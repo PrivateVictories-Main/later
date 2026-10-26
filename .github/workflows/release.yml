@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # creates the draft release
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Optional: a stable self-signed certificate keeps macOS Automation permissions across updates.
+      # Without the secrets the app is signed ad-hoc.
+      - name: Import signing certificate
+        env:
+          MAC_SIGN_P12_BASE64: ${{ secrets.MAC_SIGN_P12_BASE64 }}
+          MAC_SIGN_P12_PASSWORD: ${{ secrets.MAC_SIGN_P12_PASSWORD }}
+        run: |
+          if [[ -z "$MAC_SIGN_P12_BASE64" ]]; then
+            echo "No signing certificate provided; the app will be signed ad-hoc."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/later-signing.keychain-db"
+          password=$(uuidgen)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$MAC_SIGN_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$MAC_SIGN_P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/signing.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity=$(security find-identity -p codesigning "$keychain" | awk -F'"' '/"/ { print $2; exit }')
+          [[ -n "$identity" ]] || { echo "error: no signing identity in the certificate" >&2; exit 1; }
+          echo "LATER_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "Signing with the imported certificate."
+
+      - name: Test
+        run: swift test
+
+      - name: Build the app
+        run: scripts/build-app.sh release
+
+      - name: Check entitlements
+        run: scripts/check-entitlements.sh build/Later.app
+
+      - name: Check the version matches the tag
+        run: |
+          plist=build/Later.app/Contents/Info.plist
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
+          [[ "v$version" == "$GITHUB_REF_NAME" ]] || { echo "error: tag $GITHUB_REF_NAME does not match version $version" >&2; exit 1; }
+
+      - name: Package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ditto -c -k --keepParent build/Later.app "Later-$version.zip"
+          shasum -a 256 "Later-$version.zip" > "Later-$version.zip.sha256"
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" --draft --generate-notes --title "Later $version" \
+            "Later-$version.zip" "Later-$version.zip.sha256"
+
+      - name: Remove the temporary keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/later-signing.keychain-db" 2>/dev/null || true

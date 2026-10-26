@@ -1,0 +1,23 @@
+name: Mac
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+      - name: Build the app
+        run: scripts/build-app.sh release
+      - name: Check entitlements
+        run: scripts/check-entitlements.sh build/Later.app
