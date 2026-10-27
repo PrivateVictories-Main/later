@@ -12,3 +12,6 @@ dotnet_diagnostic.CA1305.severity = error
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1716.severity = none
 dotnet_diagnostic.CA2007.severity = none
+# The network ban (BannedApiAnalyzers) must fail the build, not warn
+dotnet_diagnostic.RS0030.severity = error
+dotnet_diagnostic.RS0031.severity = error
