@@ -17,7 +17,7 @@ public class UrlTextTests
     {
         Assert.Equal("aA", UrlText.PercentDecode("a%41"));
         Assert.Equal("C++", UrlText.PercentDecode("C%2B%2B"));
-        Assert.Equal("é", UrlText.PercentDecode("%C3%A9"));
+        Assert.Equal("\u00e9", UrlText.PercentDecode("%C3%A9"));
         Assert.Equal("plain", UrlText.PercentDecode("plain"));
     }
 
@@ -26,6 +26,6 @@ public class UrlTextTests
     {
         Assert.Equal("a%20b%25zz", UrlText.EncodeInvalid("a b%zz", UrlText.PathChar));
         Assert.Equal("/a%2Fb/c", UrlText.EncodeInvalid("/a%2Fb/c", UrlText.PathChar));   // existing escapes stay
-        Assert.Equal("%C3%A9", UrlText.EncodeInvalid("é", UrlText.PathChar));
+        Assert.Equal("%C3%A9", UrlText.EncodeInvalid("\u00e9", UrlText.PathChar));
     }
 }

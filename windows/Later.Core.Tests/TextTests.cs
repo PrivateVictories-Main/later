@@ -9,8 +9,8 @@ public class TextTests
     public void CountsGraphemeClusters()
     {
         Assert.Equal(0, Text.Count(""));
-        Assert.Equal(1, Text.Count("é"));
-        Assert.Equal(1, Text.Count("é"));
+        Assert.Equal(1, Text.Count("\u00e9"));
+        Assert.Equal(1, Text.Count("e\u0301"));
         Assert.Equal(3, Text.Count("abc"));
     }
 
@@ -26,10 +26,10 @@ public class TextTests
     [Fact]
     public void LettersAndNumbersFollowUnicode()
     {
-        Assert.True(Text.IsLetter(new Rune('é')));
-        Assert.True(Text.IsLetter(new Rune('Ⅰ')));   // Roman numeral one is a letter-number
+        Assert.True(Text.IsLetter(new Rune('\u00e9')));
+        Assert.True(Text.IsLetter(new Rune('\u2160')));   // Roman numeral one is a letter-number
         Assert.False(Text.IsLetter(new Rune('-')));
-        Assert.True(Text.IsNumber(new Rune('²')));
+        Assert.True(Text.IsNumber(new Rune('\u00b2')));
         Assert.True(Text.IsNumber(new Rune('7')));
         Assert.False(Text.IsNumber(new Rune('x')));
     }

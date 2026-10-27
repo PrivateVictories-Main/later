@@ -46,5 +46,5 @@ internal static class Text
     }
 
     /// Test helper: ICU puts U+202F (narrow no-break space) before AM/PM.
-    public static string NormalizeSpaces(string s) => s.Replace(' ', ' ').Replace(' ', ' ');
+    public static string NormalizeSpaces(string s) => s.Replace('\u202f', ' ').Replace('\u00a0', ' ');
 }
