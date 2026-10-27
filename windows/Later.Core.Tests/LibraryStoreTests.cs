@@ -164,7 +164,7 @@ public class LibraryStoreTests
             var loaded = store.Load();
             AssertSame(Sample("A"), loaded.Data);
             Assert.False(loaded.Writable);
-            Assert.Contains("set aside", loaded.Notice);
+            Assert.Contains("set aside", loaded.Notice, StringComparison.Ordinal);
             Assert.Empty(CorruptCopies(dir));
             Assert.Throws<IOException>(() => store.Save(Sample("C")));
         }
@@ -197,7 +197,7 @@ public class LibraryStoreTests
         {
             var loaded = fresh.Load();
             Assert.False(loaded.Writable);
-            Assert.Contains("try again", loaded.Notice);
+            Assert.Contains("try again", loaded.Notice, StringComparison.Ordinal);
             Assert.Empty(CorruptCopies(dir));
             Assert.Throws<IOException>(() => fresh.Save(Sample("C")));
         }
