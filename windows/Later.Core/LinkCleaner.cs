@@ -25,7 +25,7 @@ public static class LinkCleaner
 
         if (parts.EncodedFragment is { } fragment)
         {
-            var route = parts.DecodedFragment ?? fragment;   // decoded, so #%2F… and #%21… count as routes too
+            var route = parts.DecodedFragment ?? fragment;   // decoded, so #%2F\u2026 and #%21\u2026 count as routes too
             if (!(route.StartsWith('/') || route.StartsWith('!'))) parts = parts with { EncodedFragment = null };
             else
             {
