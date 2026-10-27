@@ -5,3 +5,7 @@ build/
 scripts/local.env
 .swiftpm/
 *.xcuserstate
+windows/**/bin/
+windows/**/obj/
+windows/**/TestResults/
+*.user
