@@ -98,7 +98,7 @@ internal static class Structure
     /// Localhost, home-network names and private addresses.
     internal static bool IsLocal(string host)
     {
-        if (host.IndexOf('.', StringComparison.Ordinal) < 0 || host.IndexOf(':', StringComparison.Ordinal) >= 0) return true;   // "localhost", "nas", IPv6
+        if (!host.Contains('.', StringComparison.Ordinal) || host.Contains(':', StringComparison.Ordinal)) return true;   // "localhost", "nas", IPv6
         if (LocalSuffixes.Any(s => host.EndsWith(s, StringComparison.Ordinal))) return true;
         var octets = new List<int>();
         foreach (var piece in Text.SplitOmitEmpty(host, '.'))
