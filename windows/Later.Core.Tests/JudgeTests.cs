@@ -353,7 +353,7 @@ public class DismissalTests
         return h;
     }
 
-    static ISet<Browser> Both() => new HashSet<Browser> { Browser.Helium, Browser.Chrome };
+    static HashSet<Browser> Both() => new HashSet<Browser> { Browser.Helium, Browser.Chrome };
 
     /// Later restarts: a fresh judge on the same list, whose first read finds the tab still open.
     static Harness Restarted(Harness h) => new(h.Library, h.Watched) { Now = h.Now.AddSeconds(30) };
