@@ -26,30 +26,32 @@ public sealed class LibraryStore
 
     public Loaded Load()
     {
-        if (Decode(FilePath) is { } data) { primaryKnownGood = true; return new Loaded(data, null); }
+        if (Decode(FilePath, out var unreadable) is { } data) { primaryKnownGood = true; return new Loaded(data, null); }
         primaryKnownGood = false;
+        if (unreadable) return Unwritable("Later couldn't read its list just now. It will try again.");   // locked or I/O error, not damage: touch nothing
         string? keptAs = null;
         if (File.Exists(FilePath))
         {
             var name = $"library.corrupt-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}-{Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..8]}.json";
             try { File.Move(FilePath, Path.Combine(Path.GetDirectoryName(FilePath)!, name)); }
-            catch (IOException) { return Unwritable(); }
-            catch (UnauthorizedAccessException) { return Unwritable(); }
+            catch (IOException) { return Unwritable(CantSetAside); }
+            catch (UnauthorizedAccessException) { return Unwritable(CantSetAside); }
             keptAs = name;
         }
-        if (Decode(BackupPath) is { } backup) return new Loaded(backup, "Your list was restored from its backup copy.");
+        if (Decode(BackupPath, out _) is { } backup) return new Loaded(backup, "Your list was restored from its backup copy.");
         if (keptAs is not null) return new Loaded(new LibraryData(), $"Your list couldn't be read, so a new one was started. The old file was kept as {keptAs}.");
         return new Loaded(new LibraryData(), null);
     }
 
-    Loaded Unwritable() => new(Decode(BackupPath) ?? new LibraryData(),
-        "Later couldn't set aside a damaged copy of your list, so it won't save changes until it can. Nothing has been deleted.", Writable: false);
+    const string CantSetAside = "Later couldn't set aside a damaged copy of your list, so it won't save changes until it can. Nothing has been deleted.";
+
+    Loaded Unwritable(string notice) => new(Decode(BackupPath, out _) ?? new LibraryData(), notice, Writable: false);
 
     /// Throws IOException when the save can't complete; the files on disk are then as they were.
     public void Save(LibraryData data)
     {
         var bytes = LibraryJson.Encode(data);
-        if (!primaryKnownGood && File.Exists(FilePath) && Decode(FilePath) is null)   // never rotate an unreadable list over the good backup
+        if (!primaryKnownGood && File.Exists(FilePath) && Decode(FilePath, out _) is null)   // never rotate an unreadable list over the good backup
             throw new IOException("The list on disk can't be read, so it was not overwritten.");
         try
         {
@@ -70,9 +72,21 @@ public sealed class LibraryStore
         foreach (var path in new[] { FilePath, BackupPath, TempPath }) if (File.Exists(path)) File.Delete(path);
     }
 
-    static LibraryData? Decode(string path)
+    /// Null when the file is missing, malformed (`unreadable` false) or couldn't be opened or read, e.g. locked (`unreadable` true).
+    /// Opened with full sharing so a read never blocks another process's File.Replace and vice versa; only a malformed file may be set aside.
+    static LibraryData? Decode(string path, out bool unreadable)
     {
-        try { return LibraryJson.Decode(File.ReadAllBytes(path)); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or FormatException) { return null; }
+        unreadable = false;
+        byte[] bytes;
+        try
+        {
+            using var f = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            bytes = new byte[f.Length];
+            f.ReadExactly(bytes);
+        }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { return null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { unreadable = true; return null; }
+        try { return LibraryJson.Decode(bytes); }
+        catch (Exception e) when (e is FormatException or ArgumentException) { return null; }   // ArgumentException: out-of-range dates
     }
 }

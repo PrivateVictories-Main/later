@@ -159,12 +159,13 @@ public class LibraryStoreTests
         store.Save(Sample("B"));
         Garbage(store.FilePath);
         var garbage = File.ReadAllBytes(store.FilePath);
-        using (new FileStream(store.FilePath, FileMode.Open, FileAccess.Read, FileShare.None))
+        using (new FileStream(store.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))   // readable (so it's malformed), but without Delete it can't be moved
         {
             var loaded = store.Load();
             AssertSame(Sample("A"), loaded.Data);
             Assert.False(loaded.Writable);
-            Assert.NotNull(loaded.Notice);
+            Assert.Contains("set aside", loaded.Notice);
+            Assert.Empty(CorruptCopies(dir));
             Assert.Throws<IOException>(() => store.Save(Sample("C")));
         }
         Assert.Throws<IOException>(() => store.Save(Sample("C")));   // released, but still unreadable and never set aside
@@ -181,5 +182,43 @@ public class LibraryStoreTests
         using (new FileStream(store.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
             store.Save(Sample("B"));
         AssertSame(Sample("B"), Read(store.FilePath));
+    }
+
+    [Fact]
+    public void LockedButValidFileIsNotTreatedAsCorrupt()
+    {
+        if (!OperatingSystem.IsWindows()) return;   // a sharing violation exists only on Windows
+        using var dir = new TempDir(); var store = StoreIn(dir);
+        store.Save(Sample("A"));
+        store.Save(Sample("B"));
+        var bytes = File.ReadAllBytes(store.FilePath);
+        var fresh = new LibraryStore(store.FilePath);
+        using (new FileStream(store.FilePath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var loaded = fresh.Load();
+            Assert.False(loaded.Writable);
+            Assert.Contains("try again", loaded.Notice);
+            Assert.Empty(CorruptCopies(dir));
+            Assert.Throws<IOException>(() => fresh.Save(Sample("C")));
+        }
+        Assert.Equal(bytes, File.ReadAllBytes(store.FilePath));
+        AssertSame(Sample("A"), Read(store.FilePath + ".bak"));
+        var again = fresh.Load();   // the lock is gone: the newest list loads, nothing was set aside
+        AssertSame(Sample("B"), again.Data);
+        Assert.True(again.Writable);
+        Assert.Null(again.Notice);
+    }
+
+    [Fact]
+    public void LoadDoesNotBlockAReplace()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var dir = new TempDir(); var store = StoreIn(dir);
+        store.Save(Sample("A"));
+        using (new FileStream(store.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))   // what Load itself opens with
+        {
+            store.Save(Sample("B"));
+            Assert.Equal("B", new LibraryStore(store.FilePath).Load().Data.Items[0].Title);
+        }
     }
 }

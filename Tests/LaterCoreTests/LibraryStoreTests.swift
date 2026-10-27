@@ -154,6 +154,25 @@ import Testing
         }
     }
 
+    @Test func unreadableFileIsNotTreatedAsCorrupt() throws {
+        try withStore { store, dir in
+            try store.save(sample("A"))
+            try store.save(sample("B"))
+            let bytes = try Data(contentsOf: store.fileURL)
+            try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: store.fileURL.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: store.fileURL.path) }
+            let fresh = LibraryStore(fileURL: store.fileURL)
+            let loaded = fresh.load()
+            #expect(!loaded.writable)
+            #expect(loaded.notice?.contains("try again") == true)
+            #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix("library.corrupt-") }.isEmpty)
+            #expect(throws: (any Error).self) { try fresh.save(sample("C")) }
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: store.fileURL.path)
+            #expect(try Data(contentsOf: store.fileURL) == bytes)
+            #expect(fresh.load().data == sample("B"))
+        }
+    }
+
     @Test func failedSaveKeepsTheBackup() throws {
         try withStore { store, _ in
             try store.save(sample("A"))
