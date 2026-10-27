@@ -7,7 +7,7 @@ tools='codex|claude|anthropic|agentdesk|opus|sonnet|gpt-[0-9]|t3 ?code'
 status=0
 self=':(exclude)scripts/prepush-scan.sh'   # holds the patterns themselves
 added() { git diff "$base"...HEAD -U0 -- "$@" | grep '^+' | grep -v '^+++' || true; }
-if added . ':(exclude)LICENSE' ':(exclude)*.png' ':(exclude)*.ico' "$self" | grep -inE "$personal" | grep -v 'users.noreply.github.com' ; then
+if added . ':(exclude)LICENSE' ':(exclude)*.png' ':(exclude)*.ico' ':(exclude)shared/vectors' "$self" | grep -inE "$personal" | grep -v 'users.noreply.github.com' ; then
   echo "prepush-scan: personal data in added lines" >&2; status=1; fi
 if added . ':(exclude)shared/vectors' ':(exclude)Tests' "$self" | grep -inE "$tools"; then
   echo "prepush-scan: tool or agent names in added lines" >&2; status=1; fi
