@@ -63,6 +63,8 @@ final class Engine {
     static let savesFeedHomesKey = "savesFeedHomes"
 
     private let store: LibraryStore?
+    private let readOnly: Bool
+    static let readOnlyNotice = "Another copy of Later is still watching, so this window shows your list but won't save changes. Quit Later and open it again to make changes."
     private let writer = DispatchQueue(label: "later.writer", qos: .utility)
     @ObservationIgnored private var bells: [Browser: Doorbell] = [:]
     /// Browsers macOS won't let Later watch for changes (Chrome's data folder is protected). They are read when the user
@@ -80,7 +82,10 @@ final class Engine {
     @ObservationIgnored private var observers: [(center: NotificationCenter, token: NSObjectProtocol)] = []
     @ObservationIgnored private var historyLookups = 0
 
-    init() {
+    /// `readOnly`: another process holds the engine lock, so this one shows the list as it is on disk and never recovers,
+    /// watches or saves.
+    init(readOnly: Bool = false) {
+        self.readOnly = readOnly
         io = BrowserIO()
         let feeds = !Sample.enabled && UserDefaults.standard.bool(forKey: Self.savesFeedHomesKey)
         savesFeedHomes = feeds
@@ -91,7 +96,8 @@ final class Engine {
         #endif
         let store = sample == nil ? try? LibraryStore.appDefault() : nil   // a sample list is never saved
         let loaded = sample.map { LibraryStore.Loaded(data: $0, notice: nil) }
-            ?? store?.load() ?? LibraryStore.Loaded(data: LibraryData(), notice: nil)
+            ?? (readOnly ? store?.peek(notice: Self.readOnlyNotice) : store?.load())
+            ?? LibraryStore.Loaded(data: LibraryData(), notice: nil)
         // A damaged file that couldn't be set aside blocks saving, so it can never be overwritten.
         self.store = loaded.writable ? store : nil
         library = Library(data: loaded.data)
@@ -125,15 +131,16 @@ final class Engine {
     #if DEBUG
     /// Tests only: an engine around `library`, in memory: nothing is read or saved, and no browser is looked at.
     init(testing library: Library, io: BrowserIO = BrowserIO(isRunning: { _ in false }, permission: { _ in .notRunning },
-                                                             read: { _ in throw ReadError.notRunning })) {
+                                                             read: { _ in throw ReadError.notRunning }), store: LibraryStore? = nil) {
         self.library = library
         self.io = io
+        readOnly = false
         icons = SiteIcons(library: library, folder: nil)
         judge = Judge(library: library, watched: [])
         loadNotice = nil
         paused = false
         savesFeedHomes = false
-        store = nil
+        self.store = store
     }
 
     /// Tests only: waits for the reads in flight.
@@ -143,7 +150,7 @@ final class Engine {
     #endif
 
     func start() {
-        guard !started, !Sample.enabled else { return }   // a sample list watches no browser
+        guard !started, !Sample.enabled, !readOnly else { return }   // a sample list watches no browser
         started = true
         // Watching is the whole job: macOS must not quietly quit Later once its last window closes.
         ProcessInfo.processInfo.disableAutomaticTermination("Later watches your open tabs")
@@ -153,6 +160,7 @@ final class Engine {
             observers.append((center, center.addObserver(forName: name, object: nil, queue: .main, using: handler)))
         }
         observe(center, NSWorkspace.didActivateApplicationNotification) { [weak self] note in
+            Perf.log.info("wake appSwitch")
             let id = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
             MainActor.assumeIsolated { self?.frontAppChanged(bundleID: id) }
         }
@@ -175,10 +183,12 @@ final class Engine {
         // known: the user may be away long enough for their tabs to have been waiting.
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
             observe(center, name) { [weak self] _ in
+                Perf.log.info("wake sleep")
                 MainActor.assumeIsolated { self?.readSwitchOnlyBrowsers() }
             }
         }
         observe(DistributedNotificationCenter.default(), Notification.Name("com.apple.screenIsLocked")) { [weak self] _ in
+            Perf.log.info("wake lock")
             MainActor.assumeIsolated { self?.readSwitchOnlyBrowsers() }
         }
         for browser in Browser.allCases where status[browser] != .notInstalled { startWatching(browser) }

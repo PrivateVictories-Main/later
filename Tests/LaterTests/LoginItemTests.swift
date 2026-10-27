@@ -3,6 +3,13 @@ import Testing
 @testable import Later
 
 struct LoginItemTests {
+    @Test func upgradingFrom12KeepsWhatTheUserChose() {
+        #expect(LoginItem.initiallyWanted(oldItemWasOn: true, decidedBefore: true))     // 1.2 had it on
+        #expect(!LoginItem.initiallyWanted(oldItemWasOn: false, decidedBefore: true))   // decided, now off: the user turned it off
+        #expect(LoginItem.initiallyWanted(oldItemWasOn: false, decidedBefore: false))   // a first install: on by default
+        #expect(LoginItem.initiallyWanted(oldItemWasOn: true, decidedBefore: false))
+    }
+
     @Test func theAgentIsRegisteredAgainOnlyWhenAnotherBuildRegisteredIt() {
         func repair(_ status: SMAppService.Status, wanted: Bool = true, pinned: String?, current: String? = "b") -> Bool {
             LoginItem.needsRepair(wanted: wanted, status: status, pinned: pinned, current: current)

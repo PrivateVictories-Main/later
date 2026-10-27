@@ -40,6 +40,11 @@ final class AgentDelegate {
 
     private func begin() {
         guard let tenure, tenure.isHolding, engine == nil else { return }
+        // A damaged or missing list is recovered by the window app, which tells the user. Until it has, the agent touches nothing.
+        if let store = try? LibraryStore.appDefault(), store.needsRecovery {
+            Perf.log.info("agent idle: the list needs the app to recover it")
+            return
+        }
         let engine = Engine()
         engine.start()
         self.engine = engine

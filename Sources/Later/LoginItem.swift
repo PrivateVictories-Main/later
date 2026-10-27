@@ -28,7 +28,7 @@ final class LoginItem {
         guard Self.isInstalled, !Sample.enabled else { return }   // a sample run changes nothing, this included
         UserDefaults.standard.set(on, forKey: Self.wantedKey)
         repair?.cancel()
-        on ? start() : change(false)
+        on ? start(fresh: Self.isUnregistered) : change(false)
     }
 
     private func change(_ on: Bool) {
@@ -52,37 +52,48 @@ final class LoginItem {
         if hadOld { try? old.unregister() }
         let defaults = UserDefaults.standard
         if defaults.object(forKey: Self.wantedKey) == nil {
-            // 1.2 recorded that it had decided (by default or by the toggle); not enabled since means the user turned it off.
-            defaults.set(hadOld || !defaults.bool(forKey: "loginDefaultApplied"), forKey: Self.wantedKey)
+            defaults.set(Self.initiallyWanted(oldItemWasOn: hadOld, decidedBefore: defaults.bool(forKey: "loginDefaultApplied")),
+                         forKey: Self.wantedKey)
         }
         let wanted = defaults.bool(forKey: Self.wantedKey)
-        if wanted, status == .notRegistered || status == .notFound {
-            start()
+        if wanted, Self.isUnregistered {
+            start(fresh: true)
         } else if Self.needsRepair(wanted: wanted, status: status, pinned: defaults.string(forKey: Self.pinKey), current: Self.codeHash) {
             try? Self.service.unregister()
-            start()
+            start(fresh: false)
         }
         refresh()
     }
+
+    /// 1.2 recorded that it had decided (by default or by the toggle) in `loginDefaultApplied`; having decided and no
+    /// longer being enabled means the user turned it off. A first install has decided nothing, so it is on.
+    nonisolated static func initiallyWanted(oldItemWasOn: Bool, decidedBefore: Bool) -> Bool { oldItemWasOn || !decidedBefore }
+
+    private static var isUnregistered: Bool { service.status == .notRegistered || service.status == .notFound }
 
     /// launchd starts the agent only if the program still has the code hash it had when the agent was registered, and a
     /// replaced app (any new build) no longer does (measured: OS_REASON_CODESIGNING). launchd notices at the failed start
     /// and refreshes the hash within about ten seconds, but registering before that keeps the old hash, so a build that
     /// isn't the one recorded in `pinKey` registers, then registers again 15 s later and records itself. Registering
     /// again is not a new item, so macOS shows no banner. If Later quits before the second pass, the next launch repeats it.
+    /// A fresh registration (nothing registered before) pins this build already, so it records itself at once and repairs nothing.
     private static let pinKey = "agentRegisteredHash"
     private var repair: Task<Void, Never>?
 
-    private func start() {
-        let new = UserDefaults.standard.string(forKey: Self.pinKey) != Self.codeHash
+    private func start(fresh: Bool) {
+        let defaults = UserDefaults.standard
         change(true)
-        guard new, failure == nil else { return }
+        guard failure == nil else { return }
+        if fresh { defaults.set(Self.codeHash, forKey: Self.pinKey) }
+        guard !fresh, defaults.string(forKey: Self.pinKey) != Self.codeHash else { return }
         repair = Task {
             try? await Task.sleep(for: .seconds(15))
-            guard !Task.isCancelled else { return }
+            // Not when it was switched off meanwhile, here or in Login Items (then it isn't enabled any more).
+            guard !Task.isCancelled, Self.service.status == .enabled else { return }
             try? await Self.service.unregister()
+            guard !Task.isCancelled, defaults.bool(forKey: Self.wantedKey) else { refresh(); return }
             change(true)
-            if failure == nil { UserDefaults.standard.set(Self.codeHash, forKey: Self.pinKey) }
+            if failure == nil { defaults.set(Self.codeHash, forKey: Self.pinKey) }
         }
     }
 

@@ -19,6 +19,25 @@ import Testing
         return data
     }
 
+    @Test func theAgentLeavesADamagedOrMissingListToTheApp() throws {
+        try withStore { store, dir in
+            #expect(!store.needsRecovery)   // nothing yet: a new list
+            try store.save(sample("A"))
+            #expect(!store.needsRecovery)
+            try store.save(sample("B"))   // now there is a backup too
+            try Data("{ not json".utf8).write(to: store.fileURL)
+            #expect(store.needsRecovery)
+            let damaged = try Data(contentsOf: store.fileURL)
+            let peeked = store.peek(notice: "n")
+            #expect(peeked.data == sample("A"))   // the backup, as a read-only view
+            #expect(!peeked.writable)
+            #expect(try Data(contentsOf: store.fileURL) == damaged)   // peeking set nothing aside
+            #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.contains("corrupt") }.isEmpty)
+            try FileManager.default.removeItem(at: store.fileURL)
+            #expect(store.needsRecovery)   // missing, but a backup exists
+        }
+    }
+
     @Test func roundTrips() throws {
         try withStore { store, _ in
             try store.save(sample("A"))

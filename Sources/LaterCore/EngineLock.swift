@@ -23,6 +23,17 @@ public final class EngineLock: @unchecked Sendable {
         return true
     }
 
+    /// Like `acquire(timeout:)`, but calls `nudge` at once and every `interval` seconds meanwhile. The app uses it to ask the
+    /// agent to hand over: a request that reaches the agent just before it knows it holds the lock is ignored, so it is sent again.
+    public func acquire(timeout: TimeInterval, nudgeEvery interval: TimeInterval, nudge: () -> Void) -> Bool {
+        let end = Date.now.addingTimeInterval(timeout)
+        repeat {
+            nudge()
+            if acquire(timeout: min(interval, max(end.timeIntervalSinceNow, 0))) { return true }
+        } while Date.now < end
+        return false
+    }
+
     /// Blocks until the lock is free; the kernel wakes the caller, so nothing polls.
     public func acquire() -> Bool {
         while flock(fd, LOCK_EX) != 0 { guard errno == EINTR else { return false } }

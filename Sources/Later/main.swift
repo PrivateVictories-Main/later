@@ -9,7 +9,9 @@ let arguments = CommandLine.arguments
 if arguments.contains("--agent") {
     let agent = AgentDelegate()
     agent.start()
-    dispatchMain()
+    // Not dispatchMain(): it never services the run loop NSWorkspace delivers app-switch, launch, quit and sleep events on
+    // (measured: none arrive). Distributed notifications and the main queue work either way. This is still no NSApplication.
+    RunLoop.main.run()
 }
 
 // `Later --agent-off` and `--agent-on` change the background agent's registration from a shell, then exit.

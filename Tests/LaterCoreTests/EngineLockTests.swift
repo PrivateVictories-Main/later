@@ -66,6 +66,27 @@ private final class AcquireCount: @unchecked Sendable {
         #expect(tenure.isHolding)
     }
 
+    @Test func aHandoffRequestLostToTheRaceIsAskedAgain() throws {
+        let path = tempFile()
+        defer { unlink(path) }
+        let acquired = AcquireCount()
+        let tenure = AgentTenure(lock: try #require(EngineLock(path: path)), settle: 0.05) { acquired.bump() }
+        tenure.start()
+        #expect(waitFor { acquired.count == 1 })
+        let app = try #require(EngineLock(path: path))
+        let requests = AcquireCount()
+        // The first request is lost, as when it reaches the agent before it knows it holds the lock (release does nothing then).
+        let got = app.acquire(timeout: 3, nudgeEvery: 0.05) {
+            requests.bump()
+            if requests.count > 1 { tenure.release() }
+        }
+        #expect(got)
+        #expect(requests.count > 1)
+        // With nobody answering, it gives up after the timeout instead of waiting for ever.
+        let other = try #require(EngineLock(path: path))
+        #expect(!other.acquire(timeout: 0.2, nudgeEvery: 0.05) {})
+    }
+
     @Test func releasingWhileNotHoldingChangesNothing() throws {
         let path = tempFile()
         defer { unlink(path) }

@@ -6,7 +6,9 @@ import notify
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Created only once the engine lock is held (see takeEngineLock), because creating it loads the list.
-    lazy var engine = Engine()
+    lazy var engine = Engine(readOnly: readOnly)
+    /// The agent never handed the list over: the engine only shows it (see takeEngineLock).
+    private var readOnly = false
     /// Held for as long as this process lives; the kernel frees it when Later quits or dies, and the agent resumes.
     private var engineLock: EngineLock?
     /// nil until macOS sends the launch 'oapp' event; then whether that event marks a login launch.
@@ -45,21 +47,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Only one process watches and writes the list. If the background agent has it, ask it to hand over and wait for it
     /// (it answers in a few milliseconds; nothing polls on its side). With no agent running, the lock is simply free.
     private func takeEngineLock() {
-        guard !Sample.enabled, let lock = Handoff.lock() else { return }
+        guard !Sample.enabled else { return }
+        guard let lock = Handoff.lock() else {
+            Perf.log.error("no lock file; carrying on")   // the agent exits in the same case, so no other process is watching
+            return
+        }
         engineLock = lock
         let start = ContinuousClock.now
         if !lock.acquire(timeout: 0) {
-            notify_post(Handoff.notification)
-            // shortcut: after 5 s it carries on without the lock, since an unresponsive agent mustn't lock the user out of
-            // their list; two writers can then overwrite each other's last changes. Upgrade if that is ever seen in the log.
-            if !lock.acquire(timeout: 5) { Perf.log.error("handoff timed out; carrying on without the lock") }
+            // Asked again every 0.25 s: a request that reaches the agent just before it knows it holds the lock is ignored.
+            // Without the lock the app never watches or saves; an unresponsive agent leaves it showing the list read-only.
+            if !lock.acquire(timeout: 5, nudgeEvery: 0.25, nudge: { notify_post(Handoff.notification) }) {
+                readOnly = true
+                Perf.log.error("handoff timed out; showing the list read-only")
+            }
             Perf.log.info("handoff waited \(Perf.ms(since: start), format: .fixed(precision: 1), privacy: .public)ms")
         }
         Perf.log.info("app took the list items=\(self.engine.library.data.items.count, privacy: .public)")
     }
 
-    // shortcut: 'lgit' is the documented login-item marker, but whether SMAppService.mainApp login launches carry it is
-    // unverified until the /Applications copy logs in once; if the window opens at login, switch to SMAppService.agent.
+    // 'lgit' marks a launch by 1.2's login item, which the first launch of 1.3 removes; the agent has no window to open.
     @objc private func openApplication(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
         loginLaunch = event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
     }

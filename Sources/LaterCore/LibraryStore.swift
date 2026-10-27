@@ -35,7 +35,7 @@ public struct LibraryStore: Sendable {
         public var data: LibraryData
         /// A plain sentence for the window when something had to be recovered.
         public var notice: String?
-        /// False when an unreadable list couldn't be set aside; the app must not save until it can.
+        /// False when an unreadable list couldn't be set aside; the app must not save for the rest of its session.
         public var writable: Bool
 
         public init(data: LibraryData, notice: String?, writable: Bool = true) {
@@ -43,6 +43,18 @@ public struct LibraryStore: Sendable {
             self.notice = notice
             self.writable = writable
         }
+    }
+
+    /// Whether `load()` would have to recover something (a damaged list, or a missing one with a backup). The agent leaves
+    /// that to the window app, which tells the user what happened.
+    public var needsRecovery: Bool {
+        decode(fileURL) == nil && [fileURL, backupURL].contains { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// The list as it is on disk, touching no file: for a process that doesn't hold the engine lock, so it neither recovers
+    /// nor saves. Falls back to the backup copy, then to an empty list.
+    public func peek(notice: String) -> Loaded {
+        Loaded(data: decode(fileURL) ?? decode(backupURL) ?? LibraryData(), notice: notice, writable: false)
     }
 
     public func load() -> Loaded {
@@ -57,7 +69,7 @@ public struct LibraryStore: Sendable {
             let name = "library.corrupt-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).json"
             guard (try? fm.moveItem(at: fileURL, to: fileURL.deletingLastPathComponent().appendingPathComponent(name))) != nil else {
                 return Loaded(data: decode(backupURL) ?? LibraryData(),
-                              notice: "Later couldn't set aside a damaged copy of your list, so it won't save changes until it can. Nothing has been deleted.",
+                              notice: "Later couldn't set aside a damaged copy of your list, so it won't save changes this time. Nothing has been deleted. Quit Later and open it again to try once more.",
                               writable: false)
             }
             keptAs = name
