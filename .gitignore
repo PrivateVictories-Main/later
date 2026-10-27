@@ -9,3 +9,4 @@ windows/**/bin/
 windows/**/obj/
 windows/**/TestResults/
 *.user
+windows/out/
