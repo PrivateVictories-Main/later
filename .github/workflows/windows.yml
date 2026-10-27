@@ -16,8 +16,11 @@ concurrency:
 jobs:
   core:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: windows/global.json
@@ -35,8 +38,11 @@ jobs:
           - { os: windows-2025, rid: win-x64, arch: x64 }
           - { os: windows-11-arm, rid: win-arm64, arch: arm64 }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: windows/global.json
@@ -45,21 +51,36 @@ jobs:
         run: dotnet list windows/Later.App/Later.App.csproj package --include-transitive
       - name: Core tests on Windows
         run: dotnet test windows/Later.Core.Tests -c Release --logger "console;verbosity=detailed"
+      - name: Build the scanner
+        run: dotnet build windows/tools/ImportScan -c Release
+      - name: The scanner rejects every network channel (self-test)
+        shell: pwsh
+        run: scripts/scan-selftest.ps1
       - name: Publish the app
         run: dotnet publish windows/Later.App/Later.App.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.arch }} --self-contained true -o windows/out/${{ matrix.rid }}
       - name: Scan the published output for network code
         run: dotnet run --project windows/tools/ImportScan -c Release -- windows/out/${{ matrix.rid }} --expected windows/runtime-imports.expected.${{ matrix.arch }}.txt
-      - name: The scanner rejects network imports (self-test)
+      - name: Publish folder summary
         shell: pwsh
         run: |
-          $dir = Join-Path $env:RUNNER_TEMP 'scan-selftest'
-          New-Item -ItemType Directory -Force $dir | Out-Null
-          Copy-Item "$env:SystemRoot\System32\ftp.exe" (Join-Path $dir 'Later.Probe.exe')
-          dotnet run --project windows/tools/ImportScan -c Release -- $dir
-          if ($LASTEXITCODE -ne 1) { throw "expected exit code 1 from the self-test, got $LASTEXITCODE" }
-          Write-Host 'self-test: rejected as expected'
-          Remove-Item -Recurse -Force $dir
-          $global:LASTEXITCODE = 0   # the expected failure must not become the step's exit code
+          $dir = 'windows/out/${{ matrix.rid }}'
+          $files = Get-ChildItem $dir -Recurse -File
+          $net = @($files | Where-Object { $_.Name -match '^System\.Net\.|^msquic\.dll$|^createdump\.exe$' })
+          $deps = @(Select-String -Path "$dir/Later.deps.json" -Pattern 'msquic|createdump|System\.Net\.')
+          Write-Host "publish folder: $($files.Count) files, $($net.Count) System.Net/msquic/createdump files, $($deps.Count) such lines in Later.deps.json"
+          if ($net.Count -gt 0 -or $deps.Count -gt 0) { throw 'network-capable runtime files are still published' }
+      - name: Trimming experiment (informational)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          dotnet publish windows/Later.App/Later.App.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.arch }} --self-contained true -p:PublishTrimmed=true -p:TrimMode=partial -o windows/out/trim-${{ matrix.rid }}
+          if ($LASTEXITCODE -ne 0) { throw 'trimmed publish failed' }
+          dotnet run --project windows/tools/ImportScan -c Release --no-build -- windows/out/trim-${{ matrix.rid }}
+          $p = Start-Process "windows/out/trim-${{ matrix.rid }}/Later.exe" -PassThru
+          Start-Sleep -Seconds 6
+          if ($p.HasExited) { throw "trimmed Later.exe exited early with $($p.ExitCode)" }
+          $p | Stop-Process -Force
+          Write-Host 'trimmed app started and stayed up for 6 s'
       - name: Smoke test the published app
         shell: pwsh
         run: |

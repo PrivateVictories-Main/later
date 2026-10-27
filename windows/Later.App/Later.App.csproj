@@ -18,6 +18,22 @@
     <LaterProduct>true</LaterProduct>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>   <!-- generated XAML code warns; the network ban and string-comparison rules are errors via .editorconfig -->
   </PropertyGroup>
+  <!-- The app uses no networking, so the self-contained runtime's network-capable files (msquic.dll, createdump.exe and the
+       System.Net.* assemblies) stay out of the app folder; ImportScan fails CI if they come back. Dropping them from the
+       runtime pack's asset list keeps Later.deps.json in step with the folder. -->
+  <Target Name="LaterDropNetworkRuntimeFiles" AfterTargets="ResolveRuntimePackAssets">
+    <ItemGroup>
+      <LaterNetworkFile Include="@(RuntimePackAsset)" Condition="'%(RuntimePackAsset.Filename)%(RuntimePackAsset.Extension)' == 'msquic.dll' Or '%(RuntimePackAsset.Filename)%(RuntimePackAsset.Extension)' == 'createdump.exe' Or ($([System.String]::new('%(RuntimePackAsset.Filename)').StartsWith('System.Net.')) And '%(RuntimePackAsset.Extension)' == '.dll')" />
+      <RuntimePackAsset Remove="@(LaterNetworkFile)" />
+      <ReferenceCopyLocalPaths Remove="@(LaterNetworkFile)" />
+    </ItemGroup>
+  </Target>
+  <Target Name="LaterDropNetworkPublishFiles" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <LaterNetworkPublishFile Include="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'msquic.dll' Or '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'createdump.exe' Or ($([System.String]::new('%(ResolvedFileToPublish.Filename)').StartsWith('System.Net.')) And '%(ResolvedFileToPublish.Extension)' == '.dll')" />
+      <ResolvedFileToPublish Remove="@(LaterNetworkPublishFile)" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <ProjectReference Include="..\Later.Core\Later.Core.csproj" />
