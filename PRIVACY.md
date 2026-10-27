@@ -24,7 +24,7 @@ Everything is in Later's own sandbox container, where other apps cannot read it:
 - **Your list** (`library.json`, with `library.json.bak` and one-time safety copies of older lists): for each saved page its cleaned link, title, kind, browser, when it was saved and last seen, visit counts, and whether you marked it Done. Also your corrections (for example, moving a type of page to another kind).
 - **Fingerprints, not links.** To avoid saving a page you deleted or rejected, Later keeps SHA-256 hashes of links, never the links themselves, along with a short list of on-screen times (numbers only).
 - **Site icons**, as small PNG files in its cache folder.
-- **Your settings**, such as sort order, launch at login and pause.
+- **Your settings**, such as sort order, keep watching when Later is closed, and pause.
 
 Links are cleaned before they are saved: tracking parameters are removed, and a link that carries something secret-looking (a token, code, session, key or password) is never saved at all. Links with a username or password in them, local addresses and ports are never saved either.
 
@@ -36,12 +36,13 @@ Links are cleaned before they are saved: tracking parameters are removed, and a 
 - Read page contents, cookies, passwords, bookmarks or your browsing history beyond the saved-pages lookups above.
 - Read tabs in private windows.
 - Send, sync or upload anything.
-- Run on a timer: it only wakes when a browser changes or you switch to one.
+- Run on a timer: it only wakes when a browser changes or you switch to one. While Later is closed, the background helper sleeps until then.
 
 ## Your control
 
 - **Delete** a page, or **Empty Done**, in the app. Undo is available.
-- **Pause** watching in Settings (Later also starts at login by default; you can turn that off there), or revoke access in **System Settings → Privacy & Security → Automation**.
+- **Pause** watching in Settings, or revoke access in **System Settings → Privacy & Security → Automation**.
+- **Keep watching when Later is closed** (on by default, in Settings). Watching runs in a small background helper: a second copy of the same app, with no window, which macOS starts at login and lists in **System Settings → General → Login Items**. It has the same sandbox and permissions as the app, and only one of the two does the watching at a time. Quit Later whenever you like and the helper carries on. Turn the setting off and the helper is removed, and watching stops when you quit Later.
 - Delete Later's data by removing the app and its container (`~/Library/Containers/com.ryan.later`).
 
 Questions or concerns: see [SECURITY.md](SECURITY.md).

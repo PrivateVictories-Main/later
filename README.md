@@ -42,7 +42,8 @@ The details, including exactly what Later reads and what it stores, are in [PRIV
 - **No polling.** Later does nothing on a timer. It wakes when a browser writes its session files (Helium) or when you switch to the browser (Chrome), reads the open tabs once, and goes back to sleep.
 - **Official interface.** Tabs are read through each browser's own AppleScript interface, which macOS asks you to allow once per browser. Private and incognito windows are never read.
 - **What gets saved.** A page is kept when you spend a while on it (about two minutes at first, then adapting to how you browse), when it stays open in the background for a minute, or when you come back to it. Search results, inboxes, sign-in providers, local addresses and one-time links are never kept. Home feeds such as the YouTube home page are kept only if you turn that on in Settings.
-- **Light on resources.** About 50 MB of memory and almost no CPU while idle.
+- **Watching runs in a small background helper.** The same app starts a windowless helper at login (it is listed in System Settings → General → Login Items). You can quit Later whenever you like and the helper keeps watching; reopen Later and its window takes over from the helper in a few milliseconds, with nothing lost. If you would rather Later stop when you quit it, turn off **Keep watching when Later is closed** in Settings.
+- **Light on resources.** The background helper uses about 5 MB of memory and no CPU while idle. The window adds to that only while Later is open.
 
 ## Requirements
 
