@@ -80,6 +80,7 @@ public class LibraryJsonTests
                 var xa = x.EnumerateArray().ToList(); var ya = y.EnumerateArray().ToList();
                 return xa.Count == ya.Count && xa.Zip(ya).All(p => JsonEquals(p.First, p.Second));
             case JsonValueKind.Number: return Math.Abs(x.GetDouble() - y.GetDouble()) < 1e-6;
+            case JsonValueKind.String: return x.GetString() == y.GetString();   // the Mac writes "\/" for "/"; raw text would differ
             default: return x.GetRawText() == y.GetRawText();
         }
     }
