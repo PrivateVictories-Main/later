@@ -12,6 +12,16 @@ if arguments.contains("--agent") {
     dispatchMain()
 }
 
+// `Later --agent-off` and `--agent-on` change the background agent's registration from a shell, then exit.
+if arguments.contains("--agent-off") {
+    try? SMAppService.agent(plistName: LoginItem.plistName).unregister()
+    exit(0)
+}
+if arguments.contains("--agent-on") {
+    try? SMAppService.agent(plistName: LoginItem.plistName).register()
+    exit(0)
+}
+
 let app = NSApplication.shared
 
 #if DEBUG
@@ -32,16 +42,6 @@ if arguments.contains("--reset") {
     exit(0)
 }
 #endif
-
-// `Later --agent-off` and `--agent-on` change the background agent's registration from a shell, then exit.
-if arguments.contains("--agent-off") {
-    try? SMAppService.agent(plistName: LoginItem.plistName).unregister()
-    exit(0)
-}
-if arguments.contains("--agent-on") {
-    try? SMAppService.agent(plistName: LoginItem.plistName).register()
-    exit(0)
-}
 
 if arguments.contains("--verify") {
     app.setActivationPolicy(.accessory)
