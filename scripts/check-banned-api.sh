@@ -6,7 +6,7 @@ trap 'rm -f "$probe"' EXIT
 for type in System.Net.Http.HttpClient System.Net.Sockets.Socket System.Net.WebClient; do
   cat > "$probe" <<EOT
 namespace Later.Core;
-internal static class BannedApiProbe { internal static object Make() => new $type(); }
+internal static class BannedApiProbe { internal static $type? Value => null; }
 EOT
   if out=$(dotnet build windows/Later.Core -c Release --no-incremental 2>&1); then
     echo "probe using $type compiled: the network ban is not active" >&2; exit 1
