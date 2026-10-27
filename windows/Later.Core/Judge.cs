@@ -290,7 +290,7 @@ public sealed class Judge
         }
     }
 
-    bool ShouldSave(PageRecord record, DateTime now, TimeSpan threshold)
+    static bool ShouldSave(PageRecord record, DateTime now, TimeSpan threshold)
     {
         if (record.Verdict is null) return false;
         var active = record.ActiveSeconds + (record.OnScreenSince is { } since ? (now - since).TotalSeconds : 0);

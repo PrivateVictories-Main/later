@@ -2,6 +2,7 @@ namespace Later.Core;
 
 /// The user's changes to the list with their Undo and Redo. Changes made between `BeginGroup` and `EndGroup` (a multiple
 /// selection) are one Undo. Each Redo repeats the change exactly as it was made, so Mark Done keeps its first completion date.
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711", Justification = "UndoStack is the name the app code is written against; it behaves as an undo and redo history")]
 public sealed class UndoStack
 {
     sealed record Entry(string Name, Action Change, Action Revert);
