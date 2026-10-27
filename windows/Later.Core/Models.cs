@@ -72,6 +72,7 @@ public sealed record Item(Guid Id, string Url, string Title, string Host, Kind K
 
 public readonly record struct HistoryResult(DateTime FirstVisit, int VisitCount);
 
+#pragma warning disable CA1051 // a plain mutable data bag, owned by one thread; fields are the contract the store and tests use
 public sealed class LibraryData
 {
     public int Version = 1;
@@ -95,3 +96,4 @@ public sealed class LibraryData
         Dismissed = new Dictionary<string, DateTime>(Dismissed),
     };
 }
+#pragma warning restore CA1051
