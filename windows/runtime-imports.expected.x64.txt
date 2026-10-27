@@ -1,0 +1,3 @@
+Microsoft.ui.xaml.dll: urlmon.dll
+createdump.exe: ws2_32.dll
+msquic.dll: ws2_32.dll

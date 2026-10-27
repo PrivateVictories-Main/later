@@ -3,10 +3,14 @@
 set -euo pipefail
 probe=windows/Later.Core/BannedApiProbe.cs
 trap 'rm -f "$probe"' EXIT
-for type in System.Net.Http.HttpClient System.Net.Sockets.Socket System.Net.WebClient; do
+for type_and_expr in \
+  'System.Net.Http.HttpClient|new System.Net.Http.HttpClient()' \
+  'System.Net.Sockets.Socket|new System.Net.Sockets.Socket(System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp)' \
+  'System.Net.WebClient|new System.Net.WebClient()'; do
+  type=${type_and_expr%%|*}; expr=${type_and_expr#*|}
   cat > "$probe" <<EOT
 namespace Later.Core;
-internal static class BannedApiProbe { internal static $type? Value => null; }
+internal static class BannedApiProbe { internal static object Make() => $expr; }
 EOT
   if out=$(dotnet build windows/Later.Core -c Release --no-incremental 2>&1); then
     echo "probe using $type compiled: the network ban is not active" >&2; exit 1
