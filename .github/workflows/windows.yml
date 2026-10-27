@@ -59,6 +59,7 @@ jobs:
           if ($LASTEXITCODE -ne 1) { throw "expected exit code 1 from the self-test, got $LASTEXITCODE" }
           Write-Host 'self-test: rejected as expected'
           Remove-Item -Recurse -Force $dir
+          $global:LASTEXITCODE = 0   # the expected failure must not become the step's exit code
       - name: Smoke test the published app
         shell: pwsh
         run: |
