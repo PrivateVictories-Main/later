@@ -1,5 +1,6 @@
 import AppKit
 import LaterCore
+import ServiceManagement
 
 let app = NSApplication.shared
 let arguments = CommandLine.arguments
@@ -19,6 +20,12 @@ if arguments.contains("--reset") {
         try? FileManager.default.removeItem(at: library.appendingPathComponent("Saved Application State/\(domain).savedState"))
     }
     if let icons = SiteIcons.folder { try? FileManager.default.removeItem(at: icons) }
+    exit(0)
+}
+
+// Development only: takes the development agent back out of Login Items after a dry run.
+if arguments.contains("--dev-agent-off") {
+    try? SMAppService.agent(plistName: LoginItem.plistName).unregister()
     exit(0)
 }
 #endif

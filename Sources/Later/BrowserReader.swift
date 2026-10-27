@@ -28,7 +28,16 @@ enum BrowserReader {
             .min { ($0.launchDate ?? .distantFuture) < ($1.launchDate ?? .distantFuture) }
     }
 
+    #if DEBUG
+    /// Development only: a dry run of the agent (started with `--dev-agent`) sends no Apple Events, so a build that has no
+    /// consent from the browser can't raise a prompt on someone's screen.
+    private static let sendsNoEvents = CommandLine.arguments.contains("--dev-agent")
+    #else
+    private static let sendsNoEvents = false
+    #endif
+
     static func read(_ browser: Browser) async throws -> Snapshot {
+        if sendsNoEvents { throw ReadError.needsPermission }
         guard !Sample.enabled, let app = mainInstance(of: browser), let bundleID = app.bundleIdentifier else { throw ReadError.notRunning }
         let pid = app.processIdentifier
         return try await withCheckedThrowingContinuation { continuation in
@@ -46,7 +55,7 @@ enum BrowserReader {
     static func checkPermission(_ browser: Browser) async -> ReadError? { await permission(browser, ask: false) }
 
     private static func permission(_ browser: Browser, ask: Bool) async -> ReadError? {
-        guard !Sample.enabled else { return .needsPermission }   // sample runs send no Apple Events
+        guard !Sample.enabled, !sendsNoEvents else { return .needsPermission }   // sample runs send no Apple Events
         guard let bundleID = mainInstance(of: browser)?.bundleIdentifier else { return .notRunning }
         return await withCheckedContinuation { continuation in
             queue.async {

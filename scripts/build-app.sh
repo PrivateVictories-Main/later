@@ -25,7 +25,7 @@ mkdir -p "$app/Contents/Library/LaunchAgents"
 if [[ $config == debug ]]; then
   agentplist="$app/Contents/Library/LaunchAgents/com.ryan.later.dev.agent.plist"
   cp Resources/com.ryan.later.agent.plist "$agentplist"
-  /usr/libexec/PlistBuddy -c "Set :Label com.ryan.later.dev.agent" -c "Set :AssociatedBundleIdentifiers:0 com.ryan.later.dev" "$agentplist"
+  /usr/libexec/PlistBuddy -c "Set :Label com.ryan.later.dev.agent" -c "Set :AssociatedBundleIdentifiers:0 com.ryan.later.dev" -c "Add :ProgramArguments:2 string --dev-agent" "$agentplist"
 else
   cp Resources/com.ryan.later.agent.plist "$app/Contents/Library/LaunchAgents/"
 fi
