@@ -32,15 +32,21 @@ internal static class UrlText
         catch (DecoderFallbackException) { return null; }
     }
 
-    /// Percent-encodes what the component may not hold, leaving existing `%XX` alone and encoding a stray `%` (like
-    /// `URLComponents(string:)`, which encodes invalid characters). `allowed` says which ASCII characters stay as they are.
+    static bool IsEscape(string s, int i) => s[i] == '%' && i + 2 < s.Length && Text.IsHexDigit(s[i + 1]) && Text.IsHexDigit(s[i + 2]);
+
+    /// Percent-encodes what the component may not hold, leaving existing `%XX` alone (like `URLComponents(string:)`, which
+    /// encodes invalid characters). A component with a stray `%` is not percent-encoded text at all, so Foundation encodes
+    /// every `%` in it, even the ones that start a valid escape (characterized on macOS: `%E0%A4%A` becomes `%25E0%25A4%25A`).
+    /// `allowed` says which ASCII characters stay as they are.
     public static string EncodeInvalid(string s, Func<char, bool> allowed)
     {
+        bool stray = false;
+        for (int i = 0; i < s.Length; i++) if (s[i] == '%' && !IsEscape(s, i)) { stray = true; break; }
         var sb = new StringBuilder(s.Length + 8);
         for (int i = 0; i < s.Length;)
         {
             char c = s[i];
-            if (c == '%' && i + 2 < s.Length && Text.IsHexDigit(s[i + 1]) && Text.IsHexDigit(s[i + 2])) { sb.Append(s, i, 3); i += 3; continue; }
+            if (!stray && IsEscape(s, i)) { sb.Append(s, i, 3); i += 3; continue; }
             if (c < 128 && c != '%' && allowed(c)) { sb.Append(c); i++; continue; }
             int len = char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]) ? 2 : 1;
             foreach (byte b in Encoding.UTF8.GetBytes(s.AsSpan(i, len).ToString())) sb.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));

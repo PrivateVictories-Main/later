@@ -28,4 +28,11 @@ public class UrlTextTests
         Assert.Equal("/a%2Fb/c", UrlText.EncodeInvalid("/a%2Fb/c", UrlText.PathChar));   // existing escapes stay
         Assert.Equal("%C3%A9", UrlText.EncodeInvalid("\u00e9", UrlText.PathChar));
     }
+
+    [Fact]
+    public void AStrayPercentEncodesEveryPercent()
+    {
+        Assert.Equal("/%25E0%25A4%25A", UrlText.EncodeInvalid("/%E0%A4%A", UrlText.PathChar));
+        Assert.Equal("/%25E0%25zz", UrlText.EncodeInvalid("/%E0%zz", UrlText.PathChar));
+    }
 }

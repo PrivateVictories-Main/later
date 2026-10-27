@@ -54,7 +54,7 @@ public static class LinkCleaner
     public static string PageKey(ParsedUrl url)
     {
         if (url.Host is null) return url.Absolute;
-        var rawHost = url.Host.ToLowerInvariant();
+        var rawHost = ToUnicodeHost(url.Host).ToLowerInvariant();   // URLComponents.host gives the Unicode form of a punycode host
         var host = rawHost.StartsWith("www.", StringComparison.Ordinal) ? rawHost[4..] : rawHost;
         var path = Text.SplitOmitEmpty(url.EncodedPath, '/');
         var items = url.EncodedQueryItems.ToList();
@@ -96,6 +96,12 @@ public static class LinkCleaner
         if (items.Count > 0) result.Append('?').Append(ParsedUrl.JoinItems(items));
         if (url.EncodedFragment is { } route) result.Append('#').Append(route);
         return result.ToString();
+    }
+
+    static string ToUnicodeHost(string host)
+    {
+        if (!host.Contains("xn--", StringComparison.OrdinalIgnoreCase)) return host;
+        try { return new System.Globalization.IdnMapping().GetUnicode(host); } catch (ArgumentException) { return host; }
     }
 
     static readonly HashSet<string> DocumentKinds = ["document", "spreadsheets", "presentation"];

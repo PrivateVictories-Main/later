@@ -102,6 +102,7 @@ public sealed partial record ParsedUrl(string Scheme, string? User, string? Pass
     public static IReadOnlyList<QueryItem> ParseItems(string query)
     {
         var items = new List<QueryItem>();
+        if (query.Length == 0) return items;   // "a?" has no items at all
         foreach (var piece in query.Split('&'))   // Foundation keeps empty pieces: characterize "a=1&&b=2" in Task 1 and adjust here
         {
             int eq = piece.IndexOf('=', StringComparison.Ordinal);
