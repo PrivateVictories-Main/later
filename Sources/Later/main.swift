@@ -28,7 +28,16 @@ if arguments.contains("--verify") {
     let verifier = Verifier()
     verifier.start()
     app.run()
+} else if arguments.contains("--agent") {
+    app.setActivationPolicy(.prohibited)   // no Dock tile, no windows, no menu
+    let delegate = AgentDelegate()
+    app.delegate = delegate
+    app.run()
 } else {
+    #if DEBUG
+    // Development only: skips onboarding (which needs a click) so a dry run can register the development agent.
+    if arguments.contains("--dev-agent") { UserDefaults.standard.set(true, forKey: "onboarded") }
+    #endif
     let delegate = AppDelegate()
     app.delegate = delegate
     app.run()

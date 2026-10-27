@@ -20,6 +20,15 @@ if [[ $config == debug ]]; then
     /usr/libexec/PlistBuddy -c "$cmd" "$app/Contents/Info.plist"
   done
 fi
+# The background agent's launchd plist; macOS finds it here. A debug build gets its own label, so it never touches the installed app's agent.
+mkdir -p "$app/Contents/Library/LaunchAgents"
+if [[ $config == debug ]]; then
+  agentplist="$app/Contents/Library/LaunchAgents/com.ryan.later.dev.agent.plist"
+  cp Resources/com.ryan.later.agent.plist "$agentplist"
+  /usr/libexec/PlistBuddy -c "Set :Label com.ryan.later.dev.agent" -c "Set :AssociatedBundleIdentifiers:0 com.ryan.later.dev" "$agentplist"
+else
+  cp Resources/com.ryan.later.agent.plist "$app/Contents/Library/LaunchAgents/"
+fi
 # The Liquid Glass icon: actool turns the layered .icon into Assets.car (what macOS 26 draws) plus an .icns fallback.
 xcrun actool Resources/AppIcon.icon --compile "$app/Contents/Resources" --output-format human-readable-text \
   --output-partial-info-plist /dev/null --app-icon AppIcon --target-device mac --platform macosx \

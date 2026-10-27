@@ -1,13 +1,14 @@
 import AppKit
 import LaterCore
 import SwiftUI
-#if DEBUG
 import notify
-#endif
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
-    let engine = Engine()
+    /// Created only once the engine lock is held (see takeEngineLock), because creating it loads the list.
+    lazy var engine = Engine()
+    /// Held for as long as this process lives; the kernel frees it when Later quits or dies, and the agent resumes.
+    private var engineLock: EngineLock?
     /// nil until macOS sends the launch 'oapp' event; then whether that event marks a login launch.
     private var loginLaunch: Bool?
     /// Kept in memory for sample runs, so they never write the real setting.
@@ -38,6 +39,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(openApplication(_:reply:)),
                                                      forEventClass: AEEventClass(kCoreEventClass),
                                                      andEventID: AEEventID(kAEOpenApplication))
+        takeEngineLock()
+    }
+
+    /// Only one process watches and writes the list. If the background agent has it, ask it to hand over and wait for it
+    /// (it answers in a few milliseconds; nothing polls on its side). With no agent running, the lock is simply free.
+    private func takeEngineLock() {
+        guard !Sample.enabled, let lock = Handoff.lock() else { return }
+        engineLock = lock
+        let start = ContinuousClock.now
+        if !lock.acquire(timeout: 0) {
+            notify_post(Handoff.notification)
+            // shortcut: after 5 s it carries on without the lock, since an unresponsive agent mustn't lock the user out of
+            // their list; two writers can then overwrite each other's last changes. Upgrade if that is ever seen in the log.
+            if !lock.acquire(timeout: 5) { Perf.log.error("handoff timed out; carrying on without the lock") }
+            Perf.log.info("handoff waited \(Perf.ms(since: start), format: .fixed(precision: 1), privacy: .public)ms")
+        }
+        Perf.log.info("app took the list items=\(self.engine.library.data.items.count, privacy: .public)")
     }
 
     // shortcut: 'lgit' is the documented login-item marker, but whether SMAppService.mainApp login launches carry it is
@@ -55,10 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if Sample.settings { openSettings() }
         #endif
         if onboarded {
-            // The copy in /Applications turns launch at login on once, even if onboarding ran from a development build.
+            // The copy in /Applications registers the background agent, even if onboarding ran from a development build.
             LoginItem.shared.applyDefault()
             engine.start()
-            if loginLaunch == false, !Sample.noWindow {
+            if loginLaunch == false, !Sample.noWindow, !arguments.contains("--hidden") {
                 libraryWindow.show()
             } else {
                 // At login (or with no launch event at all) Later stays out of sight, but gets ready to open fast.
@@ -218,7 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Also `.down` (the down arrow), `.type` (the next letter of "walnut" in the search, then clear) and `.section` (the
     /// next section), `.group` (the next grouping), each timed to its frame (see Perf.frame), and `.scroll` (two seconds
     /// of scrolling down the list).
-    private var devTokens: [Int32] = [0, 0, 0, 0, 0, 0, 0]
+    private var devTokens: [Int32] = [0, 0, 0, 0, 0, 0, 0, 0]
     private var devTyped = 0
     private func listenForDevCommands() {
         let commands: [(String, @MainActor (AppDelegate) -> Void)] = [
@@ -252,6 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 model.grouping = all[((all.firstIndex(of: model.grouping) ?? 0) + 1) % all.count]
             }),
             ("scroll", { $0.libraryWindow.scrollTest() }),
+            ("add", { $0.engine.addDevPage() }),
         ]
         for (index, (name, command)) in commands.enumerated() {
             notify_register_dispatch("com.ryan.later.dev." + name, &devTokens[index], .main) { [weak self] _ in

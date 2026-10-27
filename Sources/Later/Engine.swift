@@ -75,6 +75,9 @@ final class Engine {
     /// Bumped on pause, resume and quit: a read that began before then belongs to a judge or session that's gone.
     @ObservationIgnored private var generation: [Browser: Int] = [:]
     @ObservationIgnored private var started = false
+    /// Set by `stop()`: this engine has handed the list to another process and must never write it again.
+    @ObservationIgnored private var stopped = false
+    @ObservationIgnored private var observers: [(center: NotificationCenter, token: NSObjectProtocol)] = []
     @ObservationIgnored private var historyLookups = 0
 
     init() {
@@ -146,11 +149,14 @@ final class Engine {
         ProcessInfo.processInfo.disableAutomaticTermination("Later watches your open tabs")
         library.prune(now: .now)
         let center = NSWorkspace.shared.notificationCenter
-        center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+        func observe(_ center: NotificationCenter, _ name: Notification.Name, _ handler: @escaping @Sendable (Notification) -> Void) {
+            observers.append((center, center.addObserver(forName: name, object: nil, queue: .main, using: handler)))
+        }
+        observe(center, NSWorkspace.didActivateApplicationNotification) { [weak self] note in
             let id = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
             MainActor.assumeIsolated { self?.frontAppChanged(bundleID: id) }
         }
-        center.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
+        observe(center, NSWorkspace.didLaunchApplicationNotification) { [weak self] note in
             let id = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
             MainActor.assumeIsolated {
                 guard let self, let browser = Browser.matching(bundleID: id) else { return }
@@ -158,7 +164,7 @@ final class Engine {
                 self.ring(browser)
             }
         }
-        center.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+        observe(center, NSWorkspace.didTerminateApplicationNotification) { [weak self] note in
             let id = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
             MainActor.assumeIsolated {
                 guard let self, let browser = Browser.matching(bundleID: id) else { return }
@@ -168,12 +174,11 @@ final class Engine {
         // A browser Later can't watch for changes is read as the Mac goes to sleep or locks, so what was open then is
         // known: the user may be away long enough for their tabs to have been waiting.
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
-            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            observe(center, name) { [weak self] _ in
                 MainActor.assumeIsolated { self?.readSwitchOnlyBrowsers() }
             }
         }
-        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil,
-                                                            queue: .main) { [weak self] _ in
+        observe(DistributedNotificationCenter.default(), Notification.Name("com.apple.screenIsLocked")) { [weak self] _ in
             MainActor.assumeIsolated { self?.readSwitchOnlyBrowsers() }
         }
         for browser in Browser.allCases where status[browser] != .notInstalled { startWatching(browser) }
@@ -181,6 +186,20 @@ final class Engine {
         backfillHistory()
         frontAppChanged(bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)   // rings the front browser
         for browser in Browser.allCases where browser != judge.frontBrowser { ring(browser) }
+    }
+
+    /// Hands the list over: stops watching, ignores reads still in flight, writes the list now and never writes it again.
+    /// The agent calls this when the app opens; the engine is then dropped and a new one loads the list when the agent resumes.
+    func stop() throws {
+        guard started, !stopped else { return }
+        stopped = true
+        observers.forEach { $0.center.removeObserver($0.token) }
+        observers = []
+        bells.values.forEach { $0.stop() }
+        bells = [:]
+        switchOnly = []
+        for browser in Browser.allCases { generation[browser, default: 0] += 1 }
+        try write()
     }
 
     /// Once, as Later starts: when the history says saved pages were opened, for those it doesn't say yet and wasn't already
@@ -257,6 +276,11 @@ final class Engine {
     /// Writes the list now, waiting for it to finish. Called when the app quits; throws if the write failed.
     /// Without a writable store it does nothing: the notice already says saves won't be kept.
     func flush() throws {
+        guard !stopped else { return }
+        try write()
+    }
+
+    private func write() throws {
         guard let store else { return }
         let data = library.data
         do { try writer.sync { try store.save(data) } } catch {
@@ -374,7 +398,7 @@ final class Engine {
 
     private func libraryChanged() {
         icons.libraryChanged()
-        guard !saveScheduled, store != nil else { return }
+        guard !saveScheduled, store != nil, !stopped else { return }
         saveScheduled = true
         // One-shot, armed only after a change: merges a burst of changes into one write.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
@@ -384,7 +408,7 @@ final class Engine {
 
     private func saveNow() {
         saveScheduled = false
-        guard let store else { return }
+        guard let store, !stopped else { return }
         let data = library.data
         writer.async { [weak self] in
             let ok: Bool
