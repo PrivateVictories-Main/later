@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import ServiceManagement
 
 /// "Keep watching when Later is closed": registers the background agent (`Later --agent`, see Agent.swift) with macOS, which
@@ -26,7 +27,8 @@ final class LoginItem {
     func setEnabled(_ on: Bool) {
         guard Self.isInstalled, !Sample.enabled else { return }   // a sample run changes nothing, this included
         UserDefaults.standard.set(on, forKey: Self.wantedKey)
-        change(on)
+        repair?.cancel()
+        on ? start() : change(false)
     }
 
     private func change(_ on: Bool) {
@@ -53,8 +55,49 @@ final class LoginItem {
             // 1.2 recorded that it had decided (by default or by the toggle); not enabled since means the user turned it off.
             defaults.set(hadOld || !defaults.bool(forKey: "loginDefaultApplied"), forKey: Self.wantedKey)
         }
-        if defaults.bool(forKey: Self.wantedKey), status == .notRegistered || status == .notFound { change(true) }
+        let wanted = defaults.bool(forKey: Self.wantedKey)
+        if wanted, status == .notRegistered || status == .notFound {
+            start()
+        } else if Self.needsRepair(wanted: wanted, status: status, pinned: defaults.string(forKey: Self.pinKey), current: Self.codeHash) {
+            try? Self.service.unregister()
+            start()
+        }
         refresh()
+    }
+
+    /// launchd starts the agent only if the program still has the code hash it had when the agent was registered, and a
+    /// replaced app (any new build) no longer does (measured: OS_REASON_CODESIGNING). launchd notices at the failed start
+    /// and refreshes the hash within about ten seconds, but registering before that keeps the old hash, so a build that
+    /// isn't the one recorded in `pinKey` registers, then registers again 15 s later and records itself. Registering
+    /// again is not a new item, so macOS shows no banner. If Later quits before the second pass, the next launch repeats it.
+    private static let pinKey = "agentRegisteredHash"
+    private var repair: Task<Void, Never>?
+
+    private func start() {
+        let new = UserDefaults.standard.string(forKey: Self.pinKey) != Self.codeHash
+        change(true)
+        guard new, failure == nil else { return }
+        repair = Task {
+            try? await Task.sleep(for: .seconds(15))
+            guard !Task.isCancelled else { return }
+            try? await Self.service.unregister()
+            change(true)
+            if failure == nil { UserDefaults.standard.set(Self.codeHash, forKey: Self.pinKey) }
+        }
+    }
+
+    nonisolated static func needsRepair(wanted: Bool, status: SMAppService.Status, pinned: String?, current: String?) -> Bool {
+        wanted && status == .enabled && current != nil && pinned != current
+    }
+
+    /// The code hash (cdhash) of the running program.
+    private static var codeHash: String? {
+        var code: SecCode?, staticCode: SecStaticCode?, info: CFDictionary?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
+              SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
+              SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let hash = (info as? [String: Any])?[kSecCodeInfoUnique as String] as? Data else { return nil }
+        return hash.map { String(format: "%02x", $0) }.joined()
     }
 
     func refresh() { status = Self.service.status }

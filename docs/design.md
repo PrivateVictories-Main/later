@@ -44,7 +44,7 @@ A handoff does not carry the judge's in-memory timers: a page that was 40 second
 
 The agent never creates an `NSApplication`, so LaunchServices does not see it as a running copy of Later: opening Later while the agent runs starts the window app instead of being sent to the agent (both have the bundle ID `com.ryan.later`). `Later --agent-on` and `--agent-off` change the agent's registration from a shell and exit.
 
-macOS pins the agent to the code signature it was registered with, so an agent registered by one build cannot be started by launchd from a replaced app (`OS_REASON_CODESIGNING`) until it is registered again. When installing over an existing copy, run the new app once (`--agent-off` is enough), then `--agent-on`.
+launchd pins the agent to the code hash (cdhash) of the program it was registered with, so after an update the old registration cannot start the new app (`OS_REASON_CODESIGNING`). A launcher with a fixed hash cannot work around it: the program must be sandboxed because the app is, and a sandboxed program cannot start the sandboxed app (the second sandbox set-up aborts). launchd refreshes the pin only after it has seen a failed start, about ten seconds later, and registering before then keeps the old pin. So `LoginItem` records the hash of the build that registered the agent. A different build registers it, registers it again 15 s later (the same item, so no banner) and records itself; if Later quits in between, the next launch repeats it. The cost of an update is one agent restart.
 
 ## The rules
 
