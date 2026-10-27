@@ -2,18 +2,18 @@ import AppKit
 import LaterCore
 import notify
 
-/// `Later --agent`, started by launchd: the same watching as the window app, with no windows and no menu. It runs the
+/// `Later --agent`, started by launchd: the same watching as the window app, with no NSApplication, windows or menu. It runs the
 /// engine only while it holds the engine lock. When the app opens it posts the handoff notification: the agent stops its
 /// engine, writes the list, lets go of the lock and sleeps in the kernel until the app quits or dies.
 /// Logs counts and times only.
 @MainActor
-final class AgentDelegate: NSObject, NSApplicationDelegate {
+final class AgentDelegate {
     private var engine: Engine?
     private var tenure: AgentTenure?
     private var handoffToken: Int32 = 0
     private var terminateSignal: DispatchSourceSignal?
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func start() {
         guard let lock = Handoff.lock() else {
             Perf.log.error("agent: no lock file, exiting")
             exit(0)   // a clean exit, so launchd doesn't start it again in a loop

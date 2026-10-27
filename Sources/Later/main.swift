@@ -2,8 +2,17 @@ import AppKit
 import LaterCore
 import ServiceManagement
 
-let app = NSApplication.shared
 let arguments = CommandLine.arguments
+
+// The agent must not become an application as far as LaunchServices is concerned (no NSApplication): otherwise opening
+// Later while it runs would be sent to the agent, which has the same bundle ID, instead of starting the window app.
+if arguments.contains("--agent") {
+    let agent = AgentDelegate()
+    agent.start()
+    dispatchMain()
+}
+
+let app = NSApplication.shared
 
 #if DEBUG
 // Development only: dark mode for visual checks without touching the system appearance.
@@ -22,23 +31,22 @@ if arguments.contains("--reset") {
     if let icons = SiteIcons.folder { try? FileManager.default.removeItem(at: icons) }
     exit(0)
 }
+#endif
 
-// Development only: takes the development agent back out of Login Items after a dry run.
-if arguments.contains("--dev-agent-off") {
+// `Later --agent-off` and `--agent-on` change the background agent's registration from a shell, then exit.
+if arguments.contains("--agent-off") {
     try? SMAppService.agent(plistName: LoginItem.plistName).unregister()
     exit(0)
 }
-#endif
+if arguments.contains("--agent-on") {
+    try? SMAppService.agent(plistName: LoginItem.plistName).register()
+    exit(0)
+}
 
 if arguments.contains("--verify") {
     app.setActivationPolicy(.accessory)
     let verifier = Verifier()
     verifier.start()
-    app.run()
-} else if arguments.contains("--agent") {
-    app.setActivationPolicy(.prohibited)   // no Dock tile, no windows, no menu
-    let delegate = AgentDelegate()
-    app.delegate = delegate
     app.run()
 } else {
     #if DEBUG

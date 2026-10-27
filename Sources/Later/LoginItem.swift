@@ -53,8 +53,31 @@ final class LoginItem {
             // 1.2 recorded that it had decided (by default or by the toggle); not enabled since means the user turned it off.
             defaults.set(hadOld || !defaults.bool(forKey: "loginDefaultApplied"), forKey: Self.wantedKey)
         }
-        if defaults.bool(forKey: Self.wantedKey), status == .notRegistered || status == .notFound { change(true) }
+        if defaults.bool(forKey: Self.wantedKey) {
+            if status == .notRegistered || status == .notFound {
+                change(true)
+            } else if status == .enabled, defaults.string(forKey: Self.buildKey) != Self.build {
+                // launchd keeps the code signature the agent was registered with, so a replaced app (any new build) can't start
+                // it until it is registered again (measured: OS_REASON_CODESIGNING). Once per build. This works only once
+                // LaunchServices has noticed the new copy, which it does when the files' modification times are new (a copy
+                // that keeps the old times, like `ditto`, needs a `touch`); the register call can't refresh that itself.
+                try? Self.service.unregister()
+                Task {
+                    try? await Task.sleep(for: .seconds(5))
+                    change(true)
+                }
+            }
+        }
+        defaults.set(Self.build, forKey: Self.buildKey)
         refresh()
+    }
+
+    private static let buildKey = "agentRegisteredBuild"
+    /// Changes with every new copy of the app: its version and when its executable was written.
+    private static var build: String {
+        let written = (try? Bundle.main.executableURL?.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)?
+            .timeIntervalSince1970 ?? 0
+        return "\(Bundle.main.infoDictionary?["CFBundleVersion"] ?? "")-\(Int(written))"
     }
 
     func refresh() { status = Self.service.status }
