@@ -7,7 +7,7 @@ namespace Later.Core;
 public readonly record struct QueryItem(string Name, string? Value);
 
 /// A link split into its still-encoded parts, like Foundation's URLComponents. Parsing normalizes nothing but encodes
-/// characters the component may not hold. Characterized against macOS in Task 1; the vectors are the arbiter.
+/// characters the component may not hold. Characterized against macOS; the vectors are the arbiter.
 public sealed partial record ParsedUrl(string Scheme, string? User, string? Password, string? Host, int? Port,
                                        string EncodedPath, string? EncodedQuery, string? EncodedFragment)
 {
@@ -64,7 +64,7 @@ public sealed partial record ParsedUrl(string Scheme, string? User, string? Pass
         port = p; return true;
     }
 
-    /// Non-ASCII hosts become punycode (adjust to what Task 1's characterization of "münchen.example" shows).
+    /// Non-ASCII hosts become punycode (Foundation's host is punycode too).
     static string? EncodeHost(string host)
     {
         if (host.All(c => c < 128)) return host;
@@ -103,7 +103,7 @@ public sealed partial record ParsedUrl(string Scheme, string? User, string? Pass
     {
         var items = new List<QueryItem>();
         if (query.Length == 0) return items;   // "a?" has no items at all
-        foreach (var piece in query.Split('&'))   // Foundation keeps empty pieces: characterize "a=1&&b=2" in Task 1 and adjust here
+        foreach (var piece in query.Split('&'))   // Foundation keeps empty pieces: "a=1&&b=2" has an item with an empty name and no value
         {
             int eq = piece.IndexOf('=', StringComparison.Ordinal);
             items.Add(eq < 0 ? new QueryItem(piece, null) : new QueryItem(piece[..eq], piece[(eq + 1)..]));

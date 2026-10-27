@@ -203,4 +203,33 @@ import Testing
             #expect(names.filter { $0.hasPrefix("library.corrupt-") }.count == 2)
         }
     }
+
+    /// The file both platforms must read: this test encodes a fixed list with the real encoder and compares it, as parsed
+    /// JSON, with shared/vectors/library-golden.json. Regenerate it with LATER_WRITE_GOLDEN=1 swift test --filter libraryGolden.
+    @Test func libraryGolden() throws {
+        var data = LibraryData()
+        let base = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        data.items = [
+            Item(id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!, url: "https://example.com/a", title: "A page",
+                 host: "example.com", kind: .reading, pageType: "example.com/*", browser: .helium, firstSaved: base,
+                 lastSeen: base.addingTimeInterval(60.5), visits: 3, status: .done, doneAt: base.addingTimeInterval(90),
+                 openedAt: base.addingTimeInterval(-3_600), historyVisits: 7, tabIndex: 2, windowRank: 1, historyChecked: "https://example.com/a"),
+            Item(id: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!, url: "https://shop.example.com/p/1", title: "Plain",
+                 host: "shop.example.com", kind: .shopping, pageType: "shop.example.com/p/*", browser: .chrome, firstSaved: base,
+                 lastSeen: base, visits: 1, status: .active, doneAt: nil),
+        ]
+        data.corrections = ["example.com/*": Correction(isSpecific: false, kind: .school), "x.com/*": Correction(kind: .posts)]
+        data.seen = ["0123abcd": base.addingTimeInterval(10)]
+        data.dismissed = ["feedbeef": base.addingTimeInterval(20)]
+        data.dwellSamples = [12.5, 130]
+        let actual = try JSONSerialization.jsonObject(with: JSONEncoder().encode(data)) as! NSDictionary
+        let url = Vectors.folder.appendingPathComponent("library-golden.json")
+        if ProcessInfo.processInfo.environment["LATER_WRITE_GOLDEN"] == "1" {
+            try JSONSerialization.data(withJSONObject: actual, options: [.prettyPrinted, .sortedKeys]).write(to: url)
+        }
+        let golden = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! NSDictionary
+        #expect(actual == golden)
+        // and the golden decodes back to the same list
+        #expect(try JSONDecoder().decode(LibraryData.self, from: Data(contentsOf: url)) == data)
+    }
 }
