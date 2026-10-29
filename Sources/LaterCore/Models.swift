@@ -25,6 +25,10 @@ public enum Browser: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Whether Later can read the browser's own history. Where it can't, the only record of the days a site was visited
+    /// is what Later saw on the front tab itself.
+    public var hasReadableHistory: Bool { self == .helium }
+
     /// The browser's data folder, relative to the user's real home folder.
     public var dataFolder: String {
         switch self {
@@ -224,6 +228,8 @@ public struct Item: Codable, Identifiable, Equatable, Sendable {
     /// For a place page (a site's home, a dashboard, a feed): true when the site is a regular one, so the page shows only
     /// under Regulars; false when it is kept in the list. Nil for a page that is a thing. Absent in older files.
     public var regular: Bool?
+    /// A regular that is still active: the only kind that lives under Regulars. A Done page is always shown in Done.
+    public var isActiveRegular: Bool { regular == true && status == .active }
 
     /// When the page was opened, else when Later first saw it.
     public var opened: Date { openedAt ?? firstSaved }

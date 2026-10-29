@@ -8,8 +8,9 @@ public enum LibrarySection: Hashable, Sendable {
         case .all: item.status == .active && item.lastSeen >= cutoff && item.regular != true
         case .kind(let kind): item.status == .active && item.kind == kind && item.lastSeen >= cutoff && item.regular != true
         case .older: item.status == .active && item.lastSeen < cutoff && item.regular != true
-        case .done: item.status == .done && item.regular != true
-        case .regulars: item.regular == true
+        // Done shows every Done page, regular or not: Empty Done deletes exactly this. Regular is where an active page lives.
+        case .done: item.status == .done
+        case .regulars: item.status == .active && item.regular == true
         }
     }
 }
@@ -101,10 +102,10 @@ public enum LibraryQuery {
         let cutoff = now.addingTimeInterval(-olderAfter)
         var counts: [LibrarySection: Int] = [:]
         for item in data.items {
-            if item.regular == true {
-                counts[.regulars, default: 0] += 1
-            } else if item.status == .done {
+            if item.status == .done {
                 counts[.done, default: 0] += 1
+            } else if item.regular == true {
+                counts[.regulars, default: 0] += 1
             } else if item.lastSeen < cutoff {
                 counts[.older, default: 0] += 1
             } else {

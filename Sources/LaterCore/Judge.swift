@@ -101,7 +101,9 @@ public final class Judge {
             page.tab = tab   // the same page, but maybe now on screen or in another window
             let key = Key(browser: browser, page: page.pageKey)
             copies[page.pageKey, default: 0] += 1
-            sites.insert(page.site)
+            // Only what is in front counts as a visit, and only where the browser's own history can't say: a tab left open
+            // in the background is not a day spent on its site.
+            if !browser.hasReadableHistory, !away, frontBrowser == browser, tab.isActive, tab.windowIndex == 0 { sites.insert(page.site) }
             let place = (tab: tab.tabIndex, window: rank[tab.windowID] ?? 0)
             if places[page.pageKey].map({ (place.window, place.tab) < ($0.window, $0.tab) }) ?? true {
                 places[page.pageKey] = place

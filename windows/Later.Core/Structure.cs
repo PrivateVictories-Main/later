@@ -7,8 +7,8 @@ namespace Later.Core;
 internal static class Structure
 {
     /// Pages that are in the way: sign-in redirects, one-time links, confirmations and errors. A sign-in or sign-up page
-    /// itself is kept; these words only ever show up on the way through. Matched as whole path sections, but only among a
-    /// path's first two: deeper down they are a page's own name (/documentation/swift/error).
+    /// itself is kept; these words only ever show up on the way through. Matched as whole path sections at any depth,
+    /// except in documentation (a docs host, or see `DocsSections`), where they are a page's own name (/documentation/swift/error).
     static readonly HashSet<string> OneTimeWords =
     [
         "oauth", "oauth2", "authorize", "callback", "logout", "signout", "log-out", "sign-out", "redirect", "unsubscribe",
@@ -44,9 +44,15 @@ internal static class Structure
         "mail.proton.me", "messenger.com", "web.whatsapp.com", "web.telegram.org", "app.slack.com", "teams.microsoft.com",
     ];
     /// Sites that are chat in one place and a website in the rest: only the chat paths are inboxes.
+    /// They cover the site's subdomains too (ptb.discord.com), except the ones for reading (support.discord.com).
     static readonly (string Host, HashSet<string> Paths)[] ChatAppPaths = [("discord.com", new HashSet<string> { "channels", "app" })];
-    /// A first path section after which the next one is an article's name (/wiki/Consent), not a step of a flow.
-    static readonly HashSet<string> ArticleSections = ["wiki"];
+    static readonly HashSet<string> ChatDocLabels = ["support", "status", "blog", "developer", "developers", "docs", "help", "dis"];
+    /// A first path section that marks documentation or an article, where a flow's word is a page's own name
+    /// (/documentation/swift/error, /wiki/Consent).
+    static readonly HashSet<string> DocsSections =
+        ["docs", "documentation", "reference", "wiki", "manual", "guide", "learn", "api-reference"];
+    /// Separators between a page's own title and its site's name.
+    static readonly string[] TitleSeparators = [" | ", " – ", " — ", " - ", " · "];
     /// A search engine's own front page.
     static readonly string[] SearchEngineHosts =
     [
@@ -88,10 +94,11 @@ internal static class Structure
         if (IdentitySuffixes.Any(s => site.EndsWith(s, StringComparison.Ordinal)) && !IdentityDocLabels.Contains(firstLabel)) return true;
         if (AuthHostLabels.Contains(firstLabel)) return true;
         if (InboxHosts.Any(h => SiteRules.HostMatches(site, h))) return true;
-        if (all.Count > 0 && ChatAppPaths.Any(c => site == c.Host && c.Paths.Contains(all[0].ToLowerInvariant()))) return true;
+        if (all.Count > 0 && ChatAppPaths.Any(c => IsChatHost(site, c.Host) && c.Paths.Contains(all[0].ToLowerInvariant()))) return true;
         if (all.Count == 0 && SearchEngineHosts.Any(h => SiteRules.HostMatches(site, h))) return true;
         if (all.Count > 0 && InboxWords.Contains(all[0].ToLowerInvariant())) return true;
-        if (HasOneTimeWord(path) || (route is not null && HasOneTimeWord(route)) || HasSecretPath(all)) return true;
+        bool reading = firstLabel is "docs" or "developer" or "developers";
+        if ((!reading && (HasOneTimeWord(path) || (route is not null && HasOneTimeWord(route)))) || HasSecretPath(all)) return true;
         if (IsFile(all.Count > 0 ? all[^1] : null)) return true;
         return IsUselessTitle(title);
     }
@@ -134,20 +141,26 @@ internal static class Structure
         return FileExtensions.Contains(section[(dot + 1)..].ToLowerInvariant()) && !IsSlug(section);
     }
 
-    /// A one-time word in the first two sections of a path, the second not counting after "wiki".
+    /// A one-time word anywhere in a path, unless it is documentation.
     static bool HasOneTimeWord(IReadOnlyList<string> path)
     {
-        if (path.Count == 0) return false;
-        int checkedSections = ArticleSections.Contains(path[0].ToLowerInvariant()) ? 1 : 2;
-        return path.Take(checkedSections).Any(p => OneTimeWords.Contains(p.ToLowerInvariant()));
+        if (path.Count == 0 || DocsSections.Contains(path[0].ToLowerInvariant())) return false;
+        return path.Any(p => OneTimeWords.Contains(p.ToLowerInvariant()));
     }
+
+    /// The chat site itself or one of its subdomains (ptb., canary.) that isn't one for reading.
+    static bool IsChatHost(string site, string chat) =>
+        site == chat || (site.EndsWith("." + chat, StringComparison.Ordinal) && !ChatDocLabels.Contains(Text.SplitOmitEmpty(site, '.')[0]));
 
     internal static bool IsUselessTitle(string title)
     {
         var words = Text.SplitWhere(title.ToLowerInvariant(), r => !Text.IsLetter(r) && !Text.IsNumber(r));
         if (words.Count > 5) return false;
+        // A one-word phrase is the page's own title, alone or before its site's name: "Forbidden – Site", not "Forbidden Planet".
+        int cut = TitleSeparators.Select(s => title.IndexOf(s, StringComparison.Ordinal)).Where(i => i >= 0).DefaultIfEmpty(title.Length).Min();
+        var lead = Text.SplitWhere(title[..cut].ToLowerInvariant(), r => !Text.IsLetter(r) && !Text.IsNumber(r));
         return UselessTitles.Any(phrase => phrase.Length == 1
-                ? words.Count == 1 && words[0] == phrase[0]
+                ? lead.Count == 1 && lead[0] == phrase[0]
                 : words.Count >= phrase.Length && words.Take(phrase.Length).SequenceEqual(phrase))
             || BlankTitles.Any(phrase => words.SequenceEqual(phrase));
     }

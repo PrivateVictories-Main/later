@@ -28,23 +28,49 @@ enum BrowserStatus: Equatable {
     }
 }
 
-/// What the engine asks of the outside world about a browser, so tests can stand in for it.
+/// What the engine asks of the outside world about a browser, so tests can stand in for it. Every default is a stand-in that
+/// answers nothing, so an engine built in a test can never read a real browser or its history; only `real` does.
 struct BrowserIO {
-    var isRunning: (Browser) -> Bool = { BrowserReader.mainInstance(of: $0) != nil }
+    var isRunning: (Browser) -> Bool = { _ in false }
     /// Nil: allowed. Never shows macOS's prompt.
-    var permission: (Browser) async -> ReadError? = { await BrowserReader.checkPermission($0) }
-    var read: (Browser) async throws -> Snapshot = { try await BrowserReader.read($0) }
+    var permission: (Browser) async -> ReadError? = { _ in .notRunning }
+    var read: (Browser) async throws -> Snapshot = { _ in throw ReadError.notRunning }
     /// When Helium's history says each link was first opened, and how often. Reads the History files, read-only.
-    var history: @Sendable ([String]) -> [String: HistoryLookup.Result] = { links in
-        HistoryLookup.lookup(links, in: HistoryLookup.databases(in: RealHome.path + "/" + Browser.helium.dataFolder))
-    }
-    /// Which days of the last 28 each site was visited. Nothing unless the engine is the real one: a stand-in never reads
-    /// anyone's history.
+    var history: @Sendable ([String]) -> [String: HistoryLookup.Result] = { _ in [:] }
+    /// Which days of the last 28 each site was visited, from the same files.
     var visitDays: @Sendable (Date) -> [String: Set<Int>] = { _ in [:] }
+    /// The browser folder `history` and `visitDays` read. Nil for a stand-in.
+    var historyFolder: String?
 
-    /// The real answer, from the same History files: asked about once a day, never listed.
-    static let realVisitDays: @Sendable (Date) -> [String: Set<Int>] = { since in
-        HistoryLookup.visitDays(in: HistoryLookup.databases(in: RealHome.path + "/" + Browser.helium.dataFolder), since: since)
+    static var real: BrowserIO {
+        let folder = RealHome.path + "/" + Browser.helium.dataFolder
+        return BrowserIO(
+            isRunning: { BrowserReader.mainInstance(of: $0) != nil },
+            permission: { await BrowserReader.checkPermission($0) },
+            read: { try await BrowserReader.read($0) },
+            history: { HistoryLookup.lookup($0, in: HistoryLookup.databases(in: folder)) },
+            visitDays: { since in
+                VisitDaysCache.shared.days(since: since) { HistoryLookup.visitDays(in: HistoryLookup.databases(in: folder), since: $0) }
+            },
+            historyFolder: folder)
+    }
+}
+
+/// The last History answer to "which days was each site visited", kept for the process: an engine started again (each
+/// hand-off between the app and its helper) reuses it within the same day instead of reading the History again. An empty
+/// answer (a failed read) is never kept.
+final class VisitDaysCache: @unchecked Sendable {
+    static let shared = VisitDaysCache()
+    private let lock = NSLock()
+    private var cached: (since: Date, days: [String: Set<Int>])?
+
+    func days(since: Date, ask: (Date) -> [String: Set<Int>]) -> [String: Set<Int>] {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached, cached.since == since { return cached.days }
+        let days = ask(since)
+        if !days.isEmpty { cached = (since, days) }
+        return days
     }
 }
 
@@ -114,7 +140,7 @@ final class Engine {
     /// leaves them for the window app, which can tell the user how many went.
     init(readOnly: Bool = false, dropsSecretLinks: Bool = true) {
         canEdit = !readOnly
-        io = BrowserIO(visitDays: BrowserIO.realVisitDays)
+        io = .real
         let feeds = !Sample.enabled && UserDefaults.standard.bool(forKey: Self.savesFeedHomesKey)
         savesFeedHomes = feeds
         #if DEBUG
@@ -157,9 +183,7 @@ final class Engine {
 
     #if DEBUG
     /// Tests only: an engine around `library`, in memory: nothing is read or saved, and no browser is looked at.
-    init(testing library: Library, io: BrowserIO = BrowserIO(isRunning: { _ in false }, permission: { _ in .notRunning },
-                                                             read: { _ in throw ReadError.notRunning }), store: LibraryStore? = nil,
-                  readOnly: Bool = false) {
+    init(testing library: Library, io: BrowserIO = BrowserIO(), store: LibraryStore? = nil, readOnly: Bool = false) {
         self.library = library
         self.io = io
         canEdit = !readOnly
@@ -171,6 +195,9 @@ final class Engine {
         self.store = readOnly ? nil : store
         candidate = store
     }
+
+    /// The browser folder this engine reads History from; nil for a stand-in.
+    var historyFolder: String? { io.historyFolder }
 
     /// Tests only: waits for the reads in flight.
     func settle() async {
@@ -259,6 +286,8 @@ final class Engine {
         let merged = library.mergeDuplicates()
         let secrets = dropsSecretLinks ? library.dropSecretLinks() : 0
         let r = library.refreshKinds()
+        let places = library.refreshPlaces()
+        Perf.log.info("refreshPlaces backToList=\(places, privacy: .public)")
         Perf.log.info("dropSecretLinks removed=\(secrets, privacy: .public)")
         Perf.log.info("mergeDuplicates removed=\(merged, privacy: .public) refreshKinds items=\(r.items, privacy: .public) changed=\(r.changed, privacy: .public) toTools=\(r.toTools, privacy: .public)")
         return secrets
@@ -314,10 +343,8 @@ final class Engine {
             library.setHistoryDays(days)
             let ms = Perf.ms(since: start)
             Perf.log.info("visitDays sites=\(days.count, privacy: .public) regularSites=\(self.library.regularSiteCount(today: today), privacy: .public) \(ms, format: .fixed(precision: 1), privacy: .public)ms")
-            if library.hasVisitDays {
-                let r = library.migrateRegulars(today: today)
-                if r.of > 0 { Perf.log.info("regulars migrated=\(r.migrated, privacy: .public) of \(r.of, privacy: .public)") }
-            }
+            let r = library.migrateRegulars(today: today)
+            if r.of > 0 { Perf.log.info("regulars migrated=\(r.migrated, privacy: .public) of \(r.of, privacy: .public)") }
             historyLookups -= 1
         }
     }

@@ -78,7 +78,7 @@ struct ItemRow: View, @MainActor Equatable {
                         HStack(spacing: 6) {
                             Button(action: open) { Image(systemName: "arrow.up.forward") }
                                 .help("Open in your browser")
-                            if item.regular == true {
+                            if item.isActiveRegular {
                                 Button { ItemActions(model: model).keepInList([item]) } label: { Image(systemName: "tray.and.arrow.down") }
                                     .help("Keep in my list")
                                     .disabled(!model.engine.canEdit)
@@ -206,7 +206,7 @@ struct RowActions: View {
         Button("Open") { actions.open(picked) }
         Button("Copy Link") { actions.copyLinks(picked) }
         if model.engine.canEdit {
-            if picked.allSatisfy({ $0.regular == true }) {
+            if picked.allSatisfy(\.isActiveRegular) {
                 Button("Keep in My List") { actions.keepInList(picked) }
             } else {
                 Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
@@ -245,7 +245,7 @@ struct RowMenu: View {
                 }
             }
             Button("Not an Idea") { actions.notAnIdea(picked) }
-            if picked.allSatisfy({ $0.regular == true }) {
+            if picked.allSatisfy(\.isActiveRegular) {
                 Button("Keep in My List") { actions.keepInList(picked) }
             } else {
                 Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }

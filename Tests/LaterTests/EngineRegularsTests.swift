@@ -63,8 +63,48 @@ import Testing
     }
 }
 
-@Suite struct StandInEngineTests {
-    @Test func aStandInEngineNeverReadsAnyonesHistory() {
-        #expect(BrowserIO().visitDays(Date()).isEmpty)
+@Suite @MainActor struct StandInEngineTests {
+    @Test func noTestBuiltEnginePointsAtARealBrowserFolder() {
+        let fake = FakeBrowsers()
+        let engines = [Engine(testing: Library()), Engine(testing: Library(), io: fake.io), Engine(testing: Library(), readOnly: true)]
+        #expect(engines.allSatisfy { $0.historyFolder == nil })
+        #expect(BrowserIO().historyFolder == nil)
+    }
+
+    @Test func onlyTheRealIOReadsHeliumsFolder() {
+        #expect(BrowserIO.real.historyFolder == RealHome.path + "/" + Browser.helium.dataFolder)
+    }
+
+    @Test func aStandInAnswersNothingAboutAnyonesHistory() async {
+        let io = BrowserIO()
+        #expect(io.history(["https://example.com/"]).isEmpty)
+        #expect(io.visitDays(Date()).isEmpty)
+        #expect(!io.isRunning(.helium) && !io.isRunning(.chrome))
+        #expect(await io.permission(.helium) == .notRunning)
+        await #expect(throws: ReadError.self) { try await io.read(.helium) }
+    }
+}
+
+@Suite struct VisitDaysCacheTests {
+    private let day1 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    @Test func theHistoryIsAskedOncePerDayHoweverManyEnginesAsk() {
+        let cache = VisitDaysCache()
+        var asked = 0
+        let ask: (Date) -> [String: Set<Int>] = { _ in asked += 1; return ["a.com": [1, 2]] }
+        #expect(cache.days(since: day1, ask: ask) == ["a.com": [1, 2]])
+        #expect(cache.days(since: day1, ask: ask) == ["a.com": [1, 2]])
+        #expect(asked == 1)
+        _ = cache.days(since: day1.addingTimeInterval(86_400), ask: ask)
+        #expect(asked == 2)
+    }
+
+    @Test func anEmptyAnswerIsNotRemembered() {
+        let cache = VisitDaysCache()
+        var asked = 0
+        let ask: (Date) -> [String: Set<Int>] = { _ in asked += 1; return [:] }
+        _ = cache.days(since: day1, ask: ask)
+        _ = cache.days(since: day1, ask: ask)
+        #expect(asked == 2)
     }
 }

@@ -66,10 +66,21 @@ public final class Library {
     // MARK: Regulars
 
     /// Replaces what the browser's history says about which days each site was visited.
-    public func setHistoryDays(_ days: [String: Set<Int>]) { historyDays = days }
+    /// An empty answer (a failed or partial read) never replaces a good one.
+    public func setHistoryDays(_ days: [String: Set<Int>]) {
+        if days.isEmpty && !historyDays.isEmpty { return }
+        historyDays = days
+    }
 
-    /// Whether there is anything to tell a regular site from a new one yet.
-    public var hasVisitDays: Bool { !historyDays.isEmpty || !data.siteDays.isEmpty }
+    /// Whether there is enough to tell a regular site from a new one: at least as many different past days of the window,
+    /// over all sites, as it takes to be a regular. Before that, no page can be told apart, and a flag set now would be
+    /// permanent.
+    public func hasVisitDays(today: Int) -> Bool {
+        var days = Set<Int>()
+        for set in historyDays.values { days.formUnion(set) }
+        for list in data.siteDays.values { days.formUnion(list) }
+        return Familiarity.count(days, today: today) >= Familiarity.regularDays
+    }
 
     /// Notes that these sites were open on `day`: for a browser whose history Later can't read, the only record of its days.
     /// Hashed like `seen`, so no hostnames are stored.
@@ -121,6 +132,7 @@ public final class Library {
     @discardableResult
     public func migrateRegulars(today: Int) -> (migrated: Int, of: Int) {
         var migrated = 0, of = 0
+        guard hasVisitDays(today: today) else { return (0, 0) }
         for i in data.items.indices where data.items[i].regular == nil {
             let item = data.items[i]
             guard let url = URL(string: item.url), url.host != nil else { continue }
@@ -133,6 +145,23 @@ public final class Library {
         }
         if of > 0 { changed() }
         return (migrated, of)
+    }
+
+    /// Takes the flag off saved pages that the current rules no longer call places (a deeper page, a file, a page named by a
+    /// query value): they are things, kept in the list with the rest. Runs once when the list loads. Nothing is deleted.
+    /// Returns how many regulars went back to the list: counts only, for the log.
+    @discardableResult
+    public func refreshPlaces() -> Int {
+        var moved = 0, any = false
+        for i in data.items.indices where data.items[i].regular != nil {
+            guard let url = URL(string: data.items[i].url), url.host != nil,
+                  !PageRules.judge(url, title: data.items[i].title).isPlace else { continue }
+            if data.items[i].regular == true { moved += 1 }
+            data.items[i].regular = nil
+            any = true
+        }
+        if any { changed() }
+        return moved
     }
 
     /// "Keep in my list": the page type is kept from now on, and its regulars move back to their kind.

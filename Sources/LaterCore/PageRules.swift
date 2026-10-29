@@ -76,7 +76,9 @@ public enum PageRules {
                 // A site's home or a plain page like /careers or /login: one page type per host ("host/~"), so a single
                 // correction covers them all. A host nobody has a rule for is a tool or a site the user follows.
                 type = base + "/~"
-                isPlace = true
+                // Only a home or a single-section page is somewhere you go; a deeper page, a file or a page named by a
+                // query value (/blog/hello-world, /article.php?id=7) is a thing, kept even on a site you visit all the time.
+                isPlace = path.count <= 1 && queryKeys.isEmpty && !(path.last?.contains(".") ?? false)
                 if kind == .other || kind == .tools { kind = .tools }
             }
         }
@@ -101,8 +103,8 @@ public enum PageRules {
 /// What a page is made of, for sites without a rule of their own, and the pages never kept.
 enum Structure {
     /// Pages that are in the way: sign-in redirects, one-time links, confirmations and errors. A sign-in or sign-up page
-    /// itself is kept; these words only ever show up on the way through. Matched as whole path sections, but only among a
-    /// path's first two: deeper down they are a page's own name (/documentation/swift/error).
+    /// itself is kept; these words only ever show up on the way through. Matched as whole path sections at any depth,
+    /// except in documentation (a docs host, or see `docsSections`), where they are a page's own name (/documentation/swift/error).
     static let oneTimeWords: Set<String> = [
         "oauth", "oauth2", "authorize", "callback", "logout", "signout", "log-out", "sign-out", "redirect", "unsubscribe",
         "error", "success", "thank-you", "thankyou", "verify", "verify-email", "consent",
@@ -134,9 +136,12 @@ enum Structure {
         "mail.proton.me", "messenger.com", "web.whatsapp.com", "web.telegram.org", "app.slack.com", "teams.microsoft.com",
     ]
     /// Sites that are chat in one place and a website in the rest: only the chat paths are inboxes.
+    /// They cover the site's subdomains too (ptb.discord.com), except the ones for reading (support.discord.com).
     static let chatAppPaths: [String: Set<String>] = ["discord.com": ["channels", "app"]]
-    /// A first path section after which the next one is an article's name (/wiki/Consent), not a step of a flow.
-    static let articleSections: Set<String> = ["wiki"]
+    static let chatDocLabels: Set<String> = ["support", "status", "blog", "developer", "developers", "docs", "help", "dis"]
+    /// A first path section that marks documentation or an article, where a flow's word is a page's own name
+    /// (/documentation/swift/error, /wiki/Consent).
+    static let docsSections: Set<String> = ["docs", "documentation", "reference", "wiki", "manual", "guide", "learn", "api-reference"]
     /// A search engine's own front page.
     static let searchEngineHosts: [String] = [
         "google.*", "bing.com", "duckduckgo.com", "search.brave.com", "ecosia.org", "yahoo.com", "kagi.com", "startpage.com",
@@ -171,10 +176,11 @@ enum Structure {
         if identitySuffixes.contains(where: site.hasSuffix), !identityDocLabels.contains(site.split(separator: ".").first.map(String.init) ?? "") { return true }
         if authHostLabels.contains(site.split(separator: ".").first.map(String.init) ?? "") { return true }
         if inboxHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
-        if let first = all.first?.lowercased(), chatAppPaths.contains(where: { site == $0.key && $0.value.contains(first) }) { return true }
+        if let first = all.first?.lowercased(), chatAppPaths.contains(where: { isChatHost(site, $0.key) && $0.value.contains(first) }) { return true }
         if all.isEmpty, searchEngineHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
         if let first = all.first?.lowercased(), inboxWords.contains(first) { return true }
-        if hasOneTimeWord(path) || hasOneTimeWord(route) || hasSecretPath(all) { return true }
+        let reading = ["docs", "developer", "developers"].contains(site.split(separator: ".").first.map(String.init) ?? "")
+        if (!reading && (hasOneTimeWord(path) || hasOneTimeWord(route))) || hasSecretPath(all) { return true }
         if isFile(all.last) { return true }
         return isUselessTitle(title)
     }
@@ -209,19 +215,29 @@ enum Structure {
         return fileExtensions.contains(section[section.index(after: dot)...].lowercased()) && !isSlug(section)
     }
 
-    /// A one-time word in the first two sections of a path, the second not counting after "wiki".
+    /// A one-time word anywhere in a path, unless it is documentation.
     static func hasOneTimeWord(_ path: [String]) -> Bool {
-        let first = path.first?.lowercased() ?? ""
-        let checked = articleSections.contains(first) ? path.prefix(1) : path.prefix(2)
-        return checked.contains { oneTimeWords.contains($0.lowercased()) }
+        guard !docsSections.contains(path.first?.lowercased() ?? "") else { return false }
+        return path.contains { oneTimeWords.contains($0.lowercased()) }
     }
+
+    /// The chat site itself or one of its subdomains (ptb., canary.) that isn't one for reading.
+    static func isChatHost(_ site: String, _ chat: String) -> Bool {
+        site == chat || (site.hasSuffix("." + chat) && !chatDocLabels.contains(site.split(separator: ".").first.map(String.init) ?? ""))
+    }
+
+    /// Separators between a page's own title and its site's name.
+    static let titleSeparators = [" | ", " – ", " — ", " - ", " · "]
 
     static func isUselessTitle(_ title: String) -> Bool {
         let words = title.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
         guard words.count <= 5 else { return false }
+        // A one-word phrase is the page's own title, alone or before its site's name: "Forbidden – Site", not "Forbidden Planet".
+        let cut = titleSeparators.compactMap { title.range(of: $0)?.lowerBound }.min() ?? title.endIndex
+        let lead = title[..<cut].lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
         return uselessTitles.contains { phrase in
             let phraseWords = phrase.split(separator: " ").map(String.init)
-            return phraseWords.count == 1 ? words == phraseWords : words.starts(with: phraseWords)
+            return phraseWords.count == 1 ? lead == phraseWords : words.starts(with: phraseWords)
         }
             || blankTitles.contains { words.elementsEqual($0.split(separator: " ").map(String.init)) }
     }

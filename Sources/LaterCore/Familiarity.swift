@@ -48,6 +48,8 @@ public enum Familiarity {
             return days > 0 ? "Regular · visited \(days) days this month" : "Regular"
         }
         if correction?.isSpecific == true || correction?.regular == false { return "Kept because you said so" }
+        // A place (it has a flag) that is kept, on a site that has since become a regular, was kept for a reason.
+        if regular == false && days >= regularDays { return "Kept in your list" }
         return days >= regularDays ? "A specific page on a regular site" : "New site"
     }
 }

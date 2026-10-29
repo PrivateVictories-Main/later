@@ -94,7 +94,9 @@ public static class PageRules
                 // A site's home or a plain page like /careers or /login: one page type per host ("host/~"), so a single
                 // correction covers them all. A host nobody has a rule for is a tool or a site the user follows.
                 type = baseType + "/~";
-                isPlace = true;
+                // Only a home or a single-section page is somewhere you go; a deeper page, a file or a page named by a
+                // query value (/blog/hello-world, /article.php?id=7) is a thing, kept even on a site you visit all the time.
+                isPlace = path.Count <= 1 && queryKeys.Count == 0 && !(path.Count > 0 && path[^1].Contains('.', StringComparison.Ordinal));
                 if (kind == Kind.Other || kind == Kind.Tools) kind = Kind.Tools;
             }
         }

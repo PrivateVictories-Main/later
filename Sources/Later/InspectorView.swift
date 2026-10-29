@@ -86,7 +86,7 @@ struct ItemDetail: View {
                                     .contentTransition(Motion.symbolSwap)
                                     .frame(maxWidth: .infinity)
                             }
-                            if item.regular != true {
+                            if !item.isActiveRegular {
                                 Button { actions.setDone([item], !done) } label: {
                                     Label(done ? "Move Back" : "Mark Done", systemImage: done ? "arrow.uturn.backward" : "checkmark.circle")
                                         .frame(maxWidth: .infinity)

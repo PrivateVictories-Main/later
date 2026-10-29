@@ -55,6 +55,7 @@ public class FamiliarityTests
     [InlineData(true, 18, "Regular · visited 18 days this month")]
     [InlineData(true, 0, "Regular")]
     [InlineData(null, 9, "A specific page on a regular site")]
+    [InlineData(false, 9, "Kept in your list")]
     public void TheInspectorSaysWhy(bool? regular, int days, string line) => Assert.Equal(line, Familiarity.Why(regular, days, null));
 
     [Fact]

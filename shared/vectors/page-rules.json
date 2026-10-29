@@ -1,5 +1,5 @@
 {
-  "counts": {"cases": 169},
+  "counts": {"cases": 176},
   "cases": [
     {"url": "https://www.amazon.com/", "title": "Amazon.com. Spend less. Smile more.", "specific": false, "kind": "shopping"},
     {"url": "https://www.amazon.com/s?k=standing+desk", "title": "Amazon.com : standing desk", "specific": false, "kind": "shopping"},
@@ -169,6 +169,13 @@
     {"url": "https://www.youtube.com/", "title": "YouTube", "specific": true, "feeds": true, "place": true, "note": "a feed home, when feeds are saved, is a place"},
     {"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "title": "A video", "specific": true, "place": false},
     {"url": "https://x.com/karpathy/status/1890000000000000000", "title": "A post", "specific": true, "place": false},
-    {"url": "https://example.com/posts/how-we-found-the-bug", "title": "How we found the bug", "specific": true, "place": false}
+    {"url": "https://example.com/posts/how-we-found-the-bug", "title": "How we found the bug", "specific": true, "place": false},
+    {"url": "https://example.com/blog/hello-world", "title": "Hello World", "specific": true, "place": false},
+    {"url": "https://example.com/guides/getting-started", "title": "Getting started", "specific": true, "place": false},
+    {"url": "https://example.com/billing/invoices", "title": "Invoices", "specific": true, "place": false},
+    {"url": "https://example.com/greatwork.html", "title": "Great work", "specific": true, "place": false},
+    {"url": "https://example.com/article.php?id=7", "title": "An article", "specific": true, "place": false},
+    {"url": "https://example.com/page?id=7", "title": "A page", "specific": true, "place": false},
+    {"url": "https://example.com/pricing", "title": "Pricing", "specific": true, "place": true}
   ]
 }
