@@ -101,8 +101,7 @@ public sealed class Engine
         library.Prune(clock());
         judge = MakeJudge();
         BackfillHistory();
-        FrontAppChanged(io.FrontBrowser());   // rings the front browser
-        foreach (var b in BrowserInfo.All) if (b != judge.FrontBrowser) Ring(b);
+        RingFrontFirst();
     }
 
     /// Stops reading and saving. With `flush`, the list is written first (a failure is the notice, not an exception).
@@ -274,6 +273,14 @@ public sealed class Engine
         if (browser is { } entering && entering != left) Ring(entering);
     }
 
+    /// The front browser (read by the app switch) and then every other, once each; the front one is taken before any read ends.
+    void RingFrontFirst()
+    {
+        var front = io.FrontBrowser();
+        FrontAppChanged(front);
+        foreach (var b in BrowserInfo.All) if (b != front) Ring(b);
+    }
+
     /// Asleep or locked: `reason` is "sleep" or "lock". Time away is neither reading nor leaving a page open.
     public void SetAway(string reason, bool on)
     {
@@ -292,8 +299,7 @@ public sealed class Engine
         // Start judging afresh: the judge's last view of the screen is stale, and paused time isn't reading time.
         judge = MakeJudge();
         PublishCopies();
-        FrontAppChanged(io.FrontBrowser());
-        foreach (var b in BrowserInfo.All) if (b != judge.FrontBrowser) Ring(b);
+        RingFrontFirst();
         StateChanged?.Invoke();
     }
 
