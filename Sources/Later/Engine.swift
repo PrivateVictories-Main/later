@@ -38,6 +38,10 @@ struct BrowserIO {
     var history: @Sendable ([String]) -> [String: HistoryLookup.Result] = { links in
         HistoryLookup.lookup(links, in: HistoryLookup.databases(in: RealHome.path + "/" + Browser.helium.dataFolder))
     }
+    /// Which days of the last 28 each site was visited, from the same History files. Asked about once a day, never listed.
+    var visitDays: @Sendable (Date) -> [String: Set<Int>] = { since in
+        HistoryLookup.visitDays(in: HistoryLookup.databases(in: RealHome.path + "/" + Browser.helium.dataFolder), since: since)
+    }
 }
 
 /// Glue: doorbell or app switch → reader → judge → library → file. Everything runs on the main actor
@@ -95,6 +99,8 @@ final class Engine {
     @ObservationIgnored private var stopped = false
     @ObservationIgnored private var observers: [(center: NotificationCenter, token: NSObjectProtocol)] = []
     @ObservationIgnored private var historyLookups = 0
+    /// The day (see `Familiarity.dayNumber`) the history was last asked which days each site was visited.
+    @ObservationIgnored private var visitDaysAsOf: Int?
     /// Saved pages removed at load because their link carried a secret; start() saves the list without them.
     @ObservationIgnored private var secretsDropped = 0
 
@@ -223,6 +229,7 @@ final class Engine {
         for browser in Browser.allCases where status[browser] != .notInstalled { startWatching(browser) }
         judge = makeJudge()
         backfillHistory()
+        refreshVisitDays()
         frontAppChanged(bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)   // rings the front browser
         for browser in Browser.allCases where browser != judge.frontBrowser { ring(browser) }
     }
@@ -284,6 +291,31 @@ final class Engine {
     /// Once, as Later starts: when the history says saved pages were opened, for those it doesn't say yet and wasn't already
     /// asked about at an earlier launch.
     func backfillHistory() { lookUpHistory(library.linksMissingHistory(), remembersMisses: true) }
+
+    /// Asks the history which days of the last 28 each site was visited, off the main thread: at launch, and again on the
+    /// first read after the local date changes. Then pages saved before Regulars that are places on regular sites move
+    /// there, once. Nothing is read in between, and logs are counts and time only.
+    func refreshVisitDays(now: Date = .now) {
+        let today = Familiarity.dayNumber(of: now)
+        guard visitDaysAsOf != today, !Sample.enabled else { return }
+        visitDaysAsOf = today
+        let calendar = Calendar.current
+        let since = calendar.date(byAdding: .day, value: -Familiarity.window, to: calendar.startOfDay(for: now)) ?? now
+        let ask = io.visitDays
+        historyLookups += 1
+        Task {
+            let start = ContinuousClock.now
+            let days = await Task.detached(priority: .utility) { ask(since) }.value
+            library.setHistoryDays(days)
+            let ms = Perf.ms(since: start)
+            Perf.log.info("visitDays sites=\(days.count, privacy: .public) regularSites=\(self.library.regularSiteCount(today: today), privacy: .public) \(ms, format: .fixed(precision: 1), privacy: .public)ms")
+            if library.hasVisitDays {
+                let r = library.migrateRegulars(today: today)
+                if r.of > 0 { Perf.log.info("regulars migrated=\(r.migrated, privacy: .public) of \(r.of, privacy: .public)") }
+            }
+            historyLookups -= 1
+        }
+    }
 
     /// Asks the history about these links off the main thread, then records the answers. Only ever for pages that are new
     /// or still unknown, never for a page on every read. Logs counts and time only.
@@ -433,6 +465,7 @@ final class Engine {
         do {
             let snapshot = try outcome.get()
             let judgeStart = ContinuousClock.now
+            refreshVisitDays()
             judge.ingest(snapshot, now: .now)
             lookUpHistory(library.takeAwaitingHistory())
             publishCopies()

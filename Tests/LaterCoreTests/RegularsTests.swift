@@ -56,6 +56,13 @@ import Testing
         #expect(lib.data.siteDays == [Library.hash("a.com"): [today - 28, today - 1]])
     }
 
+    @Test func regularSitesAreCountedAcrossBothSourcesWithoutCountingOneTwice() {
+        let lib = Library()
+        lib.setHistoryDays(["a.com": [today - 1, today - 2, today - 3, today - 4], "b.com": [today - 1]])
+        lib.noteSiteDays(["a.com", "c.com"], days: [today - 5, today - 6, today - 7, today - 8])   // a.com is in both
+        #expect(lib.regularSiteCount(today: today) == 2)   // a.com and c.com
+    }
+
     @Test func aFileWithoutSiteDaysOrRegularFlagsStillOpens() throws {
         let old = #"{"version":1,"items":[],"corrections":{"a.com/~":{"isSpecific":true}},"seen":{},"dwellSamples":[]}"#
         let data = try JSONDecoder().decode(LibraryData.self, from: Data(old.utf8))

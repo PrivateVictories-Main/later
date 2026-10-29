@@ -108,6 +108,14 @@ public final class Library {
         return Familiarity.disposition(of: verdict, days: visitDays(site: site, today: today), correction: data.corrections[verdict.pageType])
     }
 
+    /// How many sites count as regular today, for the log: counts only.
+    public func regularSiteCount(today: Int) -> Int {
+        let known = Set(historyDays.keys.map(Self.hash))
+        let fromHistory = historyDays.keys.filter { visitDays(site: $0, today: today) >= Familiarity.regularDays }.count
+        let noted = data.siteDays.filter { !known.contains($0.key) && Familiarity.count(Set($0.value), today: today) >= Familiarity.regularDays }.count
+        return fromHistory + noted
+    }
+
     /// Looks once at every saved page from before Regulars (no flag yet): a place on a regular site becomes a regular.
     /// Nothing is deleted. Returns counts only: the places looked at, and how many of them moved.
     @discardableResult
