@@ -66,6 +66,12 @@ public struct LibraryStore: Sendable {
         let fm = FileManager.default
         var keptAs: String?
         if fm.fileExists(atPath: fileURL.path) {
+            // A file that can't be opened (permissions, I/O error) isn't known to be damaged: leave it alone.
+            guard (try? Data(contentsOf: fileURL)) != nil else {
+                return Loaded(data: decode(backupURL) ?? LibraryData(),
+                              notice: "Later couldn't read its list just now. It will try again.",
+                              writable: false)
+            }
             let name = "library.corrupt-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).json"
             guard (try? fm.moveItem(at: fileURL, to: fileURL.deletingLastPathComponent().appendingPathComponent(name))) != nil else {
                 return Loaded(data: decode(backupURL) ?? LibraryData(),

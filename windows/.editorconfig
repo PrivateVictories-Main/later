@@ -1,0 +1,17 @@
+root = true
+[*.cs]
+indent_style = space
+indent_size = 4
+# String comparisons must always say which comparison (Swift's == and hasPrefix are ordinal; .NET defaults to the culture)
+dotnet_diagnostic.CA1307.severity = error
+dotnet_diagnostic.CA1309.severity = error
+dotnet_diagnostic.CA1310.severity = error
+dotnet_diagnostic.CA1311.severity = error
+dotnet_diagnostic.CA1305.severity = error
+# Not useful for this code base
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1716.severity = none
+dotnet_diagnostic.CA2007.severity = none
+# The network ban (BannedApiAnalyzers) must fail the build, not warn
+dotnet_diagnostic.RS0030.severity = error
+dotnet_diagnostic.RS0031.severity = error

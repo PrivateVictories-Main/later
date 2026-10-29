@@ -1,0 +1,56 @@
+{
+  "corrections" : {
+    "example.com\/*" : {
+      "isSpecific" : false,
+      "kind" : "school"
+    },
+    "x.com\/*" : {
+      "kind" : "posts"
+    }
+  },
+  "dismissed" : {
+    "feedbeef" : 800000020
+  },
+  "dwellSamples" : [
+    12.5,
+    130
+  ],
+  "items" : [
+    {
+      "browser" : "helium",
+      "doneAt" : 800000090,
+      "firstSaved" : 800000000,
+      "historyChecked" : "https:\/\/example.com\/a",
+      "historyVisits" : 7,
+      "host" : "example.com",
+      "id" : "11111111-2222-3333-4444-555555555555",
+      "kind" : "reading",
+      "lastSeen" : 800000060.5,
+      "openedAt" : 799996400,
+      "pageType" : "example.com\/*",
+      "status" : "done",
+      "tabIndex" : 2,
+      "title" : "A page",
+      "url" : "https:\/\/example.com\/a",
+      "visits" : 3,
+      "windowRank" : 1
+    },
+    {
+      "browser" : "chrome",
+      "firstSaved" : 800000000,
+      "host" : "shop.example.com",
+      "id" : "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      "kind" : "shopping",
+      "lastSeen" : 800000000,
+      "pageType" : "shop.example.com\/p\/*",
+      "status" : "active",
+      "title" : "Plain",
+      "url" : "https:\/\/shop.example.com\/p\/1",
+      "visits" : 1
+    }
+  ],
+  "seen" : {
+    "0123abcd" : 800000010
+  },
+  "version" : 1
+}
