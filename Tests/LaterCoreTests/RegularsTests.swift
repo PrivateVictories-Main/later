@@ -40,7 +40,7 @@ import Testing
         #expect(lib.data.siteDays[Library.hash("a.com")] == [today, today + 1])
     }
 
-    @Test func daysFromTheHistoryAndFromObservationsAreMergedPerSite() {
+    @Test func historyDaysAndObservedDaysAreMergedPerSite() {
         let lib = Library()
         lib.setHistoryDays(["dash.example.com": [today - 1, today - 2]])
         lib.noteSiteDays(["dash.example.com"], days: [today - 2, today - 3, today])
