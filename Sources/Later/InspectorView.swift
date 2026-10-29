@@ -86,12 +86,7 @@ struct ItemDetail: View {
                                     .contentTransition(Motion.symbolSwap)
                                     .frame(maxWidth: .infinity)
                             }
-                            if item.regular == true {
-                                Button { actions.keepInList([item]) } label: {
-                                    Label("Keep in My List", systemImage: "tray.and.arrow.down").frame(maxWidth: .infinity)
-                                }
-                                .disabled(!actions.canEdit)
-                            } else {
+                            if item.regular != true {
                                 Button { actions.setDone([item], !done) } label: {
                                     Label(done ? "Move Back" : "Mark Done", systemImage: done ? "arrow.uturn.backward" : "checkmark.circle")
                                         .frame(maxWidth: .infinity)
@@ -102,13 +97,15 @@ struct ItemDetail: View {
                         .buttonStyle(.glass)
                         .controlSize(.large)
                     }
-                    if item.regular == false {
-                        Button { actions.markRegular([item]) } label: {
-                            Label("This Is a Regular", systemImage: "repeat").frame(maxWidth: .infinity)
+                    if let regular = item.regular {
+                        Button { regular ? actions.keepInList([item]) : actions.markRegular([item]) } label: {
+                            Label(regular ? "Keep in My List" : "This Is a Regular",
+                                  systemImage: regular ? "tray.and.arrow.down" : "repeat").frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.glass)
                         .controlSize(.large)
-                        .help("Move this page, and pages like it, out of your list (Edit ▸ Undo brings them back)")
+                        .help(regular ? "Move this page, and pages like it, back to your list (Edit ▸ Undo undoes it)"
+                                      : "Move this page, and pages like it, out of your list (Edit ▸ Undo brings them back)")
                         .disabled(!actions.canEdit)
                     }
                 }

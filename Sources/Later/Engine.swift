@@ -140,6 +140,7 @@ final class Engine {
         }
         #if DEBUG
         if sample != nil {
+            library.setHistoryDays(Sample.visitDays())
             status = Sample.statuses
             openCopies = Sample.openCopies(library)
         }
