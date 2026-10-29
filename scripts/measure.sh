@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Reports Later's resource use. Usage:
 #   scripts/measure.sh memory           memory footprint now
+#   scripts/measure.sh checkin          fails if the agent is registered with LaunchServices as a running app (opening Later would go to it)
 #   scripts/measure.sh quiet [minutes]  per-minute CPU %, idle wake-ups and ring count (default 10)
 #   scripts/measure.sh rings [minutes]  per-ring read and judge times (default 10)
 set -euo pipefail
@@ -21,6 +22,9 @@ tmp=$(mktemp -t later-measure)
 trap 'rm -f "$tmp"' EXIT
 
 case $mode in
+  checkin)
+    if lsappinfo list | grep -q "pid = $pid "; then echo "pid $pid IS registered with LaunchServices: opening Later would be sent to it" >&2; exit 1; fi
+    echo "pid $pid is not registered with LaunchServices" ;;
   memory)
     footprint "$pid" | grep -iE 'footprint' | head -2 ;;
   quiet)

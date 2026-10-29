@@ -117,7 +117,9 @@ final class AgentDelegate {
 extension Engine {
     func addDevPage() {
         let n = library.data.items.count
-        library.save(url: "https://example.com/dev/\(n)", title: "Dev page \(n)",
+        // Well-known hosts, so Helium has icons for some of them and the icon path runs.
+        let host = ["github.com", "www.google.com", "en.wikipedia.org", "www.youtube.com"][n % 4]
+        library.save(url: "https://\(host)/dev/\(n)", title: "Dev page \(n)",
                      verdict: Verdict(isSpecific: true, kind: .shopping, pageType: "example.com/dev/*"), browser: .chrome, now: .now)
         Perf.log.info("dev page added items=\(self.library.data.items.count, privacy: .public)")
     }

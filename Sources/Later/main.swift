@@ -4,8 +4,10 @@ import ServiceManagement
 
 let arguments = CommandLine.arguments
 
-// The agent must not become an application as far as LaunchServices is concerned (no NSApplication): otherwise opening
-// Later while it runs would be sent to the agent, which has the same bundle ID, instead of starting the window app.
+// The agent must not become an application as far as LaunchServices is concerned: otherwise opening Later while it runs
+// would be sent to the agent, which has the same bundle ID, instead of starting the window app (`open` fails with -600).
+// That means no NSApplication, and no NSImage either: creating one checks the process in (measured). SiteIcons.Icon makes
+// its image only when a window draws it. `scripts/measure.sh checkin` shows whether the running agent has been checked in.
 if arguments.contains("--agent") {
     let agent = AgentDelegate()
     agent.start()
