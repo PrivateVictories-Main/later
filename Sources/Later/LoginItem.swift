@@ -44,7 +44,9 @@ final class LoginItem {
 
     /// At every launch of the installed copy. Moves 1.2's login item (the window app itself) to the agent, keeping its
     /// on or off, and registers it if macOS dropped it.
-    func applyDefault() {
+    /// `helperMissing`: no helper held the list when Later opened, though watching in the background is wanted (see
+    /// `helperWasMissing`). The registration is then repeated, even when it already pins this build.
+    func applyDefault(helperMissing: Bool = false) {
         guard Self.isInstalled, !Sample.enabled else { return }
         refresh()
         let old = SMAppService.mainApp
@@ -56,14 +58,26 @@ final class LoginItem {
                          forKey: Self.wantedKey)
         }
         let wanted = defaults.bool(forKey: Self.wantedKey)
+        if helperMissing, wanted { wasMissing = true }
         if wanted, Self.isUnregistered {
             start(fresh: true)
-        } else if Self.needsRepair(wanted: wanted, status: status, pinned: defaults.string(forKey: Self.pinKey), current: Self.codeHash) {
+        } else if Self.needsRepair(wanted: wanted, status: status, pinned: defaults.string(forKey: Self.pinKey), current: Self.codeHash)
+                    || (helperMissing && wanted && status == .enabled) {
             try? Self.service.unregister()
             start(fresh: false)
         }
         refresh()
     }
+
+    /// The window app took the engine lock at once, so no helper was holding it, yet the user wants one. After an update that
+    /// was never followed by opening Later, launchd's pin on the old build keeps the helper from starting at login.
+    nonisolated static func helperWasMissing(_ outcome: WindowHandoff.Outcome, wanted: Bool, installed: Bool) -> Bool {
+        outcome == .immediate && wanted && installed
+    }
+
+    /// The helper wasn't running at the last launch. Settings says so when registering it again didn't bring it back.
+    private(set) var wasMissing = false
+    var notRestored: Bool { wasMissing && (status != .enabled || failure != nil) }
 
     /// 1.2 recorded that it had decided (by default or by the toggle) in `loginDefaultApplied`; having decided and no
     /// longer being enabled means the user turned it off. A first install has decided nothing, so it is on.

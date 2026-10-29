@@ -71,6 +71,8 @@ struct SettingsView: View {
                         Text("macOS didn't accept the background helper: \(failure) Try again, or use Login Items in System Settings.")
                     } else if login.status == .notFound {
                         Text("macOS can't find Later's background helper right now.")
+                    } else if login.notRestored {
+                        Text("The background helper wasn't running, and Later couldn't start it again. It tries again each time Later opens.")
                     }
                 }
                 .footnote()
