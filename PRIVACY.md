@@ -21,13 +21,14 @@ Later has read-only access to exactly two folders for this: Helium's and Chrome'
 
 Everything is in Later's own sandbox container, where other apps cannot read it:
 
-- **Your list** (`library.json`, and `library.json.bak`, the list one save back; the copies of older lists that an upgrade from 1.1 or 1.2 left are removed 30 days after they were made, once the list has loaded cleanly; a damaged list that was set aside, `library.corrupt-….json`, stays until you delete it): for each saved page its cleaned link, title, kind, browser, when it was saved and last seen, visit counts, and whether you marked it Done. Also your corrections (for example, moving a type of page to another kind).
+- **Your list** (`library.json`, and `library.json.bak`, the previous list, kept until the next save replaces it; the safety copies of older lists that an upgrade from 1.1 or 1.2 left are removed 30 days after they were made, once the list has loaded cleanly; a damaged list that was set aside, `library.corrupt-….json`, stays until you delete it): for each saved page its cleaned link, title, kind, browser, when it was saved and last seen, visit counts, and whether you marked it Done. Also your corrections (for example, moving a type of page to another kind).
 - **Fingerprints, not links.** To avoid saving a page you deleted or rejected, Later keeps SHA-256 hashes of links, never the links themselves, along with a short list of on-screen times (numbers only).
-- **A status note**, only while the background helper can't do its job (the list is damaged, the storage folder can't be opened or a save failed): a state word and a count, never a link or a title. It is shown in Later's window and removed.
+- **A lock file** (`engine.lock`, empty) that lets the window and the background helper take turns with the list.
+- **A status note** (`agent-status.json`), only while the background helper can't do its job (the list is damaged, the storage folder can't be opened or a save failed): a state word and a count, never a link or a title. It is shown in Later's window and removed.
 - **Site icons**, as small PNG files in its cache folder.
 - **Your settings**, such as sort order, keep watching when Later is closed, and pause.
 
-Links are cleaned before they are saved: tracking parameters are removed, and a link that carries something secret-looking (a token, code, session, key or password, in its query or as a long random section of its path after a word like reset, invite, magic or confirm) is never saved at all, and a page saved by an earlier version whose link has one is removed when the list loads. Links with a username or password in them, local addresses and ports are never saved either.
+Links are cleaned before they are saved: tracking parameters are removed, and a link that carries something secret-looking (a token, code, session, key or password, in its query or as a long random section of its path after a word like reset, invite, magic or confirm) is never saved at all, and a page saved by an earlier version whose link has one is removed from the list when the window app loads it (Later says how many; the backup copy follows within a save or two). Links with a username or password in them, local addresses and ports are never saved either.
 
 **Logs.** Later writes a few lines to the macOS unified log: counts and timings, such as how many tabs were read and how long that took. They never contain links, titles or page contents.
 

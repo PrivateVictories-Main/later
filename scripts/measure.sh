@@ -23,7 +23,8 @@ trap 'rm -f "$tmp"' EXIT
 
 case $mode in
   checkin)
-    if lsappinfo list | grep -q "pid = $pid "; then echo "pid $pid IS registered with LaunchServices: opening Later would be sent to it" >&2; exit 1; fi
+    apps=$(lsappinfo list)   # not piped: grep -q closing early would fail the pipe under pipefail
+    if grep -q "pid = $pid " <<<"$apps"; then echo "pid $pid IS registered with LaunchServices: opening Later would be sent to it" >&2; exit 1; fi
     echo "pid $pid is not registered with LaunchServices" ;;
   memory)
     footprint "$pid" | grep -iE 'footprint' | head -2 ;;

@@ -58,7 +58,8 @@ jobs:
         run: |
           app=build/Later.app
           if [[ "$HAS_CERT" == "true" || "$GITHUB_EVENT_NAME" == "push" ]]; then
-            codesign -dvv "$app" 2>&1 | grep -q '^Authority=Later Release Signing$' \
+            details=$(codesign -dvv "$app" 2>&1)   # not piped: grep -q closing early would fail the pipe
+            grep -q '^Authority=Later Release Signing$' <<<"$details" \
               || { echo "error: the app is not signed by the Later Release Signing certificate" >&2; exit 1; }
           fi
           [[ -f "$app/Contents/Library/LaunchAgents/com.ryan.later.agent.plist" ]] \
