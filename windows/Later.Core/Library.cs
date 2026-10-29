@@ -12,7 +12,7 @@ public sealed class Library
     readonly Dictionary<string, int> index = new();
     readonly Dictionary<string, string> keys = new();
     DateTime? lastPrune;
-    /// Links of Helium pages saved since the history was last asked, so each is asked about once. Not saved.
+    /// Links of pages saved since the history was last asked, so each is asked about once. Not saved.
     readonly List<string> awaitingHistory = new();
 
     public static readonly TimeSpan CameBackWindow = TimeSpan.FromDays(30);
@@ -62,7 +62,7 @@ public sealed class Library
         var blank = string.IsNullOrWhiteSpace(title);
         data.Items.Add(new Item(Guid.NewGuid(), url, blank ? host : title, host, verdict.Kind, verdict.PageType, browser, now, now,
                                 1, ItemStatus.Active));
-        if (browser == Browser.Helium) awaitingHistory.Add(url);
+        awaitingHistory.Add(url);   // every browser: unlike the Mac, Windows can read Chrome's History too
         index[key] = data.Items.Count - 1;
         NotifyChanged();
         return true;
@@ -70,7 +70,7 @@ public sealed class Library
 
     // MARK: Opened time and place
 
-    /// The links of Helium pages saved since the last call, for the history to be asked about.
+    /// The links of pages saved since the last call, for the history to be asked about.
     public IReadOnlyList<string> TakeAwaitingHistory()
     {
         var taken = awaitingHistory.ToList();
@@ -78,9 +78,9 @@ public sealed class Library
         return taken;
     }
 
-    /// Links of Helium pages whose opening time isn't known yet, for the one-time backfill when the list loads.
+    /// Links of pages whose opening time isn't known yet, for the one-time backfill when the list loads.
     public IReadOnlyList<string> LinksMissingHistory() =>
-        data.Items.Where(i => i.OpenedAt is null && i.Browser == Browser.Helium && i.HistoryChecked != i.Url).Select(i => i.Url).ToList();
+        data.Items.Where(i => i.OpenedAt is null && i.HistoryChecked != i.Url).Select(i => i.Url).ToList();
 
     /// Remembers that the history was asked about these links and had nothing to say about some, so the next launch's
     /// backfill doesn't ask again. Saved: it is the only way the answer outlives this launch.

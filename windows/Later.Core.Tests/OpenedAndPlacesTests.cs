@@ -43,13 +43,14 @@ public class OpenedAndPlacesTests
     }
 
     [Fact]
-    public void ChromePagesAreNeverAskedAbout()
+    public void EveryBrowsersPagesAreAsked()   // the Mac asks about Helium only: its Chrome data folder is protected
     {
         var library = new Library();
         library.Save("https://a.com/1", "One", Reading, Browser.Chrome, T0);
         library.Save("https://a.com/2", "Two", Reading, Browser.Helium, T0);
-        Assert.Equal(new List<string> { "https://a.com/2" }, library.LinksMissingHistory().ToList());
-        Assert.Equal(new List<string> { "https://a.com/2" }, library.TakeAwaitingHistory().ToList());
+        var both = new List<string> { "https://a.com/1", "https://a.com/2" };
+        Assert.Equal(both, library.LinksMissingHistory().ToList());
+        Assert.Equal(both, library.TakeAwaitingHistory().ToList());
         Assert.Empty(library.TakeAwaitingHistory());   // each new page is asked once
     }
 
