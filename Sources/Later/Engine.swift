@@ -8,6 +8,9 @@ enum BrowserStatus: Equatable {
     /// Statuses the window warns about: ones the user can fix, or real breakage.
     var isProblem: Bool { self == .needsPermission || self == .readFailed }
 
+    /// Not watched yet: a browser opened for the first time (no data folder until then) or installed after Later started.
+    var isUnwatched: Bool { self == .notRunning || self == .notInstalled }
+
     /// "Helium", "Helium and Chrome".
     static func names(_ browsers: [Browser]) -> String {
         ListFormatter.localizedString(byJoining: browsers.map(\.displayName))
@@ -186,15 +189,25 @@ final class Engine {
         }
         // A browser Later can't watch for changes is read as the Mac goes to sleep or locks, so what was open then is
         // known: the user may be away long enough for their tabs to have been waiting.
-        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
+        // Time asleep or locked is neither reading nor leaving a page open (see Judge.setAway).
+        for (name, reason, away) in [(NSWorkspace.willSleepNotification, "sleep", true), (NSWorkspace.didWakeNotification, "sleep", false),
+                                     (NSWorkspace.screensDidSleepNotification, "screen", true), (NSWorkspace.screensDidWakeNotification, "screen", false)] {
             observe(center, name) { [weak self] _ in
-                Perf.log.info("wake sleep")
-                MainActor.assumeIsolated { self?.readSwitchOnlyBrowsers() }
+                if away { Perf.log.info("wake sleep") }
+                MainActor.assumeIsolated {
+                    self?.setAway(reason, away)
+                    if away { self?.readSwitchOnlyBrowsers() }
+                }
             }
         }
-        observe(DistributedNotificationCenter.default(), Notification.Name("com.apple.screenIsLocked")) { [weak self] _ in
-            Perf.log.info("wake lock")
-            MainActor.assumeIsolated { self?.readSwitchOnlyBrowsers() }
+        for (name, away) in [("com.apple.screenIsLocked", true), ("com.apple.screenIsUnlocked", false)] {
+            observe(DistributedNotificationCenter.default(), Notification.Name(name)) { [weak self] _ in
+                if away { Perf.log.info("wake lock") }
+                MainActor.assumeIsolated {
+                    self?.setAway("lock", away)
+                    if away { self?.readSwitchOnlyBrowsers() }
+                }
+            }
         }
         for browser in Browser.allCases where status[browser] != .notInstalled { startWatching(browser) }
         judge = makeJudge()
@@ -267,7 +280,19 @@ final class Engine {
 
     private var watchedBrowsers: Set<Browser> { Set(bells.keys).union(switchOnly) }
 
-    private func makeJudge() -> Judge { Judge(library: library, watched: watchedBrowsers, savesFeedHomes: savesFeedHomes) }
+    private func makeJudge() -> Judge {
+        let judge = Judge(library: library, watched: watchedBrowsers, savesFeedHomes: savesFeedHomes)
+        if !away.isEmpty { judge.setAway(true, now: .now) }
+        return judge
+    }
+
+    /// The reasons nobody is looking: "sleep", "screen" (display asleep) and "lock". Away until all have ended.
+    @ObservationIgnored private var away: Set<String> = []
+
+    private func setAway(_ reason: String, _ on: Bool) {
+        if on { away.insert(reason) } else { away.remove(reason) }
+        judge.setAway(!away.isEmpty, now: .now)
+    }
 
     func browserTerminated(_ browser: Browser) {
         guard watchedBrowsers.contains(browser), !io.isRunning(browser) else { return }
@@ -326,7 +351,7 @@ final class Engine {
     private func ring(_ browser: Browser) {
         // A browser opened for the first time creates its data folder as it starts; it rings on its launch and whenever
         // The user switches to it, so it's watched from the first ring after its folder appears.
-        if started, bells[browser] == nil, !switchOnly.contains(browser), status[browser] == .notRunning { startWatching(browser) }
+        if started, bells[browser] == nil, !switchOnly.contains(browser), status[browser]?.isUnwatched == true { startWatching(browser) }
         guard !paused, bells[browser] != nil || switchOnly.contains(browser) else { return }
         guard !reading.contains(browser) else {
             readAgain.insert(browser)   // a change arrived mid-read; read once more afterwards

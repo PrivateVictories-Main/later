@@ -1,12 +1,12 @@
-import CoreServices
 import Foundation
 
-/// Rings when a browser writes to any profile's `Sessions/` folder, on whichever signal comes first:
-/// FSEvents on the data folder, or kqueue on each Sessions folder and its newest `Session_*` and `Tabs_*` files.
+/// Rings when a browser writes to any profile's `Sessions/` folder, on kqueue signals only: each Sessions folder and its
+/// newest `Session_*` and `Tabs_*` files, plus the data folder (a new profile) and any profile that has no Sessions
+/// folder yet. Nothing else in the browser's data folder (cache, cookies, storage) wakes Later.
 /// It only learns *that* something changed; it lists names but never reads those files.
 @MainActor
 public final class Doorbell {
-    private var stream: FSEventStreamRef?
+    private var started = false
     private var folder = ""
     private var watches: [String: DispatchSourceFileSystemObject] = [:]
     private let onRing: @MainActor () -> Void
@@ -17,56 +17,38 @@ public final class Doorbell {
 
     /// Returns false when macOS won't let the app watch the folder.
     public func start(folder: String) -> Bool {
-        guard stream == nil else { return true }
+        guard !started else { return true }
         guard WatchProbe.canWatch(folder: folder) else { return false }
-        var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
-                                           retain: nil, release: nil, copyDescription: nil)
-        let callback: FSEventStreamCallback = { _, info, _, paths, _, _ in
-            guard let info else { return }
-            let bell = Unmanaged<Doorbell>.fromOpaque(info).takeUnretainedValue()
-            let list = (Unmanaged<CFArray>.fromOpaque(paths).takeUnretainedValue() as NSArray) as? [String] ?? []
-            // "…/Sessions" alone is a Sessions folder appearing, e.g. in a new profile.
-            guard list.contains(where: { $0.contains("/Sessions/") || $0.hasSuffix("/Sessions") }) else { return }
-            MainActor.assumeIsolated {
-                bell.attach()
-                bell.onRing()
-            }
-        }
-        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents)
-        // 0.5 s latency lets FSEvents merge a burst of writes into one ring. No app timer involved.
-        guard let created = FSEventStreamCreate(nil, callback, &context, [folder] as CFArray,
-                                                FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.5, flags)
-        else { return false }
-        FSEventStreamSetDispatchQueue(created, .main)
-        guard FSEventStreamStart(created) else {
-            FSEventStreamInvalidate(created)
-            FSEventStreamRelease(created)
+        self.folder = folder
+        started = true
+        attach()
+        guard watches[folder] != nil else {
+            stop()
             return false
         }
-        stream = created
-        self.folder = folder
-        attach()
         return true
     }
 
     public func stop() {
         watches.values.forEach { $0.cancel() }
         watches = [:]
-        guard let stream else { return }
-        FSEventStreamStop(stream)
-        FSEventStreamInvalidate(stream)
-        FSEventStreamRelease(stream)
-        self.stream = nil
+        started = false
     }
 
-    /// Watches every profile's Sessions folder and its newest files; drops watches on paths no longer current.
+    /// Watches the data folder, every profile's Sessions folder and its newest files; drops watches on paths no longer current.
+    /// A profile that has no Sessions folder yet is watched until it gets one.
     private func attach() {
-        guard stream != nil else { return }
+        guard started else { return }
         let fm = FileManager.default
-        var wanted: [String: Bool] = [:]  // path → is a Sessions folder
+        var wanted: [String: Bool] = [folder: true]  // path → is a folder (its changes attach again)
         for profile in (try? fm.contentsOfDirectory(atPath: folder)) ?? [] {
-            let sessions = folder + "/" + profile + "/Sessions"
-            guard let names = try? fm.contentsOfDirectory(atPath: sessions) else { continue }
+            let profilePath = folder + "/" + profile
+            let sessions = profilePath + "/Sessions"
+            guard let names = try? fm.contentsOfDirectory(atPath: sessions) else {
+                var isFolder: ObjCBool = false
+                if fm.fileExists(atPath: profilePath, isDirectory: &isFolder), isFolder.boolValue { wanted[profilePath] = true }
+                continue
+            }
             wanted[sessions] = true
             // Chromium names them <prefix><timestamp>, so the largest name is the newest.
             for prefix in ["Session_", "Tabs_"] {

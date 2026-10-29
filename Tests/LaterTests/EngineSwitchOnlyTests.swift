@@ -144,3 +144,13 @@ final class FakeBrowsers: @unchecked Sendable {
         #expect(BrowserStatus.names([.helium, .chrome]) == "Helium and Chrome")
     }
 }
+
+@Suite struct BrowserStatusTests {
+    @Test func aBrowserInstalledAfterLaterStartedIsAdoptedAtItsFirstRing() {
+        #expect(BrowserStatus.notInstalled.isUnwatched)   // set at start; the browser may be installed since
+        #expect(BrowserStatus.notRunning.isUnwatched)
+        #expect(!BrowserStatus.watching.isUnwatched)
+        #expect(!BrowserStatus.needsPermission.isUnwatched)
+        #expect(!BrowserStatus.readFailed.isUnwatched)
+    }
+}
