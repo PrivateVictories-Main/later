@@ -37,9 +37,9 @@ internal sealed unsafe class UiaTest : IDisposable
 {
     readonly UiaSession session = new();
 
-    public record TabInfo(int Index, string Name, bool Selected);
+    public record TabInfo(int Index, string Name, bool Selected, string ClassName = "", string AutomationId = "");
 
-    /// Live tabs of a window in tree order, before the first document (as the product reads them).
+    /// Live tab items of a window in tree order.
     public List<TabInfo> Tabs(nint hwnd)
     {
         var result = new List<TabInfo>();
@@ -49,8 +49,9 @@ internal sealed unsafe class UiaTest : IDisposable
             foreach (var p in found)
             {
                 var e = (IUIAutomationElement*)p;
-                if (UiaSession.Current(e, UiaIds.ControlType) is UiaIds.Document) break;
-                result.Add(new TabInfo(result.Count, UiaSession.Current(e, UiaIds.Name) as string ?? "", UiaSession.Current(e, UiaIds.IsSelected) is true));
+                if (UiaSession.Current(e, UiaIds.ControlType) is UiaIds.Document) continue;
+                result.Add(new TabInfo(result.Count, UiaSession.Current(e, UiaIds.Name) as string ?? "", UiaSession.Current(e, UiaIds.IsSelected) is true,
+                    UiaSession.Current(e, UiaIds.ClassName) as string ?? "", UiaSession.Current(e, UiaIds.AutomationId) as string ?? ""));
             }
         }
         finally { foreach (var p in found) _ = ((IUIAutomationElement*)p)->Release(); }

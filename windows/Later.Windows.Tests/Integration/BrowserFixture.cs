@@ -16,7 +16,7 @@ internal sealed class BrowserFixture : IDisposable
         var args = new List<string>
         {
             $"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check", "--disable-sync",
-            "--disable-features=Translate", $"--host-resolver-rules=MAP fixture.example.com 127.0.0.1:{server.Port}", "--new-window",
+            "--disable-features=Translate,HttpsUpgrades,HttpsFirstBalancedModeAutoEnable,HttpsFirstModeIncognito,HttpsFirstModeV2ForEngagedSites", $"--host-resolver-rules=MAP fixture.example.com 127.0.0.1:{server.Port}", "--new-window",
         };
         if (incognito) args.Add("--incognito");
         if (restore) args.Add("--restore-last-session");

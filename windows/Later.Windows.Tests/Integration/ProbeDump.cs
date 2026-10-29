@@ -30,6 +30,7 @@ public class ProbeDump(ITestOutputHelper output)
         using var incognito = BrowserFixture.Start(exe, server, [FixtureServer.Url(9)], incognito: true, profile: normal.Profile);
         bool two = ItSupport.WaitUntil(() => ItSupport.WindowsOf(browser).Count >= 2, TimeSpan.FromSeconds(40));
         P($"second window appeared={two}");
+        P($"private page loaded={ItSupport.WaitUntil(() => ItSupport.WindowsOf(browser).Any(w => w.Title.StartsWith("Fixture 9", StringComparison.Ordinal)), TimeSpan.FromSeconds(20))}");
         Thread.Sleep(5000);   // let titles, tab strips and the accessibility tree settle
         AllChromeWindows();
         using var uia = new UiaTest();
@@ -41,8 +42,8 @@ public class ProbeDump(ITestOutputHelper output)
         {
             P($"--- window hwnd={w.Hwnd} z={w.ZIndex} minimized={w.IsMinimized} pid={w.Pid} title='{w.Title}'");
             P($"top-level UIA Name='{uia.RootName(w.Hwnd)}'");
-            foreach (var line in uia.Dump(w.Hwnd)) P("  " + line);
-            foreach (var t in uia.Tabs(w.Hwnd)) P($"  tab[{t.Index}] selected={t.Selected} name='{t.Name}'");
+            foreach (var line in uia.Dump(w.Hwnd, 8, 300)) P("  " + line);
+            foreach (var t in uia.Tabs(w.Hwnd)) P($"  tab[{t.Index}] selected={t.Selected} class='{t.ClassName}' id='{t.AutomationId}' name='{t.Name}'");
             var raw = source.ReadWindow(w);
             P($"product read: private={raw?.IsPrivate} tabs={raw?.Tabs.Count} activeUrl='{raw?.ActiveUrl}'" + (raw is null ? " (unreadable)" : ""));
             if (raw is not null) foreach (var t in raw.Tabs) P($"  raw tab[{t.Index}] selected={t.IsSelected} id={t.RuntimeId} title='{t.Title}'");
