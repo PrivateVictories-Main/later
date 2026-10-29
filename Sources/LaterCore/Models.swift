@@ -175,8 +175,11 @@ public struct Verdict: Equatable, Sendable {
     public var pageType: String
     /// A site's home, a dashboard, a feed or a plain section page: somewhere you go, not a thing. See `Familiarity`.
     public var isPlace: Bool
+    /// A sign-in step, inbox, error or one-time link: no correction brings it back. See `Structure.isHardSkip`.
+    public var isHardSkip: Bool
 
-    public init(isSpecific: Bool, kind: Kind, pageType: String, isPlace: Bool = false) {
+    public init(isSpecific: Bool, kind: Kind, pageType: String, isPlace: Bool = false, isHardSkip: Bool = false) {
+        self.isHardSkip = isHardSkip
         self.isSpecific = isSpecific
         self.kind = kind
         self.pageType = pageType

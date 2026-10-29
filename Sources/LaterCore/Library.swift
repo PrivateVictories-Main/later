@@ -154,7 +154,9 @@ public final class Library {
     public func refreshPlaces() -> Int {
         var moved = 0, any = false
         for i in data.items.indices where data.items[i].regular != nil {
-            guard let url = URL(string: data.items[i].url), url.host != nil,
+            // "This Is a Regular" covers the whole page type: the user's choice stands.
+            guard data.corrections[data.items[i].pageType]?.regular != true,
+                  let url = URL(string: data.items[i].url), url.host != nil,
                   !PageRules.judge(url, title: data.items[i].title).isPlace else { continue }
             if data.items[i].regular == true { moved += 1 }
             data.items[i].regular = nil

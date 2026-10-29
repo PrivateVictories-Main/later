@@ -84,17 +84,17 @@ public enum PageRules {
         }
         // A PDF with a real name is something to read.
         if isSpecific, path.last?.lowercased().hasSuffix(".pdf") == true, kind == .other || kind == .tools { kind = .reading }
-        if Structure.isHardSkip(site: site, port: url.port, path: urlPath, route: path == urlPath ? [] : path, title: title) {
-            isSpecific = false
-        }
-        return apply(corrections, to: Verdict(isSpecific: isSpecific, kind: kind, pageType: type, isPlace: isPlace))
+        let hardSkip = Structure.isHardSkip(site: site, port: url.port, path: urlPath, route: path == urlPath ? [] : path, title: title)
+        if hardSkip { isSpecific = false }
+        return apply(corrections, to: Verdict(isSpecific: isSpecific, kind: kind, pageType: type, isPlace: isPlace, isHardSkip: hardSkip))
     }
 
-    /// The verdict with the user's correction for its page type, if they made one.
+    /// The verdict with the user's correction for its page type, if they made one. A correction can turn a page off,
+    /// never bring back a hard skip.
     public static func apply(_ corrections: [String: Correction], to verdict: Verdict) -> Verdict {
         guard let correction = corrections[verdict.pageType] else { return verdict }
         var verdict = verdict
-        if let s = correction.isSpecific { verdict.isSpecific = s }
+        if let s = correction.isSpecific { verdict.isSpecific = s && !verdict.isHardSkip }
         if let k = correction.kind { verdict.kind = k }
         return verdict
     }

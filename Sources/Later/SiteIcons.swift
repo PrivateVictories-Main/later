@@ -36,7 +36,7 @@ final class SiteIcons {
     /// Where the PNGs are kept; nil for a sample list, whose icons stay in memory.
     @ObservationIgnored private let folder: URL?
     /// Helium's data folder, whose profiles' icon caches are read.
-    @ObservationIgnored private let helium: String
+    @ObservationIgnored let helium: String
     /// Hosts with no icon anywhere, and when that was found, so they're asked about at most once an hour.
     @ObservationIgnored private var misses: [String: Date] = [:]
     @ObservationIgnored private var running = false
@@ -50,7 +50,7 @@ final class SiteIcons {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("Icons")
     }
 
-    init(library: Library, folder: URL?, helium: String = RealHome.path + "/" + Browser.helium.dataFolder) {
+    init(library: Library, folder: URL?, helium: String) {
         self.library = library
         self.folder = folder
         self.helium = helium

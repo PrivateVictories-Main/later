@@ -1,5 +1,5 @@
 {
-  "counts": {"cases": 176},
+  "counts": {"cases": 181},
   "cases": [
     {"url": "https://www.amazon.com/", "title": "Amazon.com. Spend less. Smile more.", "specific": false, "kind": "shopping"},
     {"url": "https://www.amazon.com/s?k=standing+desk", "title": "Amazon.com : standing desk", "specific": false, "kind": "shopping"},
@@ -176,6 +176,11 @@
     {"url": "https://example.com/greatwork.html", "title": "Great work", "specific": true, "place": false},
     {"url": "https://example.com/article.php?id=7", "title": "An article", "specific": true, "place": false},
     {"url": "https://example.com/page?id=7", "title": "A page", "specific": true, "place": false},
-    {"url": "https://example.com/pricing", "title": "Pricing", "specific": true, "place": true}
+    {"url": "https://example.com/pricing", "title": "Pricing", "specific": true, "place": true},
+    {"url": "https://example.com/handbook/chapter/verify", "title": "Verify", "specific": false},
+    {"url": "https://example.com/logout", "title": "Signing out", "specific": false, "corrections": {"example.com/~": {"isSpecific": true}}},
+    {"url": "https://example.com/messages", "title": "Messages", "specific": false, "corrections": {"example.com/~": {"isSpecific": true}}},
+    {"url": "https://example.com/thank-you", "title": "Thank you", "specific": false, "corrections": {"example.com/~": {"isSpecific": true}}},
+    {"url": "https://example.com/pricing", "title": "Pricing", "specific": true, "corrections": {"example.com/~": {"isSpecific": true}}}
   ]
 }

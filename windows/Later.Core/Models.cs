@@ -52,8 +52,9 @@ public sealed record Tab(string Url, string Title, bool IsActive, int WindowInde
 
 public sealed record Snapshot(Browser Browser, IReadOnlyList<Tab> Tabs);
 
+/// `IsHardSkip`: a sign-in step, inbox, error or one-time link; no correction brings it back.
 /// `IsPlace`: a site's home, a dashboard, a feed or a plain section page (somewhere you go, not a thing). See `Familiarity`.
-public sealed record Verdict(bool IsSpecific, Kind Kind, string PageType, bool IsPlace = false);
+public sealed record Verdict(bool IsSpecific, Kind Kind, string PageType, bool IsPlace = false, bool IsHardSkip = false);
 
 /// The user's correction for one page type. Null fields mean "no correction".
 /// `Regular` is "This is a regular" (true) or its undoing (false) for a place page type.

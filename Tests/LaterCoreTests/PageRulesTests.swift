@@ -15,6 +15,15 @@ import Testing
         #expect(dashboardVerdict.pageType != itemVerdict.pageType)
     }
 
+    /// The Judge applies corrections to the rules-only verdict on every read: a "keep" correction must not bring a hard skip back.
+    @Test func aKeepCorrectionAppliedLaterStillLeavesAHardSkipSkipped() throws {
+        let logout = try #require(LinkCleaner.clean("https://example.com/logout"))
+        let verdict = PageRules.judge(logout, title: "Signing out")
+        #expect(!verdict.isSpecific)
+        let keep = [verdict.pageType: Correction(isSpecific: true)]
+        #expect(!PageRules.apply(keep, to: verdict).isSpecific)
+    }
+
     static let routeMarkers = ["#/", "#!/", "#%2F", "#%21/"].flatMap { [($0, ""), ($0, "?returnTo=%2Fsearch%3Fq%3Ddesk")] }
 
     /// A correction on the item type must not touch the dashboard's verdict, whichever way the route is written.

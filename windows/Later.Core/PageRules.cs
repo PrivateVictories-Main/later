@@ -103,19 +103,21 @@ public static class PageRules
         // A PDF with a real name is something to read.
         if (isSpecific && path.Count > 0 && path[^1].EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && (kind == Kind.Other || kind == Kind.Tools))
             kind = Kind.Reading;
-        if (Structure.IsHardSkip(site, url.Port, urlPath, title, path.SequenceEqual(urlPath) ? null : path)) isSpecific = false;
-        return Apply(corrections ?? NoCorrections, new Verdict(isSpecific, kind, type, isPlace));
+        bool hardSkip = Structure.IsHardSkip(site, url.Port, urlPath, title, path.SequenceEqual(urlPath) ? null : path);
+        if (hardSkip) isSpecific = false;
+        return Apply(corrections ?? NoCorrections, new Verdict(isSpecific, kind, type, isPlace, hardSkip));
     }
 
     static string QueryKey(string encodedName) => (UrlText.PercentDecode(encodedName) ?? encodedName).ToLowerInvariant();
 
-    /// The verdict with the user's correction for its page type, if they made one.
+    /// The verdict with the user's correction for its page type, if they made one. A correction can turn a page off,
+    /// never bring back a hard skip.
     public static Verdict Apply(IReadOnlyDictionary<string, Correction> corrections, Verdict verdict)
     {
         if (!corrections.TryGetValue(verdict.PageType, out var correction)) return verdict;
         return verdict with
         {
-            IsSpecific = correction.IsSpecific ?? verdict.IsSpecific,
+            IsSpecific = (correction.IsSpecific ?? verdict.IsSpecific) && !verdict.IsHardSkip,
             Kind = correction.Kind ?? verdict.Kind,
         };
     }

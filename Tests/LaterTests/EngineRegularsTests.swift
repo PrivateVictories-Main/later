@@ -68,6 +68,7 @@ import Testing
         let fake = FakeBrowsers()
         let engines = [Engine(testing: Library()), Engine(testing: Library(), io: fake.io), Engine(testing: Library(), readOnly: true)]
         #expect(engines.allSatisfy { $0.historyFolder == nil })
+        #expect(engines.allSatisfy { $0.icons.helium != BrowserIO.real.historyFolder })
         #expect(BrowserIO().historyFolder == nil)
     }
 

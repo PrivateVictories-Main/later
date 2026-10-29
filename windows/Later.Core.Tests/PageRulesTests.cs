@@ -18,6 +18,16 @@ public class PageRulesTests
         Assert.NotEqual(itemVerdict.PageType, dashboardVerdict.PageType);
     }
 
+    /// The Judge applies corrections to the rules-only verdict on every read: a "keep" correction must not bring a hard skip back.
+    [Fact]
+    public void AKeepCorrectionAppliedLaterStillLeavesAHardSkipSkipped()
+    {
+        var verdict = PageRules.Judge(LinkCleaner.Clean("https://example.com/logout")!, "Signing out");
+        Assert.False(verdict.IsSpecific);
+        var keep = new Dictionary<string, Correction> { [verdict.PageType] = new Correction(IsSpecific: true) };
+        Assert.False(PageRules.Apply(keep, verdict).IsSpecific);
+    }
+
     public static TheoryData<string, string> RouteMarkers()
     {
         var data = new TheoryData<string, string>();

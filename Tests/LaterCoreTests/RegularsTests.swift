@@ -181,6 +181,15 @@ import Testing
         #expect(lib.refreshPlaces() == 0)
     }
 
+    @Test func refreshingPlacesLeavesAPageTypeTheUserMadeARegular() {
+        let lib = library(visitedDays: 6)
+        lib.save(url: home, title: "Dash", verdict: place, browser: .helium, now: t0)
+        lib.save(url: "https://dash.example.com/blog/hello-world", title: "Hello World", verdict: place, browser: .helium, now: t0)
+        lib.markRegular(lib.data.items[0].id)
+        #expect(lib.refreshPlaces() == 0)
+        #expect(lib.data.items.map(\.regular) == [true, true])
+    }
+
     // MARK: The user's choices
 
     @Test func keepInMyListMovesTheRegularsOfThatPageTypeAndKeepsFuturePages() throws {

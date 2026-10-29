@@ -129,6 +129,8 @@ final class Engine {
     @ObservationIgnored private var stopped = false
     @ObservationIgnored private var observers: [(center: NotificationCenter, token: NSObjectProtocol)] = []
     @ObservationIgnored private var historyLookups = 0
+    /// The latest daily History ask, kept so tests can wait for it exactly.
+    @ObservationIgnored private var visitDaysTask: Task<Void, Never>?
     /// The day (see `Familiarity.dayNumber`) the history was last asked which days each site was visited.
     @ObservationIgnored private var visitDaysAsOf: Int?
     /// Saved pages removed at load because their link carried a secret; start() saves the list without them.
@@ -158,7 +160,8 @@ final class Engine {
         library = Library(data: loaded.data)
         if sample == nil { secretsDropped = Self.tidy(library, dropsSecretLinks: dropsSecretLinks) }
         // A sample list's icons stay in memory, like the list itself.
-        icons = SiteIcons(library: library, folder: sample == nil ? SiteIcons.folder : nil)
+        icons = SiteIcons(library: library, folder: sample == nil ? SiteIcons.folder : nil,
+                          helium: RealHome.path + "/" + Browser.helium.dataFolder)
         judge = Judge(library: library, watched: [], savesFeedHomes: feeds)   // replaced in start(), once the watched browsers are known
         loadNotice = store == nil && sample == nil ? "Later can't open its storage folder, so saves won't be kept." : loaded.notice
         paused = !Sample.enabled && UserDefaults.standard.bool(forKey: "paused")
@@ -187,7 +190,7 @@ final class Engine {
         self.library = library
         self.io = io
         canEdit = !readOnly
-        icons = SiteIcons(library: library, folder: nil)
+        icons = SiteIcons(library: library, folder: nil, helium: "/nonexistent")   // never a real browser folder
         judge = Judge(library: library, watched: [])
         loadNotice = readOnly ? Self.readOnlyNotice : nil
         paused = false
@@ -202,6 +205,7 @@ final class Engine {
     /// Tests only: waits for the reads in flight.
     func settle() async {
         for _ in 0..<500 where !reading.isEmpty || !readAgain.isEmpty || historyLookups > 0 { await Task.yield() }
+        await visitDaysTask?.value
     }
     #endif
 
@@ -336,8 +340,7 @@ final class Engine {
         let calendar = Calendar.current
         let since = calendar.date(byAdding: .day, value: -Familiarity.window, to: calendar.startOfDay(for: now)) ?? now
         let ask = io.visitDays
-        historyLookups += 1
-        Task {
+        visitDaysTask = Task {
             let start = ContinuousClock.now
             let days = await Task.detached(priority: .utility) { ask(since) }.value
             library.setHistoryDays(days)
@@ -345,7 +348,6 @@ final class Engine {
             Perf.log.info("visitDays sites=\(days.count, privacy: .public) regularSites=\(self.library.regularSiteCount(today: today), privacy: .public) \(ms, format: .fixed(precision: 1), privacy: .public)ms")
             let r = library.migrateRegulars(today: today)
             if r.of > 0 { Perf.log.info("regulars migrated=\(r.migrated, privacy: .public) of \(r.of, privacy: .public)") }
-            historyLookups -= 1
         }
     }
 
