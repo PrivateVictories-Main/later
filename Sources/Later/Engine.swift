@@ -38,8 +38,12 @@ struct BrowserIO {
     var history: @Sendable ([String]) -> [String: HistoryLookup.Result] = { links in
         HistoryLookup.lookup(links, in: HistoryLookup.databases(in: RealHome.path + "/" + Browser.helium.dataFolder))
     }
-    /// Which days of the last 28 each site was visited, from the same History files. Asked about once a day, never listed.
-    var visitDays: @Sendable (Date) -> [String: Set<Int>] = { since in
+    /// Which days of the last 28 each site was visited. Nothing unless the engine is the real one: a stand-in never reads
+    /// anyone's history.
+    var visitDays: @Sendable (Date) -> [String: Set<Int>] = { _ in [:] }
+
+    /// The real answer, from the same History files: asked about once a day, never listed.
+    static let realVisitDays: @Sendable (Date) -> [String: Set<Int>] = { since in
         HistoryLookup.visitDays(in: HistoryLookup.databases(in: RealHome.path + "/" + Browser.helium.dataFolder), since: since)
     }
 }
@@ -110,7 +114,7 @@ final class Engine {
     /// leaves them for the window app, which can tell the user how many went.
     init(readOnly: Bool = false, dropsSecretLinks: Bool = true) {
         canEdit = !readOnly
-        io = BrowserIO()
+        io = BrowserIO(visitDays: BrowserIO.realVisitDays)
         let feeds = !Sample.enabled && UserDefaults.standard.bool(forKey: Self.savesFeedHomesKey)
         savesFeedHomes = feeds
         #if DEBUG

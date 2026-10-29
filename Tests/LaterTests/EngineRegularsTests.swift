@@ -62,3 +62,9 @@ import Testing
         #expect(fake.visitDaysAsked.count == 1)   // the same day: not again
     }
 }
+
+@Suite struct StandInEngineTests {
+    @Test func aStandInEngineNeverReadsAnyonesHistory() {
+        #expect(BrowserIO().visitDays(Date()).isEmpty)
+    }
+}
