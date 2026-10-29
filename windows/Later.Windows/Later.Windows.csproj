@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <RootNamespace>Later.Windows</RootNamespace>
+    <AssemblyName>Later.Windows</AssemblyName>
+    <LaterProduct>true</LaterProduct>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <SupportedOSPlatformVersion>10.0.22621.0</SupportedOSPlatformVersion>
+    <!-- Generated interop code warns; the network ban and the string-comparison rules are errors via .editorconfig. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Later.Core\Later.Core.csproj" />
+    <InternalsVisibleTo Include="Later.Windows.Tests" />
+  </ItemGroup>
+</Project>

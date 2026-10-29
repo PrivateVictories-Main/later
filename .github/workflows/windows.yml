@@ -51,6 +51,8 @@ jobs:
         run: dotnet list windows/Later.App/Later.App.csproj package --include-transitive
       - name: Core tests on Windows
         run: dotnet test windows/Later.Core.Tests -c Release --logger "console;verbosity=detailed"
+      - name: Windows unit tests
+        run: dotnet test windows/Later.Windows.Tests -c Release --filter "Category!=Integration&Category!=Probe" --logger "console;verbosity=detailed"
       - name: Build the scanner
         run: dotnet build windows/tools/ImportScan -c Release
       - name: The scanner rejects every network channel (self-test)

@@ -1,0 +1,65 @@
+using Later.Windows.Reader;
+using Xunit;
+
+namespace Later.Windows.Tests;
+
+public class TabLinkResolverTests
+{
+    static RawTab Tab(string id, string title, bool selected = false, int index = 0) => new(id, title, selected, index);
+    static SessionTab Saved(string url, string title) => new(1, 0, url, title);
+
+    [Fact]
+    public void RecallWorksWhileTheTitleMatchesAndNotAfterItChanges()
+    {
+        var r = new TabLinkResolver();
+        r.Remember(Tab("1", "Page", true), "https://a.example/p");
+        Assert.Equal("https://a.example/p", r.Recall(Tab("1", "Page")));
+        Assert.Null(r.Recall(Tab("1", "Page changed")));
+        Assert.Null(r.Recall(Tab("2", "Page")));
+    }
+
+    [Fact]
+    public void TwoTabsWithOneTitleStayUnresolved()
+    {
+        var tabs = new[] { Tab("1", "Discussion"), Tab("2", "Discussion"), Tab("3", "Other") };
+        var ambiguous = TabLinkResolver.AmbiguousTitles(tabs);
+        Assert.Contains("Discussion", ambiguous);
+        Assert.DoesNotContain("Other", ambiguous);
+        var session = new[] { Saved("https://a.example/1", "Discussion"), Saved("https://a.example/3", "Other") };
+        var history = new Dictionary<string, string> { ["Discussion"] = "https://a.example/1", ["Other"] = "https://a.example/3" };
+        Assert.Null(TabLinkResolver.FromSession("Discussion", session, ambiguous));
+        Assert.Null(TabLinkResolver.FromHistory("Discussion", history, ambiguous));
+        Assert.Equal("https://a.example/3", TabLinkResolver.FromSession("Other", session, ambiguous));
+        Assert.Equal("https://a.example/3", TabLinkResolver.FromHistory("Other", history, ambiguous));
+    }
+
+    [Fact]
+    public void ASessionTitleWithTwoDistinctUrlsIsNotResolved()
+    {
+        var none = new HashSet<string>();
+        var session = new[] { Saved("https://a.example/1", "Same"), Saved("https://a.example/2", "Same") };
+        Assert.Null(TabLinkResolver.FromSession("Same", session, none));
+        var twice = new[] { Saved("https://a.example/1", "Same"), Saved("https://a.example/1", "Same") };
+        Assert.Equal("https://a.example/1", TabLinkResolver.FromSession("Same", twice, none));
+    }
+
+    [Fact]
+    public void SessionTitlesWithAMemoryUsageSuffixStillMatch()
+    {
+        var session = new[] { Saved("https://a.example/1", "Page - Memory usage - 85 MB") };
+        Assert.Equal("https://a.example/1", TabLinkResolver.FromSession("Page", session, new HashSet<string>()));
+    }
+
+    [Fact]
+    public void PruneDropsClosedTabsAndForgetDropsAll()
+    {
+        var r = new TabLinkResolver();
+        r.Remember(Tab("1", "A"), "https://a.example/1");
+        r.Remember(Tab("2", "B"), "https://a.example/2");
+        r.Prune(new HashSet<string> { "2" });
+        Assert.Null(r.Recall(Tab("1", "A")));
+        Assert.Equal("https://a.example/2", r.Recall(Tab("2", "B")));
+        r.Forget();
+        Assert.Null(r.Recall(Tab("2", "B")));
+    }
+}
