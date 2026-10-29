@@ -45,6 +45,8 @@ public sealed class Judge
     /// again on every read. Null: a link that's never tracked.
     readonly Dictionary<Browser, Dictionary<TabKey, OpenPage?>> judged = new();
     bool savesFeedHomes;
+    /// The machine is asleep or locked: no screen clock starts and no page counts as left open.
+    bool away;
     /// How many tabs hold each page, by page key, across every watched browser. Not saved.
     readonly Dictionary<Browser, Dictionary<string, int>> copyCounts = new();
 
@@ -175,6 +177,17 @@ public sealed class Judge
         Evaluate(now, threshold);
     }
 
+    /// The machine went to sleep or locked (or came back). Time up to now keeps its credit; the time away counts as neither
+    /// reading nor leaving a page open, so a page in front when the lid closes isn't saved for the night it sat there.
+    public void SetAway(bool value, DateTime now)
+    {
+        if (value == away) return;
+        Evaluate(now, library.DwellThreshold);
+        away = value;
+        UpdateScreen(now);
+        if (value) foreach (var record in records.Values) record.OffScreenSince = null;   // starts again at the wake
+    }
+
     /// The browser's last copy quit. Time before now keeps its credit; then its pages are forgotten without
     /// ending them, so a relaunch that restores the session is a first read: no visits, nothing "came back".
     public void BrowserQuit(Browser browser, DateTime now)
@@ -240,7 +253,7 @@ public sealed class Judge
     {
         get
         {
-            if (FrontBrowser is not { } browser || !open.TryGetValue(browser, out var pages)) return null;
+            if (away || FrontBrowser is not { } browser || !open.TryGetValue(browser, out var pages)) return null;
             foreach (var (key, page) in pages)
                 if (page.Tab.IsActive && page.Tab.WindowIndex == 0) return key;
             return null;
@@ -266,7 +279,7 @@ public sealed class Judge
                 record.OnScreenSince = null;
                 record.OffScreenSince = now;
             }
-            else if (record.OffScreenSince is null)
+            else if (record.OffScreenSince is null && !away)   // no clock starts while away; the wake starts it
             {
                 record.OffScreenSince = now;
             }

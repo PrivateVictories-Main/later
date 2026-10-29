@@ -31,6 +31,63 @@ public class JudgeTests
     }
 
     [Fact]
+    public void ANightAsleepIsNotReadingTime()
+    {
+        var h = new Harness();
+        h.Show(T(ProductA, active: true));
+        h.Wait(5); h.Judge.SetAway(true, h.Now);   // the lid closes with the page in front
+        h.Wait(8 * 3600); h.Judge.SetAway(false, h.Now);
+        h.Show(T(ProductA, active: true));
+        h.AssertNothingSaved();
+        h.Show(T(ProductA));   // closed after a look of five seconds
+        h.Show();
+        h.AssertNothingSaved();
+        Assert.Equal(new List<double> { 5 }, h.Library.Data.DwellSamples);
+    }
+
+    [Fact]
+    public void ANightAsleepIsNotTimeLeftOpenEither()
+    {
+        var h = new Harness();
+        h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        h.Wait(10); h.Judge.SetAway(true, h.Now);
+        h.Wait(8 * 3600); h.Judge.SetAway(false, h.Now);
+        h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        h.AssertNothingSaved();
+        h.Wait(61); h.Show(T(ShopHome, "Shop", active: true), T(ProductA));   // a minute awake and off screen
+        h.AssertSaved(ProductA);
+    }
+
+    [Fact]
+    public void ReadsWhileAwayStartNoClocks()
+    {
+        var h = new Harness();
+        h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        h.Wait(10); h.Judge.SetAway(true, h.Now);   // locked, but the browser keeps writing its session files
+        h.Wait(30); h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        h.Wait(61); h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        h.AssertNothingSaved();
+        h.Wait(3600); h.Judge.SetAway(false, h.Now);
+        h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        h.AssertNothingSaved();
+        h.Wait(61); h.Show(T(ShopHome, "Shop", active: true), T(ProductA));   // a minute awake and off screen
+        h.AssertSaved(ProductA);
+    }
+
+    [Fact]
+    public void TimeAwakeAroundASleepStillCounts()
+    {
+        var h = new Harness();
+        h.Show(T(ProductA, active: true));
+        h.Wait(100); h.Judge.SetAway(true, h.Now);
+        h.Wait(3600); h.Judge.SetAway(false, h.Now);
+        h.Show(T(ProductA, active: true));
+        h.AssertNothingSaved();
+        h.Wait(30); h.Show(T(ProductA, active: true));
+        h.AssertSaved(ProductA);   // the 100 s before the sleep and 30 s after it make the 120
+    }
+
+    [Fact]
     public void BackgroundTabLeftOpenIsSaved()
     {
         var h = new Harness();
