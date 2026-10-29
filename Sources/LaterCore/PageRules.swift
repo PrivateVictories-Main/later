@@ -82,7 +82,7 @@ public enum PageRules {
         }
         // A PDF with a real name is something to read.
         if isSpecific, path.last?.lowercased().hasSuffix(".pdf") == true, kind == .other || kind == .tools { kind = .reading }
-        if Structure.isHardSkip(site: site, port: url.port, path: urlPath + (path == urlPath ? [] : path), title: title) {
+        if Structure.isHardSkip(site: site, port: url.port, path: urlPath, route: path == urlPath ? [] : path, title: title) {
             isSpecific = false
         }
         return apply(corrections, to: Verdict(isSpecific: isSpecific, kind: kind, pageType: type, isPlace: isPlace))
@@ -101,7 +101,8 @@ public enum PageRules {
 /// What a page is made of, for sites without a rule of their own, and the pages never kept.
 enum Structure {
     /// Pages that are in the way: sign-in redirects, one-time links, confirmations and errors. A sign-in or sign-up page
-    /// itself is kept; these words only ever show up on the way through. Matched as whole path sections.
+    /// itself is kept; these words only ever show up on the way through. Matched as whole path sections, but only among a
+    /// path's first two: deeper down they are a page's own name (/documentation/swift/error).
     static let oneTimeWords: Set<String> = [
         "oauth", "oauth2", "authorize", "callback", "logout", "signout", "log-out", "sign-out", "redirect", "unsubscribe",
         "error", "success", "thank-you", "thankyou", "verify", "verify-email", "consent",
@@ -123,14 +124,19 @@ enum Structure {
     /// Sign-in providers: a page there is a step on the way to somewhere else.
     static let identityHosts: Set<String> = ["accounts.google.com", "login.microsoftonline.com", "login.live.com", "appleid.apple.com"]
     static let identitySuffixes = [".onelogin.com", ".okta.com", ".auth0.com"]
+    /// Hosts of those providers that are for reading, not signing in: developer.okta.com, support.okta.com.
+    static let identityDocLabels: Set<String> = ["developer", "developers", "docs", "support", "help", "blog", "www"]
     /// A host that starts with one of these exists only for signing in.
     static let authHostLabels: Set<String> = ["sso", "idp", "auth", "login", "signin", "accounts"]
     /// Mail and chat, where every page is an inbox.
     static let inboxHosts: [String] = [
         "mail.google.com", "outlook.live.com", "outlook.office.com", "outlook.office365.com", "outlook.com", "mail.yahoo.com",
-        "mail.proton.me", "messenger.com", "web.whatsapp.com", "web.telegram.org", "app.slack.com", "discord.com",
-        "teams.microsoft.com",
+        "mail.proton.me", "messenger.com", "web.whatsapp.com", "web.telegram.org", "app.slack.com", "teams.microsoft.com",
     ]
+    /// Sites that are chat in one place and a website in the rest: only the chat paths are inboxes.
+    static let chatAppPaths: [String: Set<String>] = ["discord.com": ["channels", "app"]]
+    /// A first path section after which the next one is an article's name (/wiki/Consent), not a step of a flow.
+    static let articleSections: Set<String> = ["wiki"]
     /// A search engine's own front page.
     static let searchEngineHosts: [String] = [
         "google.*", "bing.com", "duckduckgo.com", "search.brave.com", "ecosia.org", "yahoo.com", "kagi.com", "startpage.com",
@@ -141,7 +147,8 @@ enum Structure {
         "pdf", "png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "json", "txt", "xml", "csv", "zip", "js", "css", "mp3", "mp4", "mov",
     ]
     /// Titles of pages that are in the way: challenges and errors. A title is one of these only when it is short (five
-    /// words or fewer) and starts with the phrase, so "The Forbidden City" and "How CAPTCHA works" are real pages.
+    /// words or fewer) and starts with the phrase, so "The Forbidden City" and "How CAPTCHA works" are real pages. A
+    /// one-word phrase must be the whole title: "Forbidden Planet - Wikipedia" is a real page.
     static let uselessTitles = [
         "403 forbidden", "404 not found", "404 page not found", "page not found", "not found", "forbidden", "access denied",
         "just a moment", "attention required", "verify you are human", "checking your browser", "502 bad gateway",
@@ -155,15 +162,18 @@ enum Structure {
 
     /// Pages never kept, whatever else the rules say: local hosts, sign-in providers, captive portals and shorteners,
     /// inboxes, search results and a search engine's front page, one-time links, files, and challenge or error titles.
-    static func isHardSkip(site: String, port: Int?, path: [String], title: String) -> Bool {
+    /// `route` is the path inside a hash route (#/oauth/callback), which has its own first two sections.
+    static func isHardSkip(site: String, port: Int?, path: [String], route: [String] = [], title: String) -> Bool {
         if site.isEmpty || port != nil || isLocal(site) { return true }
         if passThroughHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
-        if identityHosts.contains(site) || identitySuffixes.contains(where: site.hasSuffix) { return true }
+        if identityHosts.contains(site) { return true }
+        if identitySuffixes.contains(where: site.hasSuffix), !identityDocLabels.contains(site.split(separator: ".").first.map(String.init) ?? "") { return true }
         if authHostLabels.contains(site.split(separator: ".").first.map(String.init) ?? "") { return true }
         if inboxHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
+        if let first = path.first?.lowercased(), chatAppPaths.contains(where: { SiteRules.hostMatches(site, $0.key) && site == $0.key && $0.value.contains(first) }) { return true }
         if path.isEmpty, searchEngineHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
         if let first = path.first?.lowercased(), inboxWords.contains(first) { return true }
-        if path.contains(where: { oneTimeWords.contains($0.lowercased()) }) || hasSecretPath(path) { return true }
+        if hasOneTimeWord(path) || hasOneTimeWord(route) || hasSecretPath(path + route) { return true }
         if isFile(path.last) { return true }
         return isUselessTitle(title)
     }
@@ -198,10 +208,20 @@ enum Structure {
         return fileExtensions.contains(section[section.index(after: dot)...].lowercased()) && !isSlug(section)
     }
 
+    /// A one-time word in the first two sections of a path, the second not counting after "wiki".
+    static func hasOneTimeWord(_ path: [String]) -> Bool {
+        let first = path.first?.lowercased() ?? ""
+        let checked = articleSections.contains(first) ? path.prefix(1) : path.prefix(2)
+        return checked.contains { oneTimeWords.contains($0.lowercased()) }
+    }
+
     static func isUselessTitle(_ title: String) -> Bool {
         let words = title.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
         guard words.count <= 5 else { return false }
-        return uselessTitles.contains { words.starts(with: $0.split(separator: " ").map(String.init)) }
+        return uselessTitles.contains { phrase in
+            let phraseWords = phrase.split(separator: " ").map(String.init)
+            return phraseWords.count == 1 ? words == phraseWords : words.starts(with: phraseWords)
+        }
             || blankTitles.contains { words.elementsEqual($0.split(separator: " ").map(String.init)) }
     }
 

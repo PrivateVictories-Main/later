@@ -1,5 +1,5 @@
 {
-  "counts": {"cases": 276},
+  "counts": {"cases": 299},
   "cases": [
     {"url": "https://brightlane.example.com/", "title": "", "specific": true, "kind": "tools"},
     {"url": "https://brightlane.example.com/", "title": "A page title", "specific": true, "kind": "tools"},
@@ -276,6 +276,29 @@
     {"url": "https://www.amazon.com/ref=nav_logo", "title": "Home", "feeds": true, "specific": true},
     {"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "title": "A video", "specific": true},
     {"url": "https://x.com/karpathy/status/1890000000000000000", "title": "A post", "specific": true},
-    {"url": "https://www.youtube.com/", "title": "YouTube", "feeds": true, "specific": false, "corrections": {"youtube.com/": {"isSpecific": false}}}
+    {"url": "https://www.youtube.com/", "title": "YouTube", "feeds": true, "specific": false, "corrections": {"youtube.com/": {"isSpecific": false}}},
+    {"url": "https://developer.apple.com/documentation/swift/error", "title": "Error | Apple Developer Documentation", "specific": true},
+    {"url": "https://docs.example.com/api/functions/redirect", "title": "redirect | Example docs", "specific": true},
+    {"url": "https://example.com/docs/guides/callback", "title": "Callbacks | Example docs", "specific": true},
+    {"url": "https://example.com/docs/guides/consent", "title": "Consent | Example docs", "specific": true},
+    {"url": "https://example.com/handbook/chapter/verify", "title": "Verify | Example handbook", "specific": true},
+    {"url": "https://en.wikipedia.org/wiki/Consent", "title": "Consent - Wikipedia", "specific": true},
+    {"url": "https://en.wikipedia.org/wiki/Forbidden_Planet", "title": "Forbidden Planet - Wikipedia", "specific": true},
+    {"url": "https://example.com/auth/oauth/callback", "title": "Welcome", "specific": false},
+    {"url": "https://example.com/app/logout", "title": "Welcome", "specific": false},
+    {"url": "https://example.com/app#/oauth/callback", "title": "Welcome", "specific": false},
+    {"url": "https://example.com/products/thank-you", "title": "Welcome", "specific": false},
+    {"url": "https://discord.com/", "title": "Discord | Your Place to Talk and Hang Out", "specific": true},
+    {"url": "https://discord.com/blog/how-discord-stores-trillions-of-messages", "title": "How Discord Stores Trillions of Messages", "specific": true},
+    {"url": "https://discord.com/developers/docs/intro", "title": "Introduction | Discord Developer Portal", "specific": true},
+    {"url": "https://discord.com/channels/@me/1234567890123", "title": "Discord | @friend", "specific": false},
+    {"url": "https://discord.com/channels/1234567890123/1234567890456", "title": "Discord | #general", "specific": false},
+    {"url": "https://discord.com/app", "title": "Discord", "specific": false},
+    {"url": "https://support.discord.com/hc/en-us/articles/360045138571-Beginner-s-Guide-to-Discord", "title": "Beginner's Guide to Discord", "specific": true},
+    {"url": "https://developer.okta.com/docs/guides/sign-into-web-app-redirect/", "title": "Sign users in to your web app | Okta Developer", "specific": true},
+    {"url": "https://support.okta.com/help/s/article/how-to-reset-a-password", "title": "How to reset a password", "specific": true},
+    {"url": "https://developer.auth0.com/resources/labs/authorization/", "title": "Authorization labs | Auth0", "specific": true},
+    {"url": "https://acme.okta.com/app/UserHome", "title": "My Apps", "specific": false},
+    {"url": "https://acme.auth0.com/u/login", "title": "Log in", "specific": false}
   ]
 }
