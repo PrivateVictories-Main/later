@@ -74,6 +74,20 @@ final class Harness {
         #expect(h.saved == [productA])
     }
 
+    @Test func readsWhileAwayStartNoClocks() {
+        let h = Harness()
+        h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        h.wait(10); h.judge.setAway(true, now: h.now)   // locked, but the browser keeps writing its session files
+        h.wait(30); h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        h.wait(61); h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        #expect(h.saved.isEmpty)
+        h.wait(3600); h.judge.setAway(false, now: h.now)
+        h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        #expect(h.saved.isEmpty)
+        h.wait(61); h.show(tab(shopHome, "Shop", active: true), tab(productA))   // a minute awake and off screen
+        #expect(h.saved == [productA])
+    }
+
     @Test func timeAwakeAroundASleepStillCounts() {
         let h = Harness()
         h.show(tab(productA, active: true))

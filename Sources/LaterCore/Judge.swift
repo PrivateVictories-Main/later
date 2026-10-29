@@ -260,7 +260,7 @@ public final class Judge {
                 record.activeSeconds += now.timeIntervalSince(since)
                 record.onScreenSince = nil
                 record.offScreenSince = now
-            } else if record.offScreenSince == nil {
+            } else if record.offScreenSince == nil, !away {   // no clock starts while away; the wake starts it
                 record.offScreenSince = now
             }
             records[key] = record
