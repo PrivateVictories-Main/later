@@ -20,6 +20,7 @@ internal static unsafe partial class NativeTest
     [LibraryImport("user32.dll", EntryPoint = "PeekMessageW")] internal static partial int PeekMessage(out Msg msg, nint hwnd, uint min, uint max, uint remove);
     [LibraryImport("user32.dll")] internal static partial int TranslateMessage(in Msg msg);
     [LibraryImport("user32.dll", EntryPoint = "DispatchMessageW")] internal static partial nint DispatchMessage(in Msg msg);
+    [LibraryImport("user32.dll")] internal static partial void keybd_event(byte key, byte scan, uint flags, nuint extra);
     [LibraryImport("kernel32.dll")] internal static partial uint GetCurrentThreadId();
 
     internal const int SwMinimize = 6, SwRestore = 9;

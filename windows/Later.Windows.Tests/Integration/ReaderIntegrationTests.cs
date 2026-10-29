@@ -188,18 +188,6 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
             output.WriteLine($"HOOK {b}: events in 5 s idle = {idle.Count} ({string.Join(", ", idle.Select(e => e.Kind))})");
             Assert.Empty(idle.Where(e => e.Kind != WatchEventKind.Foreground));   // foreground changes belong to other programs
 
-            // Foreground: x64 only (the Arm runner's first-boot privacy screen holds the foreground there).
-            var arch = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture;
-            if (arch == System.Runtime.InteropServices.Architecture.X64)
-            {
-                int fg = Count(WatchEventKind.Foreground);
-                _ = NativeTest.SetForegroundWindow(hwnd);
-                bool seen = WaitUntil(() => Count(WatchEventKind.Foreground) > fg, TimeSpan.FromSeconds(3));
-                output.WriteLine($"HOOK {b}: foreground event after SetForegroundWindow = {seen}");
-                Assert.True(seen, "no Foreground event after SetForegroundWindow");
-            }
-            else output.WriteLine($"HOOK {b}: foreground assertion skipped on {arch}");
-
             // A new window shows; closing it is reported for a known hwnd.
             var knownBefore = WindowsOf(b).Select(w => w.Hwnd).ToHashSet();
             int shown = Count(WatchEventKind.WindowShown);
@@ -207,6 +195,28 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
             Assert.True(WaitUntil(() => WindowsOf(b).Any(w => !knownBefore.Contains(w.Hwnd)), Slow), "second window did not appear");
             Assert.True(Count(WatchEventKind.WindowShown) > shown, "no WindowShown for the new window");
             var newWindow = WindowsOf(b).First(w => !knownBefore.Contains(w.Hwnd)).Hwnd;
+            // Foreground: x64 only (the Arm runner's first-boot privacy screen holds the foreground there). The new window
+            // is in front now; moving the first one forward is a foreground change in another process's window.
+            var arch = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture;
+            if (arch == System.Runtime.InteropServices.Architecture.X64)
+            {
+                int fg = Count(WatchEventKind.Foreground);
+                NativeTest.keybd_event(0x12, 0, 0, 0); NativeTest.keybd_event(0x12, 0, 2, 0);   // an Alt tap lifts the foreground lock for this process
+                bool forced = NativeTest.SetForegroundWindow(hwnd) != 0;
+                bool seen = WaitUntil(() => Count(WatchEventKind.Foreground) > fg, TimeSpan.FromSeconds(3));
+                string how = "SetForegroundWindow";
+                if (!seen)
+                {
+                    fg = Count(WatchEventKind.Foreground); how = "minimize and restore";
+                    _ = NativeTest.ShowWindow(hwnd, NativeTest.SwMinimize);
+                    seen = WaitUntil(() => Count(WatchEventKind.Foreground) > fg, TimeSpan.FromSeconds(3));
+                    _ = NativeTest.ShowWindow(hwnd, NativeTest.SwRestore);
+                }
+                output.WriteLine($"HOOK {b}: foreground event seen={seen} via {how} (SetForegroundWindow returned {forced})");
+                Assert.True(seen, "no Foreground event");
+            }
+            else output.WriteLine($"HOOK {b}: foreground assertion skipped on {arch}");
+
             watcher!.SetKnownBrowserWindows([hwnd, newWindow]);
             _ = NativeTest.PostMessage(newWindow, NativeTest.WmClose, 0, 0);
             Assert.True(WaitUntil(() => { lock (events) return events.Any(e => e.Kind == WatchEventKind.WindowDestroyed && e.Hwnd == newWindow); }, TimeSpan.FromSeconds(10)),
@@ -273,6 +283,18 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
 
         using var second = BrowserFixture.Start(ExeOf(b), server, [], profile: first.Profile, restore: true);
         Assert.True(WaitUntil(() => WindowsOf(b).Any() && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 4, Slow), "the restored window did not get four tabs");
+        var sessionsDir = Path.Combine(first.Profile, "Default", "Sessions");
+        foreach (var file in Directory.Exists(sessionsDir) ? Directory.GetFiles(sessionsDir).OrderBy(x => x, StringComparer.Ordinal) : [])
+        {
+            try
+            {
+                using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var bytes = new byte[fs.Length]; fs.ReadExactly(bytes);
+                var parsed = PreviousSession.Parse(bytes);
+                output.WriteLine($"SESSION-FILE {b}: {Path.GetFileName(file)} {bytes.Length} bytes, header {Convert.ToHexString(bytes.AsSpan(0, Math.Min(16, bytes.Length)))}, parsed {parsed.Count} tabs");
+            }
+            catch (IOException e) { output.WriteLine($"SESSION-FILE {b}: {Path.GetFileName(file)} unreadable: {e.Message}"); }
+        }
         var session = PreviousSession.Read(first.Profile);
         output.WriteLine($"SESSION {b}: {string.Join(" | ", session.OrderBy(s => s.Index).Select(s => $"w{s.WindowId} t{s.Index} {s.Url} '{s.Title}'"))}");
         Assert.Equal(urls, session.OrderBy(s => s.Index).Select(s => s.Url).ToArray());
