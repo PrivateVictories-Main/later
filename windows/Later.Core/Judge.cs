@@ -188,6 +188,23 @@ public sealed class Judge
         if (value) foreach (var record in records.Values) record.OffScreenSince = null;   // starts again at the wake
     }
 
+    /// The first moment after `now` at which an unsaved page of this browser could be saved by time alone: a minute off screen,
+    /// or long enough on screen. The judge has no timer of its own; the engine arms one read for this moment. Null when no
+    /// page is waiting on the clock (a page that can't be saved, such as a deleted one, doesn't count).
+    public DateTime? NextDeadline(Browser browser, DateTime now)
+    {
+        var threshold = library.DwellThreshold;
+        DateTime? first = null;
+        void Consider(DateTime at) { if (at > now && (first is null || at < first)) first = at; }
+        foreach (var (key, record) in records)
+        {
+            if (key.Browser != browser || record.Saved || record.LeftOpenQualified) continue;
+            if (record.OffScreenSince is { } off) Consider(off + LeftOpenAfter);
+            if (record.Verdict is not null && record.OnScreenSince is { } on) Consider(on + TimeSpan.FromSeconds(Math.Max(0, threshold.TotalSeconds - record.ActiveSeconds)));
+        }
+        return first;
+    }
+
     /// The browser's last copy quit. Time before now keeps its credit; then its pages are forgotten without
     /// ending them, so a relaunch that restores the session is a first read: no visits, nothing "came back".
     public void BrowserQuit(Browser browser, DateTime now)

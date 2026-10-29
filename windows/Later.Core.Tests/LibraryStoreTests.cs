@@ -25,6 +25,39 @@ public class LibraryStoreTests
     static string[] CorruptCopies(TempDir dir) =>
         Directory.GetFiles(dir.Path, "library.corrupt-*").Select(p => Path.GetFileName(p)).ToArray();
 
+    // Check: what Load would find, touching nothing (the background helper's question).
+
+    [Fact]
+    public void CheckSaysFineForAReadableOrAMissingList()
+    {
+        using var dir = new TempDir(); var store = StoreIn(dir);
+        Assert.Equal(LibraryStore.Health.Fine, store.Check());
+        store.Save(Sample("A"));
+        Assert.Equal(LibraryStore.Health.Fine, store.Check());
+    }
+
+    [Fact]
+    public void CheckSaysNeedsRecoveryForADamagedListOrAMissingOneWithABackupAndTouchesNothing()
+    {
+        using var dir = new TempDir(); var store = StoreIn(dir);
+        store.Save(Sample("A")); store.Save(Sample("B"));   // the second save makes the backup
+        Garbage(dir.At("library.json"));
+        Assert.Equal(LibraryStore.Health.NeedsRecovery, store.Check());
+        File.Delete(dir.At("library.json"));
+        Assert.Equal(LibraryStore.Health.NeedsRecovery, store.Check());   // only the backup is left
+        Assert.Equal(["library.json.bak"], Directory.GetFiles(dir.Path).Select(p => Path.GetFileName(p)).ToArray());
+    }
+
+    [Fact]
+    public void CheckSaysUnreadableForAListThatIsOnlyLocked()
+    {
+        using var dir = new TempDir(); var store = StoreIn(dir);
+        store.Save(Sample("A"));
+        using (new FileStream(dir.At("library.json"), FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.Equal(LibraryStore.Health.Unreadable, store.Check());
+        Assert.Equal(LibraryStore.Health.Fine, store.Check());
+    }
+
     [Fact]
     public void RoundTrips()
     {

@@ -24,6 +24,28 @@ public sealed class LibraryStore
 
     public sealed record Loaded(LibraryData Data, string? Notice, bool Writable = true);
 
+    public enum Health
+    {
+        /// The list reads, or there is none yet.
+        Fine,
+        /// The list is damaged, or missing with a backup: `Load()` would set it aside or restore it, and say so.
+        NeedsRecovery,
+        /// The list could not be opened (locked, an I/O error); nothing says it is damaged, so it is worth asking again later.
+        Unreadable,
+    }
+
+    /// What `Load()` would find, touching no file. The background helper uses it to leave recovery to the window app (which tells
+    /// the user) and to wait out a list that is only locked.
+    public Health Check()
+    {
+        if (Decode(FilePath, out var unreadable) is not null) return Health.Fine;
+        if (unreadable) return Health.Unreadable;
+        if (File.Exists(FilePath)) return Health.NeedsRecovery;   // malformed
+        if (!File.Exists(BackupPath)) return Health.Fine;         // a new list
+        Decode(BackupPath, out var backupUnreadable);
+        return backupUnreadable ? Health.Unreadable : Health.NeedsRecovery;
+    }
+
     public Loaded Load()
     {
         if (Decode(FilePath, out var unreadable) is { } data) { primaryKnownGood = true; return new Loaded(data, null); }

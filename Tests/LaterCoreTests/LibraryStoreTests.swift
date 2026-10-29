@@ -256,14 +256,16 @@ import Testing
             Item(id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!, url: "https://example.com/a", title: "A page",
                  host: "example.com", kind: .reading, pageType: "example.com/*", browser: .helium, firstSaved: base,
                  lastSeen: base.addingTimeInterval(60.5), visits: 3, status: .done, doneAt: base.addingTimeInterval(90),
-                 openedAt: base.addingTimeInterval(-3_600), historyVisits: 7, tabIndex: 2, windowRank: 1, historyChecked: "https://example.com/a"),
+                 openedAt: base.addingTimeInterval(-3_600), historyVisits: 7, tabIndex: 2, windowRank: 1, historyChecked: "https://example.com/a", regular: true),
             Item(id: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!, url: "https://shop.example.com/p/1", title: "Plain",
                  host: "shop.example.com", kind: .shopping, pageType: "shop.example.com/p/*", browser: .chrome, firstSaved: base,
-                 lastSeen: base, visits: 1, status: .active, doneAt: nil),
+                 lastSeen: base, visits: 1, status: .active, doneAt: nil, regular: false),
         ]
-        data.corrections = ["example.com/*": Correction(isSpecific: false, kind: .school), "x.com/*": Correction(kind: .posts)]
+        data.corrections = ["example.com/*": Correction(isSpecific: false, kind: .school), "x.com/*": Correction(kind: .posts),
+                            "y.com/~": Correction(isSpecific: true, regular: true)]
         data.seen = ["0123abcd": base.addingTimeInterval(10)]
         data.dismissed = ["feedbeef": base.addingTimeInterval(20)]
+        data.siteDays = ["cafe0123": [20_000, 20_001]]
         data.dwellSamples = [12.5, 130]
         let actual = try JSONSerialization.jsonObject(with: JSONEncoder().encode(data)) as! NSDictionary
         let url = Vectors.folder.appendingPathComponent("library-golden.json")

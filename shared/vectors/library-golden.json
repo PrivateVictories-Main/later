@@ -6,6 +6,10 @@
     },
     "x.com\/*" : {
       "kind" : "posts"
+    },
+    "y.com\/~" : {
+      "isSpecific" : true,
+      "regular" : true
     }
   },
   "dismissed" : {
@@ -28,6 +32,7 @@
       "lastSeen" : 800000060.5,
       "openedAt" : 799996400,
       "pageType" : "example.com\/*",
+      "regular" : true,
       "status" : "done",
       "tabIndex" : 2,
       "title" : "A page",
@@ -43,6 +48,7 @@
       "kind" : "shopping",
       "lastSeen" : 800000000,
       "pageType" : "shop.example.com\/p\/*",
+      "regular" : false,
       "status" : "active",
       "title" : "Plain",
       "url" : "https:\/\/shop.example.com\/p\/1",
@@ -51,6 +57,12 @@
   ],
   "seen" : {
     "0123abcd" : 800000010
+  },
+  "siteDays" : {
+    "cafe0123" : [
+      20000,
+      20001
+    ]
   },
   "version" : 1
 }

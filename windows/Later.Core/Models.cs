@@ -64,8 +64,12 @@ public enum ItemStatus { Active, Done }
 
 public sealed record Item(Guid Id, string Url, string Title, string Host, Kind Kind, string PageType, Browser Browser,
     DateTime FirstSaved, DateTime LastSeen, int Visits, ItemStatus Status, DateTime? DoneAt = null, DateTime? OpenedAt = null,
-    int? HistoryVisits = null, int? TabIndex = null, int? WindowRank = null, string? HistoryChecked = null)
+    int? HistoryVisits = null, int? TabIndex = null, int? WindowRank = null, string? HistoryChecked = null, bool? Regular = null)
 {
+    /// `Regular`: for a place page, true when its site is a regular one (shown only under Regulars), false when it is kept in
+    /// the list; null for a page that is a thing, or one saved before Regulars. A regular that is still active is the only kind under Regulars.
+    public bool IsActiveRegular => Regular == true && Status == ItemStatus.Active;
+
     /// When the page was opened, else when Later first saw it.
     public DateTime Opened => OpenedAt ?? FirstSaved;
 
@@ -87,6 +91,9 @@ public sealed class LibraryData
     public List<double> DwellSamples = new();
     /// SHA-256 of page keys the user deleted → when; kept until the page's tab closes.
     public Dictionary<string, DateTime> Dismissed = new();
+    /// SHA-256 of a site's host (no "www.") → the days of the last 28 a read found it open in a tab (the Mac's own notes for a
+    /// browser whose History it can't read). Windows reads History instead and notes nothing, but keeps what a Mac file holds.
+    public Dictionary<string, List<int>> SiteDays = new();
 
     /// Items are shared (Item is immutable); the maps and lists are copied.
     public LibraryData Copy() => new()
@@ -97,6 +104,7 @@ public sealed class LibraryData
         Seen = new Dictionary<string, DateTime>(Seen),
         DwellSamples = new List<double>(DwellSamples),
         Dismissed = new Dictionary<string, DateTime>(Dismissed),
+        SiteDays = SiteDays.ToDictionary(p => p.Key, p => new List<int>(p.Value)),
     };
 }
 #pragma warning restore CA1051

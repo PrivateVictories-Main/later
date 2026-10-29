@@ -614,4 +614,53 @@ public class RelaunchTests
         h.Wait(65); h.Show(T("https://acmehq.example.com/", "Acme"), T("https://x.com/home", "Home / X", active: true));
         h.AssertSaved("https://acmehq.example.com/");
     }
+
+    // NextDeadline: the one moment the engine arms a read for.
+
+    [Fact]
+    public void ABackgroundPageHasADeadlineAMinuteAfterItLeftTheScreen()
+    {
+        var h = new Harness();
+        h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        Assert.Equal(h.Now.AddSeconds(60), h.Judge.NextDeadline(Browser.Helium, h.Now));
+        h.Wait(30);
+        Assert.Equal(h.Now.AddSeconds(30), h.Judge.NextDeadline(Browser.Helium, h.Now));
+    }
+
+    [Fact]
+    public void APageOnScreenHasADeadlineWhenItsTimeWouldSaveIt()
+    {
+        var h = new Harness();
+        h.Show(T(ProductA, active: true));
+        Assert.Equal(h.Now.AddSeconds(120), h.Judge.NextDeadline(Browser.Helium, h.Now));
+        h.Wait(100);
+        Assert.Equal(h.Now.AddSeconds(20), h.Judge.NextDeadline(Browser.Helium, h.Now));
+    }
+
+    [Fact]
+    public void NothingWaitingOnTheClockMeansNoDeadline()
+    {
+        var h = new Harness();
+        Assert.Null(h.Judge.NextDeadline(Browser.Helium, h.Now));
+        h.Show(T(ShopHome, "Shop", active: true));                  // a general page is never tracked
+        Assert.Null(h.Judge.NextDeadline(Browser.Helium, h.Now));
+        h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        h.Wait(61); h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        h.AssertSaved(ProductA);                                     // saved: nothing left to wait for
+        Assert.Null(h.Judge.NextDeadline(Browser.Helium, h.Now));
+        h.Show(T(ShopHome, "Shop", active: true), T(ProductA), T(ProductB));
+        Assert.NotNull(h.Judge.NextDeadline(Browser.Helium, h.Now));
+        Assert.Null(h.Judge.NextDeadline(Browser.Helium, h.Now.AddSeconds(100)));   // a moment already past is not a deadline
+    }
+
+    [Fact]
+    public void ADeadlineBelongsToItsBrowserAndEndsWithAway()
+    {
+        var h = new Harness(watched: new HashSet<Browser> { Browser.Helium, Browser.Chrome });
+        h.Show(T(ShopHome, "Shop", active: true), T(ProductA));
+        Assert.Null(h.Judge.NextDeadline(Browser.Chrome, h.Now));
+        Assert.NotNull(h.Judge.NextDeadline(Browser.Helium, h.Now));
+        h.Judge.SetAway(true, h.Now);
+        Assert.Null(h.Judge.NextDeadline(Browser.Helium, h.Now));
+    }
 }

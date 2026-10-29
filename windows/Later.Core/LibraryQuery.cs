@@ -3,33 +3,37 @@ using System.Text.RegularExpressions;
 
 namespace Later.Core;
 
-public enum SectionKind { All, OfKind, Older, Done }
+public enum SectionKind { All, OfKind, Older, Done, Regulars }
 
-/// A sidebar section: everything recent, one kind, the older pages, or the done ones.
+/// A sidebar section: everything recent, one kind, the older pages, the done ones, or the regulars (places on sites visited all the time).
 public readonly record struct LibrarySection(SectionKind Kind, Kind? ItemKind = null)
 {
     public static LibrarySection All => new(SectionKind.All);
     public static LibrarySection OfKind(Kind kind) => new(SectionKind.OfKind, kind);
     public static LibrarySection Older => new(SectionKind.Older);
     public static LibrarySection Done => new(SectionKind.Done);
+    public static LibrarySection Regulars => new(SectionKind.Regulars);
 
     public string Title => Kind switch
     {
         SectionKind.All => "All",
         SectionKind.OfKind => ItemKind!.Value.Title(),
         SectionKind.Older => "Older",
+        SectionKind.Regulars => "Regulars",
         _ => "Done",
     };
 
     /// The sidebar's order, also the order of the number shortcuts.
     public static IReadOnlyList<LibrarySection> Ordered { get; } =
-        [All, .. KindInfo.All.Select(OfKind), Older, Done];
+        [All, .. KindInfo.All.Select(OfKind), Older, Done, Regulars];
 
     internal bool Contains(Item item, DateTime cutoff) => Kind switch
     {
-        SectionKind.All => item.Status == ItemStatus.Active && item.LastSeen >= cutoff,
-        SectionKind.OfKind => item.Status == ItemStatus.Active && item.Kind == ItemKind && item.LastSeen >= cutoff,
-        SectionKind.Older => item.Status == ItemStatus.Active && item.LastSeen < cutoff,
+        SectionKind.All => item.Status == ItemStatus.Active && item.LastSeen >= cutoff && item.Regular != true,
+        SectionKind.OfKind => item.Status == ItemStatus.Active && item.Kind == ItemKind && item.LastSeen >= cutoff && item.Regular != true,
+        SectionKind.Older => item.Status == ItemStatus.Active && item.LastSeen < cutoff && item.Regular != true,
+        // Done shows every Done page, regular or not: Empty Done deletes exactly this. Regular is where an active page lives.
+        SectionKind.Regulars => item.IsActiveRegular,
         _ => item.Status == ItemStatus.Done,
     };
 }
@@ -132,6 +136,7 @@ public static partial class LibraryQuery
         foreach (var item in data.Items)
         {
             if (item.Status == ItemStatus.Done) Add(LibrarySection.Done);
+            else if (item.Regular == true) Add(LibrarySection.Regulars);
             else if (item.LastSeen < cutoff) Add(LibrarySection.Older);
             else
             {

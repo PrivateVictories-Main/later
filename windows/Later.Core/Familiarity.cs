@@ -17,6 +17,9 @@ public static class Familiarity
     /// Days count from 1970-01-01 in the user's own time zone, so "a different day" means a different local date.
     public static int DayNumber(DateTime local) => DayNumber(local.Year, local.Month, local.Day);
 
+    /// The day number of a moment (any kind of `DateTime`) in the user's own time zone.
+    public static int Today(DateTime moment) => DayNumber(moment.ToLocalTime());
+
     /// Days from 1970-01-01 to a civil date (proleptic Gregorian), with no time zone in it.
     public static int DayNumber(int year, int month, int day)
     {

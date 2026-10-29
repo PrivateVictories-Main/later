@@ -33,6 +33,7 @@ internal static class Fixtures
         Assert.Equal(expected.Seen, actual.Seen);
         Assert.Equal(expected.DwellSamples, actual.DwellSamples);
         Assert.Equal(expected.Dismissed, actual.Dismissed);
+        Assert.Equal(expected.SiteDays, actual.SiteDays);
     }
 
     public static Item MakeItem(string url, string title, string host = "a.com", Kind kind = Kind.Reading, string pageType = "a.com/*",

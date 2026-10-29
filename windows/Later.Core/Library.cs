@@ -14,6 +14,9 @@ public sealed class Library
     DateTime? lastPrune;
     /// Links of pages saved since the history was last asked, so each is asked about once. Not saved.
     readonly List<string> awaitingHistory = new();
+    /// Sites (host without "www.") → the days of the last 28 the browser's own history shows a visit. Read afresh each day
+    /// and never saved; the hashed days a Mac file noted itself are in `data.SiteDays`.
+    Dictionary<string, HashSet<int>> historyDays = new();
 
     public static readonly TimeSpan CameBackWindow = TimeSpan.FromDays(30);
     const int MaxDwellSamples = 200;
@@ -60,12 +63,135 @@ public sealed class Library
         if (index.ContainsKey(key)) return false;
         var host = HostOf(url);
         var blank = string.IsNullOrWhiteSpace(title);
+        bool? regular = verdict.IsPlace ? Disposition(verdict, host, Familiarity.Today(now)) == PlaceDisposition.Regular : null;
         data.Items.Add(new Item(Guid.NewGuid(), url, blank ? host : title, host, verdict.Kind, verdict.PageType, browser, now, now,
-                                1, ItemStatus.Active));
+                                1, ItemStatus.Active, Regular: regular));
         awaitingHistory.Add(url);   // every browser: unlike the Mac, Windows can read Chrome's History too
         index[key] = data.Items.Count - 1;
         NotifyChanged();
         return true;
+    }
+
+    // MARK: Regulars
+
+    /// Replaces what the browser's history says about which days each site was visited.
+    /// An empty answer (a failed or partial read) never replaces a good one.
+    public void SetHistoryDays(Dictionary<string, HashSet<int>> days)
+    {
+        if (days.Count == 0 && historyDays.Count > 0) return;
+        historyDays = days;
+    }
+
+    /// Whether there is enough to tell a regular site from a new one: at least as many different past days of the window,
+    /// over all sites, as it takes to be a regular. Before that, no page can be told apart, and a flag set now would be
+    /// permanent.
+    public bool HasVisitDays(int today)
+    {
+        var days = new HashSet<int>();
+        foreach (var set in historyDays.Values) days.UnionWith(set);
+        foreach (var list in data.SiteDays.Values) days.UnionWith(list);
+        return Familiarity.Count(days, today) >= Familiarity.RegularDays;
+    }
+
+    /// On how many different days of the last 28 (never today) the site was visited, by the history and by a Mac file's own notes.
+    public int VisitDays(string site, int today)
+    {
+        var days = historyDays.TryGetValue(site, out var known) ? new HashSet<int>(known) : [];
+        if (data.SiteDays.TryGetValue(Hash(site), out var noted)) days.UnionWith(noted);
+        return Familiarity.Count(days, today);
+    }
+
+    public PlaceDisposition Disposition(Verdict verdict, string site, int today)
+    {
+        if (!verdict.IsPlace) return PlaceDisposition.Save;
+        return Familiarity.Disposition(verdict, VisitDays(site, today), data.Corrections.GetValueOrDefault(verdict.PageType));
+    }
+
+    /// How many sites count as regular today, for the log: counts only.
+    public int RegularSiteCount(int today)
+    {
+        var known = historyDays.Keys.Select(Hash).ToHashSet();
+        int fromHistory = historyDays.Keys.Count(site => VisitDays(site, today) >= Familiarity.RegularDays);
+        int noted = data.SiteDays.Count(p => !known.Contains(p.Key) && Familiarity.Count(p.Value, today) >= Familiarity.RegularDays);
+        return fromHistory + noted;
+    }
+
+    /// Looks once at every saved page from before Regulars (no flag yet): a place on a regular site becomes a regular.
+    /// Nothing is deleted. Returns counts only: the places looked at, and how many of them moved.
+    public (int Migrated, int Of) MigrateRegulars(int today)
+    {
+        int migrated = 0, of = 0;
+        if (!HasVisitDays(today)) return (0, 0);
+        for (int i = 0; i < data.Items.Count; i++)
+        {
+            var item = data.Items[i];
+            if (item.Regular is not null) continue;
+            if (ParsedUrl.Parse(item.Url) is not { Host: not null } url) continue;
+            if (!PageRules.Judge(url, item.Title).IsPlace) continue;
+            of++;
+            // The page type saved with the item is the one the user's corrections are stored under.
+            var verdict = new Verdict(true, item.Kind, item.PageType, IsPlace: true);
+            bool regular = Disposition(verdict, item.Host, today) == PlaceDisposition.Regular;
+            data.Items[i] = item with { Regular = regular };
+            if (regular) migrated++;
+        }
+        if (of > 0) NotifyChanged();
+        return (migrated, of);
+    }
+
+    /// Takes the flag off saved pages that the current rules no longer call places (a deeper page, a file, a page named by a
+    /// query value): they are things, kept in the list with the rest. Runs once when the list loads. Nothing is deleted.
+    /// Returns how many regulars went back to the list: counts only, for the log.
+    public int RefreshPlaces()
+    {
+        int moved = 0;
+        bool any = false;
+        for (int i = 0; i < data.Items.Count; i++)
+        {
+            var item = data.Items[i];
+            // "This is a regular" covers the whole page type: the user's choice stands.
+            if (item.Regular is null || data.Corrections.GetValueOrDefault(item.PageType)?.Regular == true) continue;
+            if (ParsedUrl.Parse(item.Url) is not { Host: not null } url || PageRules.Judge(url, item.Title).IsPlace) continue;
+            if (item.Regular == true) moved++;
+            data.Items[i] = item with { Regular = null };
+            any = true;
+        }
+        if (any) NotifyChanged();
+        return moved;
+    }
+
+    /// "Keep in my list": the page type is kept from now on, and its regulars move back to their kind.
+    public void KeepInList(Guid id)
+    {
+        if (data.Items.FirstOrDefault(i => i.Id == id) is not { } item) return;
+        var correction = data.Corrections.GetValueOrDefault(item.PageType) ?? new Correction();
+        data.Corrections[item.PageType] = correction with { IsSpecific = true, Regular = null };
+        SetFlagOfType(item.PageType, false);
+        NotifyChanged();
+    }
+
+    /// "This is a regular": the page type is left to the regulars, whatever the days say.
+    public void MarkRegular(Guid id)
+    {
+        if (data.Items.FirstOrDefault(i => i.Id == id) is not { } item) return;
+        var correction = data.Corrections.GetValueOrDefault(item.PageType) ?? new Correction();
+        data.Corrections[item.PageType] = correction with { Regular = true };
+        SetFlagOfType(item.PageType, true);
+        NotifyChanged();
+    }
+
+    void SetFlagOfType(string pageType, bool regular)
+    {
+        for (int i = 0; i < data.Items.Count; i++)
+            if (data.Items[i].PageType == pageType && data.Items[i].Regular is not null) data.Items[i] = data.Items[i] with { Regular = regular };
+    }
+
+    /// Puts pages' regular flags back as they were before a choice, for Undo.
+    public void SetRegulars(IReadOnlyDictionary<Guid, bool?> flags)
+    {
+        for (int i = 0; i < data.Items.Count; i++)
+            if (flags.TryGetValue(data.Items[i].Id, out var flag)) data.Items[i] = data.Items[i] with { Regular = flag };
+        NotifyChanged();
     }
 
     // MARK: Opened time and place
@@ -377,9 +503,16 @@ public sealed class Library
         bool Recent(DateTime when) => now - when <= CameBackWindow;
         var seen = data.Seen.Where(kv => Recent(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value);
         var dismissed = data.Dismissed.Where(kv => Recent(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value);
-        if (seen.Count == data.Seen.Count && dismissed.Count == data.Dismissed.Count) return;
+        int first = Familiarity.Today(now) - Familiarity.Window;
+        var siteDays = data.SiteDays
+            .Select(p => (p.Key, Days: p.Value.Where(d => d >= first).ToList()))
+            .Where(p => p.Days.Count > 0)
+            .ToDictionary(p => p.Key, p => p.Days);
+        bool daysChanged = siteDays.Count != data.SiteDays.Count || siteDays.Any(p => p.Value.Count != data.SiteDays[p.Key].Count);
+        if (seen.Count == data.Seen.Count && dismissed.Count == data.Dismissed.Count && !daysChanged) return;
         data.Seen = seen;
         data.Dismissed = dismissed;
+        data.SiteDays = siteDays;
         NotifyChanged();
     }
 

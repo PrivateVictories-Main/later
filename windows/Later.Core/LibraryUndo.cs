@@ -106,6 +106,25 @@ public static class LibraryUndo
         });
     }
 
+    /// "Keep in my list" and "This is a regular" change the page type's correction and every saved page of that type, so
+    /// Undo puts back both.
+    public static void KeepInList(this Library library, Guid id, UndoStack undo) => Choose(library, id, "Keep Pages Like This", undo, () => library.KeepInList(id));
+
+    public static void MarkRegular(this Library library, Guid id, UndoStack undo) => Choose(library, id, "Mark as Regular", undo, () => library.MarkRegular(id));
+
+    static void Choose(Library library, Guid id, string name, UndoStack undo, Action change)
+    {
+        if (library.Data.Items.FirstOrDefault(i => i.Id == id) is not { } item) return;
+        var type = item.PageType;
+        var correction = library.Data.Corrections.GetValueOrDefault(type);
+        var flags = library.Data.Items.Where(i => i.PageType == type).ToDictionary(i => i.Id, i => i.Regular);
+        undo.Do(name, change, () =>
+        {
+            library.SetCorrection(correction, type);
+            library.SetRegulars(flags);
+        });
+    }
+
     /// Empty Done is one Undo, however many pages it deletes.
     public static void EmptyDone(this Library library, DateTime now, UndoStack undo)
     {

@@ -37,6 +37,17 @@ public static class LibraryJson
             foreach (var s in data.DwellSamples) w.WriteNumberValue(s);
             w.WriteEndArray();
             WriteDates(w, "dismissed", data.Dismissed);
+            if (data.SiteDays.Count > 0)   // like the Mac: a list that never noted a site has no such field
+            {
+                w.WriteStartObject("siteDays");
+                foreach (var (hash, days) in data.SiteDays)
+                {
+                    w.WriteStartArray(hash);
+                    foreach (var day in days) w.WriteNumberValue(day);
+                    w.WriteEndArray();
+                }
+                w.WriteEndObject();
+            }
             w.WriteEndObject();
         }
         return stream.ToArray();
@@ -64,6 +75,7 @@ public static class LibraryJson
         if (i.TabIndex is { } t) w.WriteNumber("tabIndex", t);
         if (i.WindowRank is { } r) w.WriteNumber("windowRank", r);
         if (i.HistoryChecked is { } hc) w.WriteString("historyChecked", hc);
+        if (i.Regular is { } regular) w.WriteBoolean("regular", regular);
         w.WriteEndObject();
     }
 
@@ -87,6 +99,8 @@ public static class LibraryJson
             foreach (var e in Required(root, "dwellSamples").EnumerateArray()) data.DwellSamples.Add(e.GetDouble());
             if (Optional(root, "dismissed") is { } dismissed)   // absent in files from before dismissals existed
                 foreach (var p in dismissed.EnumerateObject()) data.Dismissed[p.Name] = ToDate(p.Value.GetDouble());
+            if (Optional(root, "siteDays") is { } siteDays)   // absent in files from before Regulars
+                foreach (var p in siteDays.EnumerateObject()) data.SiteDays[p.Name] = p.Value.EnumerateArray().Select(d => d.GetInt32()).ToList();
             return data;
         }
         catch (Exception e) when (e is JsonException or InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
@@ -114,6 +128,7 @@ public static class LibraryJson
             DoneAt: Optional(e, "doneAt") is { } d ? ToDate(d.GetDouble()) : null,
             OpenedAt: Optional(e, "openedAt") is { } o ? ToDate(o.GetDouble()) : null,
             HistoryVisits: Optional(e, "historyVisits")?.GetInt32(), TabIndex: Optional(e, "tabIndex")?.GetInt32(),
-            WindowRank: Optional(e, "windowRank")?.GetInt32(), HistoryChecked: Optional(e, "historyChecked")?.GetString());
+            WindowRank: Optional(e, "windowRank")?.GetInt32(), HistoryChecked: Optional(e, "historyChecked")?.GetString(),
+            Regular: Optional(e, "regular") is { } regular ? regular.GetBoolean() : null);
     }
 }

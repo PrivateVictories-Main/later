@@ -32,6 +32,27 @@ public class LibraryJsonTests
         Assert.Single(d.Dismissed);
     }
 
+    // A Mac library loaded and saved on Windows loses nothing: the Regulars fields round-trip exactly.
+    [Fact]
+    public void TheRegularsFieldsOfTheMacGoldenDecode()
+    {
+        var d = LibraryJson.Decode(Golden());
+        Assert.True(d.Items[0].Regular); Assert.False(d.Items[1].Regular);
+        Assert.Equal(new Correction(IsSpecific: true, Regular: true), d.Corrections["y.com/~"]);
+        Assert.Null(d.Corrections["x.com/*"].Regular);
+        Assert.Equal(new Dictionary<string, List<int>> { ["cafe0123"] = [20_000, 20_001] }, d.SiteDays);
+    }
+
+    [Fact]
+    public void ALoadedAndSavedGoldenLosesNoRegularsField()
+    {
+        var first = LibraryJson.Decode(Golden());
+        var again = LibraryJson.Decode(LibraryJson.Encode(first));
+        Assert.Equal(first.Items, again.Items);
+        Assert.Equal(first.Corrections, again.Corrections);
+        Assert.Equal(first.SiteDays, again.SiteDays);
+    }
+
     [Fact]
     public void EncodingReproducesTheGoldenAsParsedJson()
     {
