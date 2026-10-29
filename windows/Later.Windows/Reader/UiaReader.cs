@@ -15,12 +15,10 @@ internal sealed unsafe class UiaReader : IDisposable
     public UiaReader()
     {
         var uia = session.Automation;
-        IUIAutomationCacheRequest* request;
-        UiaSession.Check(uia->CreateCacheRequest(&request));
-        cache = request;
+        cache = uia->CreateCacheRequest();
         foreach (var id in new[] { UiaIds.Name, UiaIds.ControlType, UiaIds.RuntimeId, UiaIds.IsSelected, UiaIds.Value })
-            UiaSession.Check(cache->AddProperty((UIA_PROPERTY_ID)id));
-        UiaSession.Check(cache->put_AutomationElementMode((AutomationElementMode)0 /*None: cached values only*/));
+            cache->AddProperty((UIA_PROPERTY_ID)id);
+        cache->AutomationElementMode = (AutomationElementMode)0;   // None: cached values only
         var tab = session.ControlTypeIs(UiaIds.TabItem); var doc = session.ControlTypeIs(UiaIds.Document);
         tabsAndDocuments = session.Or(tab, doc);
         tab->Release(); doc->Release();
@@ -34,20 +32,21 @@ internal sealed unsafe class UiaReader : IDisposable
         IUIAutomationElementArray* found = null;
         try
         {
-            if (session.Automation->ElementFromHandle(new HWND(w.Hwnd), &root).Failed || root is null) return null;
+            root = session.Automation->ElementFromHandle(new HWND(w.Hwnd));
+            if (root is null) return null;
             string uiaName = UiaSession.Current(root, UiaIds.Name) as string ?? "";
             if (PrivateWindowDetector.IsPrivate(new RawWindowInfo(w.Browser, w.Title, uiaName))) return new RawWindow(w.Hwnd, true, [], null);
 
-            if (root->FindAllBuildCache((TreeScope)UiaIds.ScopeDescendants, tabsAndDocuments, cache, &found).Failed || found is null) return null;
-            int count;
-            if (found->get_Length(&count).Failed) return null;
+            found = root->FindAllBuildCache((TreeScope)UiaIds.ScopeDescendants, tabsAndDocuments, cache);
+            if (found is null) return null;
+            int count = found->Length;
             var tabs = new List<RawTab>(); string? activeUrl = null; bool pastDocument = false;
             for (int i = 0; i < count; i++)
             {
-                IUIAutomationElement* e = null;
+                IUIAutomationElement* e = found->GetElement(i);
+                if (e is null) return null;
                 try
                 {
-                    if (found->GetElement(i, &e).Failed || e is null) return null;
                     int type = UiaSession.Cached(e, UiaIds.ControlType) is int t ? t : 0;
                     if (type == UiaIds.Document)
                     {
@@ -59,7 +58,7 @@ internal sealed unsafe class UiaReader : IDisposable
                         tabs.Add(new RawTab(UiaSession.RuntimeIdText(UiaSession.Cached(e, UiaIds.RuntimeId)), title, UiaSession.Cached(e, UiaIds.IsSelected) is true, tabs.Count));
                     }
                 }
-                finally { if (e is not null) e->Release(); }
+                finally { e->Release(); }
             }
             return new RawWindow(w.Hwnd, false, tabs, string.IsNullOrWhiteSpace(activeUrl) ? null : activeUrl);
         }

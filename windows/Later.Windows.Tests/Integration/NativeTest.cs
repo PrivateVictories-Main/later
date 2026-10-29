@@ -61,16 +61,14 @@ internal sealed unsafe class UiaTest : IDisposable
     {
         var root = Root(hwnd);
         IUIAutomationCondition* tabs = session.ControlTypeIs(UiaIds.TabItem);
-        IUIAutomationElementArray* found;
+        IUIAutomationElementArray* found = null;
         try
         {
-            UiaSession.Check(root->FindAll((TreeScope)UiaIds.ScopeDescendants, tabs, &found));
-            IUIAutomationElement* tab;
-            UiaSession.Check(found->GetElement(index, &tab));
+            found = root->FindAll((TreeScope)UiaIds.ScopeDescendants, tabs);
+            IUIAutomationElement* tab = found->GetElement(index);
             try
             {
-                IUnknown* unknown;
-                UiaSession.Check(tab->GetCurrentPattern((UIA_PATTERN_ID)10010 /*SelectionItem*/, &unknown));
+                IUnknown* unknown = tab->GetCurrentPattern((UIA_PATTERN_ID)10010 /*SelectionItem*/);
                 var iid = new Guid("a8efa66a-0fda-421a-9194-38021f3578ea");   // IUIAutomationSelectionItemPattern
                 Marshal.ThrowExceptionForHR(Marshal.QueryInterface((nint)unknown, ref iid, out var pattern));
                 int hr = ((delegate* unmanaged[Stdcall]<nint, int>)(*(void***)pattern)[3])(pattern);   // vtable slot 3 = Select()
@@ -78,9 +76,8 @@ internal sealed unsafe class UiaTest : IDisposable
                 Marshal.ThrowExceptionForHR(hr);
             }
             finally { _ = tab->Release(); }
-            _ = found->Release();
         }
-        finally { _ = tabs->Release(); _ = root->Release(); }
+        finally { if (found is not null) _ = found->Release(); _ = tabs->Release(); _ = root->Release(); }
     }
 
     /// A depth-limited look at the window's UI tree, skipping page content, one line per node.
@@ -102,12 +99,14 @@ internal sealed unsafe class UiaTest : IDisposable
     {
         if (depth > maxDepth) return;
         IUIAutomationElementArray* kids;
-        if (parent->FindAll((TreeScope)UiaIds.ScopeChildren, all, &kids).Failed) return;
-        int n; _ = kids->get_Length(&n);
+        try { kids = parent->FindAll((TreeScope)UiaIds.ScopeChildren, all); }
+        catch (COMException) { return; }
+        int n = kids->Length;
         for (int i = 0; i < n && nodes < maxNodes; i++)
         {
             IUIAutomationElement* kid;
-            if (kids->GetElement(i, &kid).Failed) continue;
+            try { kid = kids->GetElement(i); }
+            catch (COMException) { continue; }
             nodes++;
             lines.Add($"{new string(' ', depth * 2)}{Describe(kid)}");
             if (UiaSession.Current(kid, UiaIds.ControlType) is not UiaIds.Document) Walk(kid, all, depth + 1, maxDepth, ref nodes, maxNodes, lines);
@@ -128,9 +127,7 @@ internal sealed unsafe class UiaTest : IDisposable
 
     IUIAutomationElement* Root(nint hwnd)
     {
-        IUIAutomationElement* root;
-        UiaSession.Check(session.Automation->ElementFromHandle(new Windows.Win32.Foundation.HWND(hwnd), &root));
-        return root;
+        return session.Automation->ElementFromHandle(new Windows.Win32.Foundation.HWND(hwnd));
     }
 
     /// Live elements of the given control types in tree order; the caller releases each.
@@ -142,9 +139,9 @@ internal sealed unsafe class UiaTest : IDisposable
         var list = new List<nint>();
         try
         {
-            UiaSession.Check(root->FindAll((TreeScope)UiaIds.ScopeDescendants, either, &found));
-            int n; _ = found->get_Length(&n);
-            for (int i = 0; i < n; i++) { IUIAutomationElement* e; UiaSession.Check(found->GetElement(i, &e)); list.Add((nint)e); }
+            found = root->FindAll((TreeScope)UiaIds.ScopeDescendants, either);
+            int n = found->Length;
+            for (int i = 0; i < n; i++) list.Add((nint)found->GetElement(i));
         }
         finally { if (found is not null) _ = found->Release(); _ = either->Release(); _ = a->Release(); _ = b->Release(); _ = root->Release(); }
         return list;

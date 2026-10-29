@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using Windows.Win32.Foundation;
 using Windows.Win32.System.Variant;
 using Windows.Win32.UI.Accessibility;
 
@@ -48,44 +47,32 @@ internal sealed unsafe class UiaSession : IDisposable
         if (Automation is not null) { Automation->Release(); Automation = null; if (uninitialize) Com.CoUninitialize(); }
     }
 
+    // CsWin32 gives COM methods in a friendly shape: out values are returned and a failed HRESULT throws COMException.
+
     /// A condition `ControlType == type`; the caller releases it.
     public IUIAutomationCondition* ControlTypeIs(int type)
     {
         VARIANT v = default;
         Marshal.GetNativeVariantForObject(type, (nint)(&v));
-        IUIAutomationCondition* condition;
-        Check(Automation->CreatePropertyCondition((UIA_PROPERTY_ID)UiaIds.ControlType, v, &condition));
-        return condition;
+        return Automation->CreatePropertyCondition((UIA_PROPERTY_ID)UiaIds.ControlType, v);
     }
 
-    public IUIAutomationCondition* Or(IUIAutomationCondition* a, IUIAutomationCondition* b)
-    {
-        IUIAutomationCondition* condition;
-        Check(Automation->CreateOrCondition(a, b, &condition));
-        return condition;
-    }
+    public IUIAutomationCondition* Or(IUIAutomationCondition* a, IUIAutomationCondition* b) => Automation->CreateOrCondition(a, b);
 
-    public IUIAutomationCondition* True()
-    {
-        IUIAutomationCondition* condition;
-        Check(Automation->CreateTrueCondition(&condition));
-        return condition;
-    }
+    public IUIAutomationCondition* True() => Automation->CreateTrueCondition();
 
     /// A property as the cache request captured it: string, bool, int or int[] (RuntimeId); null when empty or unsupported.
     public static object? Cached(IUIAutomationElement* element, int propertyId)
     {
-        VARIANT v = default;
-        if (element->GetCachedPropertyValue((UIA_PROPERTY_ID)propertyId, &v).Failed) return null;
-        return Take(&v);
+        try { var v = element->GetCachedPropertyValue((UIA_PROPERTY_ID)propertyId); return Take(&v); }
+        catch (COMException) { return null; }
     }
 
     /// A property read live from the element.
     public static object? Current(IUIAutomationElement* element, int propertyId)
     {
-        VARIANT v = default;
-        if (element->GetCurrentPropertyValue((UIA_PROPERTY_ID)propertyId, &v).Failed) return null;
-        return Take(&v);
+        try { var v = element->GetCurrentPropertyValue((UIA_PROPERTY_ID)propertyId); return Take(&v); }
+        catch (COMException) { return null; }
     }
 
     static object? Take(VARIANT* v)
@@ -95,9 +82,4 @@ internal sealed unsafe class UiaSession : IDisposable
     }
 
     public static string RuntimeIdText(object? id) => id is int[] ids ? string.Join('.', ids.Select(i => i.ToString(System.Globalization.CultureInfo.InvariantCulture))) : "";
-
-    public static void Check(HRESULT hr)
-    {
-        if (hr.Failed) throw new COMException("UI Automation call failed", hr.Value);
-    }
 }

@@ -17,7 +17,7 @@ public static class BrowserDiscovery
     public static IReadOnlyList<BrowserWindow> Enumerate()
     {
         var found = new List<BrowserWindow>();
-        User32.EnumWindows((hwnd, _) =>
+        User32.EnumWindows((hwnd, lParam) =>
         {
             if (User32.IsWindowVisible(hwnd) == 0 || User32.Class(hwnd) != BrowserWindowClass) return 1;
             var title = User32.Title(hwnd);
