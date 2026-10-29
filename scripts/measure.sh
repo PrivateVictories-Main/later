@@ -1,17 +1,31 @@
 #!/bin/zsh
 # Reports Later's resource use. Usage:
 #   scripts/measure.sh memory           memory footprint now
+#   scripts/measure.sh checkin          fails if the agent is registered with LaunchServices as a running app (opening Later would go to it)
 #   scripts/measure.sh quiet [minutes]  per-minute CPU %, idle wake-ups and ring count (default 10)
 #   scripts/measure.sh rings [minutes]  per-ring read and judge times (default 10)
 set -euo pipefail
 # The installed copy only: development builds (com.ryan.later.dev) log to the same subsystem.
-pid=$(pgrep -f '/Applications/Later.app/Contents/MacOS/Later' | head -1) || { echo "/Applications/Later.app isn't running" >&2; exit 1; }
+# The background helper is the one to measure; the window app only when no helper runs. The pick is printed.
+bin=/Applications/Later.app/Contents/MacOS/Later
+pid= role=
+for p in $(pgrep -x Later || true); do
+  [[ $(lsof -a -p "$p" -d txt -Fn 2>/dev/null | sed -n "s/^n//p;" | head -1) == "$bin" ]] || continue
+  if [[ $(ps -o args= -p "$p") == *" --agent" ]]; then pid=$p role=agent; break; fi
+  [[ -n $pid ]] || { pid=$p role=window; }
+done
+[[ -n $pid ]] || { echo "/Applications/Later.app isn't running" >&2; exit 1; }
+echo "measuring pid $pid ($role)"
 mode=${1:-quiet}
 minutes=${2:-10}
 tmp=$(mktemp -t later-measure)
 trap 'rm -f "$tmp"' EXIT
 
 case $mode in
+  checkin)
+    apps=$(lsappinfo list)   # not piped: grep -q closing early would fail the pipe under pipefail
+    if grep -q "pid = $pid " <<<"$apps"; then echo "pid $pid IS registered with LaunchServices: opening Later would be sent to it" >&2; exit 1; fi
+    echo "pid $pid is not registered with LaunchServices" ;;
   memory)
     footprint "$pid" | grep -iE 'footprint' | head -2 ;;
   quiet)

@@ -62,6 +62,7 @@ struct ItemDetail: View {
                         }
                         Spacer(minLength: 4)
                         KindMenu(kind: item.kind) { actions.move([item], to: $0) }
+                            .disabled(!actions.canEdit)
                     }
                 }
                 VStack(spacing: 8) {
@@ -76,16 +77,17 @@ struct ItemDetail: View {
                         HStack(spacing: 8) {
                             Button {
                                 actions.copyLinks([item])
-                                withAnimation(.snappy) { copied = true }
+                                withAnimation(Motion.quick) { copied = true }
                             } label: {
                                 Label(copied ? "Copied" : "Copy Link", systemImage: copied ? "checkmark" : "link")
-                                    .contentTransition(.symbolEffect(.replace))
+                                    .contentTransition(Motion.symbolSwap)
                                     .frame(maxWidth: .infinity)
                             }
                             Button { actions.setDone([item], !done) } label: {
                                 Label(done ? "Move Back" : "Mark Done", systemImage: done ? "arrow.uturn.backward" : "checkmark.circle")
                                     .frame(maxWidth: .infinity)
                             }
+                            .disabled(!actions.canEdit)
                         }
                         .buttonStyle(.glass)
                         .controlSize(.large)
@@ -120,6 +122,7 @@ struct ItemDetail: View {
                     .help("Delete this page (Edit ▸ Undo brings it back)")
                 }
                 .buttonStyle(.glass)
+                .disabled(!actions.canEdit)
             }
             .padding(.horizontal, 20)
             .padding(.top, 14)
@@ -283,6 +286,7 @@ struct SelectionSummary: View {
                                 Label(allDone ? "Move Back" : "Mark Done", systemImage: allDone ? "arrow.uturn.backward" : "checkmark.circle")
                                     .frame(maxWidth: .infinity)
                             }
+                            .disabled(!actions.canEdit)
                         }
                         .buttonStyle(.glass)
                         .controlSize(.large)
@@ -298,6 +302,7 @@ struct SelectionSummary: View {
                     .help("Delete these pages (Edit ▸ Undo brings them back)")
                 }
                 .buttonStyle(.glass)
+                .disabled(!actions.canEdit)
             }
             .padding(.horizontal, 20)
             .padding(.top, 14)

@@ -27,7 +27,7 @@ struct ListPane: View {
                     ListHeader(model: model, summary: listing.summary)
                     if model.showsNotice, let notice = model.engine.notice {
                         NoticeBar(text: notice) { withAnimation(Motion.standard) { model.dismissedGeneration = model.engine.noticeGeneration } }
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .transition(Motion.notice)
                     }
                     if listing.items.isEmpty {
                         EmptyLibrary(model: model)
@@ -183,6 +183,7 @@ struct ListHeader: View {
                 .buttonStyle(.glass)
                 .tint(nil)
                 .help("Delete everything in Done (Edit ▸ Undo brings it back)")
+                .disabled(!model.engine.canEdit)
             }
         }
         .padding(.leading, 6)

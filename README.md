@@ -41,8 +41,9 @@ The details, including exactly what Later reads and what it stores, are in [PRIV
 
 - **No polling.** Later does nothing on a timer. It wakes when a browser writes its session files (Helium) or when you switch to the browser (Chrome), reads the open tabs once, and goes back to sleep.
 - **Official interface.** Tabs are read through each browser's own AppleScript interface, which macOS asks you to allow once per browser. Private and incognito windows are never read.
-- **What gets saved.** A page is kept when you spend a while on it (about two minutes at first, then adapting to how you browse), when it stays open in the background for a minute, or when you come back to it. Search results, inboxes, sign-in providers, local addresses and one-time links are never kept. Home feeds such as the YouTube home page are kept only if you turn that on in Settings.
-- **Light on resources.** About 50 MB of memory and almost no CPU while idle.
+- **What gets saved.** A page is kept when you spend a while on it (about two minutes at first, then adapting to how you browse), when it stays open in the background for a minute, or when you come back to it. Search results, inboxes, sign-in providers, local addresses and one-time links (including reset, invite and sign-in links with the secret in the address) are never kept. Home feeds such as the YouTube home page are kept only if you turn that on in Settings.
+- **Watching runs in a small background helper.** The same app starts a windowless helper at login (it is listed in System Settings → General → Login Items). You can quit Later whenever you like and the helper keeps watching; reopen Later and its window takes over from the helper in a few milliseconds, with no page lost (a page partway through its minute starts counting again). If you would rather Later stop when you quit it, turn off **Keep watching when Later is closed** in Settings.
+- **Light on resources.** The background helper uses under 10 MB of memory (7.3 MB after a day and a half) and next to no CPU while idle. The window adds to that only while Later is open.
 
 ## Requirements
 
@@ -54,12 +55,12 @@ The details, including exactly what Later reads and what it stores, are in [PRIV
 
 ## Install
 
-1. Download `Later-1.2.0.zip` from the [Releases](../../releases) page and unzip it.
+1. Download `Later-1.3.0.zip` from the [Releases](../../releases) page and unzip it.
 2. Drag **Later** to your Applications folder and open it.
 3. macOS will say it cannot verify the app, because Later is not signed with a paid Apple Developer ID. Open **System Settings → Privacy & Security**, scroll to the message about Later, and choose **Open Anyway**. You only need to do this once.
 4. Later's setup window has an **Allow…** button for each browser you have installed. Open Helium and Chrome first (it says "Open Helium first" until you do), click **Allow…**, and choose **Allow** in the macOS prompt. If you skip one, **Settings → Browsers** in Later has the same button, and Chrome is only ever asked that way. You can change this later in System Settings → Privacy & Security → Automation.
 
-Each release includes a `.sha256` file so you can check your download: `shasum -a 256 -c Later-1.2.0.zip.sha256`.
+Each release includes a `.sha256` file so you can check your download: `shasum -a 256 -c Later-1.3.0.zip.sha256`.
 
 ## Build from source
 

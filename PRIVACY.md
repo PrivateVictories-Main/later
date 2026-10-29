@@ -1,6 +1,6 @@
 # Privacy
 
-Later works only on your Mac. This page says exactly what it reads, what it stores, and what it never does. It describes version 1.2.0, and everything here can be checked in the source.
+Later works only on your Mac. This page says exactly what it reads, what it stores, and what it never does. It describes version 1.3.0, and everything here can be checked in the source.
 
 ## No network
 
@@ -21,12 +21,14 @@ Later has read-only access to exactly two folders for this: Helium's and Chrome'
 
 Everything is in Later's own sandbox container, where other apps cannot read it:
 
-- **Your list** (`library.json`, with `library.json.bak` and one-time safety copies of older lists): for each saved page its cleaned link, title, kind, browser, when it was saved and last seen, visit counts, and whether you marked it Done. Also your corrections (for example, moving a type of page to another kind).
+- **Your list** (`library.json`, and `library.json.bak`, the previous list, kept until the next save replaces it; the safety copies of older lists that an upgrade from 1.1 or 1.2 left are removed 30 days after they were made, once the list has loaded cleanly; a damaged list that was set aside, `library.corrupt-….json`, stays until you delete it): for each saved page its cleaned link, title, kind, browser, when it was saved and last seen, visit counts, and whether you marked it Done. Also your corrections (for example, moving a type of page to another kind).
 - **Fingerprints, not links.** To avoid saving a page you deleted or rejected, Later keeps SHA-256 hashes of links, never the links themselves, along with a short list of on-screen times (numbers only).
+- **A lock file** (`engine.lock`, empty) that lets the window and the background helper take turns with the list.
+- **A status note** (`agent-status.json`), only while the background helper can't do its job (the list is damaged, the storage folder can't be opened or a save failed): a state word and a count, never a link or a title. It is shown in Later's window and removed.
 - **Site icons**, as small PNG files in its cache folder.
-- **Your settings**, such as sort order, launch at login and pause.
+- **Your settings**, such as sort order, keep watching when Later is closed, and pause.
 
-Links are cleaned before they are saved: tracking parameters are removed, and a link that carries something secret-looking (a token, code, session, key or password) is never saved at all. Links with a username or password in them, local addresses and ports are never saved either.
+Links are cleaned before they are saved: tracking parameters are removed, and a link that carries something secret-looking (a token, code, session, key or password, in its query or as a long random section of its path after a word like reset, invite, magic or confirm) is never saved at all, and a page saved by an earlier version whose link has one is removed from the list when the window app loads it (Later says how many; the backup copy follows within a save or two). Links with a username or password in them, local addresses and ports are never saved either.
 
 **Logs.** Later writes a few lines to the macOS unified log: counts and timings, such as how many tabs were read and how long that took. They never contain links, titles or page contents.
 
@@ -36,12 +38,13 @@ Links are cleaned before they are saved: tracking parameters are removed, and a 
 - Read page contents, cookies, passwords, bookmarks or your browsing history beyond the saved-pages lookups above.
 - Read tabs in private windows.
 - Send, sync or upload anything.
-- Run on a timer: it only wakes when a browser changes or you switch to one.
+- Run on a timer. It wakes briefly when you switch apps, when an app opens or quits, or when the Mac sleeps or locks, and reads a browser only when its tabs change or you switch to it. While nothing happens, the background helper sleeps.
 
 ## Your control
 
 - **Delete** a page, or **Empty Done**, in the app. Undo is available.
-- **Pause** watching in Settings (Later also starts at login by default; you can turn that off there), or revoke access in **System Settings → Privacy & Security → Automation**.
+- **Pause** watching in Settings, or revoke access in **System Settings → Privacy & Security → Automation**.
+- **Keep watching when Later is closed** (on by default, in Settings). Watching runs in a small background helper: a second copy of the same app, with no window, which macOS starts at login and lists in **System Settings → General → Login Items**. It has the same sandbox and permissions as the app, and only one of the two does the watching at a time. Quit Later whenever you like and the helper carries on. Turn the setting off and the helper is removed, and watching stops when you quit Later.
 - Delete Later's data by removing the app and its container (`~/Library/Containers/com.ryan.later`).
 
 Questions or concerns: see [SECURITY.md](SECURITY.md).

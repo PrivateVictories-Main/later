@@ -10,8 +10,11 @@ import SwiftUI
 /// the list loses its icon, in memory and on disk.
 @MainActor @Observable
 final class SiteIcons {
-    struct Icon {
-        let image: NSImage
+    final class Icon {
+        /// Made when first drawn, never before: creating an NSImage registers the process with LaunchServices as a running
+        /// "Later", and the background agent (which has no window) must not be one, or opening Later would be sent to it.
+        private(set) lazy var image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width / 2, height: cgImage.height / 2))
+        private let cgImage: CGImage
         /// Its longer side in pixels, without the clear margin around it: how large it can be drawn before it blurs.
         let pixels: CGFloat
         /// The icon's own color, for its tile; nil when the icon is mostly gray or many-colored.
@@ -19,6 +22,13 @@ final class SiteIcons {
         /// A gray or black mark on a clear ground (Wikipedia's W, Apple's apple): drawn in the label color instead, so
         /// it reads in light and dark alike.
         let isMark: Bool
+
+        fileprivate init(_ decoded: Decoded) {
+            cgImage = decoded.image
+            pixels = CGFloat(max(decoded.image.width, decoded.image.height))
+            tint = decoded.tint.map { NSColor(srgbRed: $0.red, green: $0.green, blue: $0.blue, alpha: 1) }
+            isMark = decoded.isMark
+        }
     }
 
     private(set) var icons: [String: Icon] = [:]
@@ -261,13 +271,4 @@ final class SiteIcons {
         icons = samples.compactMapValues { Self.decode($0).map(Icon.init) }
     }
     #endif
-}
-
-private extension SiteIcons.Icon {
-    init(_ decoded: SiteIcons.Decoded) {
-        image = NSImage(cgImage: decoded.image, size: NSSize(width: decoded.image.width / 2, height: decoded.image.height / 2))
-        pixels = CGFloat(max(decoded.image.width, decoded.image.height))
-        tint = decoded.tint.map { NSColor(srgbRed: $0.red, green: $0.green, blue: $0.blue, alpha: 1) }
-        isMark = decoded.isMark
-    }
 }

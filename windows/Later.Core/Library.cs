@@ -155,6 +155,27 @@ public sealed class Library
         return (data.Items.Count, changed, toTools);
     }
 
+    /// Removes saved pages whose link carries a secret in its path (a reset or invite link saved before the rule existed).
+    /// Runs once when the list loads. Returns how many went away: counts only, for the log.
+    public int DropSecretLinks()
+    {
+        int before = data.Items.Count;
+        data.Items = data.Items.Where(item => !HasSecretPath(item.Url)).ToList();
+        int removed = before - data.Items.Count;
+        if (removed > 0) NotifyChanged(reindexing: true);
+        return removed;
+    }
+
+    static bool HasSecretPath(string link)
+    {
+        if (ParsedUrl.Parse(link) is not { } url) return false;
+        var path = Text.SplitOmitEmpty(url.DecodedPath, '/');
+        // A hash route (#/accept/<token>) is a path too.
+        if (url.DecodedFragment is { } route && (route.StartsWith('/') || route.StartsWith('!')))
+            path = path.Concat(Text.SplitOmitEmpty(route.Split('?', 2)[0][(route.StartsWith('!') ? 1 : 0)..], '/')).ToList();
+        return Structure.HasSecretPath(path);
+    }
+
     /// Folds saved pages that are really one page (the same link written two ways) into one item: the earliest save, all
     /// the visits, the latest sighting and title, done if a copy was marked done after the others were last seen. The
     /// user's kind for a page type is kept. Runs once when the list loads. Returns how many items went away.

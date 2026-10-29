@@ -13,6 +13,13 @@ internal static class Structure
         "oauth", "oauth2", "authorize", "callback", "logout", "signout", "log-out", "sign-out", "redirect", "unsubscribe",
         "error", "success", "thank-you", "thankyou", "verify", "verify-email", "consent",
     ];
+    /// Words of a one-time flow whose link carries its secret in the path: /reset-password/<token>, /invite/<code>.
+    /// Matched as whole pieces of a section split at "-" and "_". The flow page without a token (/reset) is kept.
+    static readonly HashSet<string> SecretFlowWords =
+    [
+        "reset", "invite", "invites", "invitation", "magic", "accept", "token", "confirm", "confirmation", "activate",
+        "activation", "claim", "redeem", "join",
+    ];
     /// A path that starts with one of these is a mail, chat or notification inbox, or a page of search results.
     static readonly HashSet<string> InboxWords = ["messages", "notifications", "inbox", "search"];
     internal static readonly HashSet<string> CartWords = ["cart", "basket", "bag", "checkout"];
@@ -73,9 +80,38 @@ internal static class Structure
         if (InboxHosts.Any(h => SiteRules.HostMatches(site, h))) return true;
         if (path.Count == 0 && SearchEngineHosts.Any(h => SiteRules.HostMatches(site, h))) return true;
         if (path.Count > 0 && InboxWords.Contains(path[0].ToLowerInvariant())) return true;
-        if (path.Any(p => OneTimeWords.Contains(p.ToLowerInvariant()))) return true;
+        if (path.Any(p => OneTimeWords.Contains(p.ToLowerInvariant())) || HasSecretPath(path)) return true;
         if (IsFile(path.Count > 0 ? path[^1] : null)) return true;
         return IsUselessTitle(title);
+    }
+
+    /// Nouns that may end a flow section after its flow word: reset-password, confirm-email, magic-link, redeem-code.
+    static readonly HashSet<string> SecretFlowTails = ["password", "link", "email", "account", "code"];
+
+    /// A flow section (reset-password, accept-invite; not magic-string or token-service) followed straight away by a long,
+    /// random-looking section: a one-time link, never saved or kept. A section that is only the flow word (/invite/acme/<code>)
+    /// may have one section between it and the token.
+    internal static bool HasSecretPath(IReadOnlyList<string> path)
+    {
+        for (int i = 0; i < path.Count; i++)
+        {
+            var pieces = Text.SplitWhere(path[i].ToLowerInvariant(), r => r.Value == '-' || r.Value == '_');
+            if (pieces.Count == 0 || !pieces.Any(SecretFlowWords.Contains)) continue;
+            if (!SecretFlowWords.Contains(pieces[^1]) && !SecretFlowTails.Contains(pieces[^1])) continue;
+            int reach = pieces.Count == 1 ? 2 : 1;
+            for (int j = i + 1; j < path.Count && j <= i + reach; j++) if (IsSecretToken(path[j])) return true;
+        }
+        return false;
+    }
+
+    /// shortcut: ASCII letters, digits, "-" and "_" only, and no all-digit codes; add dots (JWTs) or digit-only tokens if a site needs it.
+    internal static bool IsSecretToken(string s)
+    {
+        if (Text.Count(s) == 36 && Text.SplitOmitEmpty(s, '-').Select(Text.Count).SequenceEqual([8, 4, 4, 4, 12])) return true;
+        if (s.Length < 12 || !s.All(c => c < 128 && (Text.IsAsciiLetterOrDigit(c) || c == '-' || c == '_'))) return false;
+        if (!s.Any(char.IsAsciiLetter) || !s.Any(char.IsAsciiDigit)) return false;
+        // A lowercase section with separators is a slug ("team-handbook-2024"), not a token.
+        return s.Any(char.IsAsciiLetterUpper) || !s.Any(c => c == '-' || c == '_');
     }
 
     /// "report.pdf" or "data.json", but not "git-cheat-sheet-education.pdf" or "index.html".

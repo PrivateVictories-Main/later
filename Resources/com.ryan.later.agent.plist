@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.ryan.later.agent</string>
+    <key>BundleProgram</key><string>Contents/MacOS/Later</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>Later</string>
+        <string>--agent</string>
+    </array>
+    <!-- Shown in Login Items as part of Later. -->
+    <key>AssociatedBundleIdentifiers</key>
+    <array><string>com.ryan.later</string></array>
+    <key>RunAtLoad</key><true/>
+    <!-- Restarted after a crash or kill, not after a clean exit (turning it off in Settings). -->
+    <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+    <key>LimitLoadToSessionType</key><string>Aqua</string>
+    <key>EnvironmentVariables</key><dict><key>MallocSpaceEfficient</key><string>1</string></dict>
+</dict>
+</plist>

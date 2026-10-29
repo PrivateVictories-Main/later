@@ -102,6 +102,12 @@ enum Structure {
         "oauth", "oauth2", "authorize", "callback", "logout", "signout", "log-out", "sign-out", "redirect", "unsubscribe",
         "error", "success", "thank-you", "thankyou", "verify", "verify-email", "consent",
     ]
+    /// Words of a one-time flow whose link carries its secret in the path: /reset-password/<token>, /invite/<code>.
+    /// Matched as whole pieces of a section split at "-" and "_". The flow page without a token (/reset) is kept.
+    static let secretFlowWords: Set<String> = [
+        "reset", "invite", "invites", "invitation", "magic", "accept", "token", "confirm", "confirmation", "activate",
+        "activation", "claim", "redeem", "join",
+    ]
     /// A path that starts with one of these is a mail, chat or notification inbox, or a page of search results.
     static let inboxWords: Set<String> = ["messages", "notifications", "inbox", "search"]
     static let cartWords: Set<String> = ["cart", "basket", "bag", "checkout"]
@@ -153,9 +159,33 @@ enum Structure {
         if inboxHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
         if path.isEmpty, searchEngineHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
         if let first = path.first?.lowercased(), inboxWords.contains(first) { return true }
-        if path.contains(where: { oneTimeWords.contains($0.lowercased()) }) { return true }
+        if path.contains(where: { oneTimeWords.contains($0.lowercased()) }) || hasSecretPath(path) { return true }
         if isFile(path.last) { return true }
         return isUselessTitle(title)
+    }
+
+    /// Nouns that may end a flow section after its flow word: reset-password, confirm-email, magic-link, redeem-code.
+    static let secretFlowTails: Set<String> = ["password", "link", "email", "account", "code"]
+
+    /// A flow section (reset-password, accept-invite; not magic-string or token-service) followed straight away by a long,
+    /// random-looking section: a one-time link, never saved or kept. A section that is only the flow word (/invite/acme/<code>)
+    /// may have one section between it and the token.
+    static func hasSecretPath(_ path: [String]) -> Bool {
+        path.indices.contains { i in
+            let pieces = path[i].lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).map(String.init)
+            guard let last = pieces.last, pieces.contains(where: secretFlowWords.contains),
+                  secretFlowWords.contains(last) || secretFlowTails.contains(last) else { return false }
+            return path[(i + 1)...].prefix(pieces.count == 1 ? 2 : 1).contains(where: isSecretToken)
+        }
+    }
+
+    /// shortcut: ASCII letters, digits, "-" and "_" only, and no all-digit codes; add dots (JWTs) or digit-only tokens if a site needs it.
+    static func isSecretToken(_ s: String) -> Bool {
+        if s.count == 36, s.split(separator: "-").map(\.count) == [8, 4, 4, 4, 12] { return true }
+        guard s.count >= 12, s.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }),
+              s.contains(where: \.isLetter), s.contains(where: \.isNumber) else { return false }
+        // A lowercase section with separators is a slug ("team-handbook-2024"), not a token.
+        return s.contains(where: \.isUppercase) || !s.contains(where: { $0 == "-" || $0 == "_" })
     }
 
     /// "report.pdf" or "data.json", but not "git-cheat-sheet-education.pdf" or "index.html".

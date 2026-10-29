@@ -1,8 +1,33 @@
 import AppKit
 import LaterCore
+import ServiceManagement
+
+let arguments = CommandLine.arguments
+
+// The agent must not become an application as far as LaunchServices is concerned: otherwise opening Later while it runs
+// would be sent to the agent, which has the same bundle ID, instead of starting the window app (`open` fails with -600).
+// That means no NSApplication, and no NSImage either: creating one checks the process in (measured). SiteIcons.Icon makes
+// its image only when a window draws it. `scripts/measure.sh checkin` shows whether the running agent has been checked in.
+if arguments.contains("--agent") {
+    let agent = AgentDelegate()
+    agent.start()
+    // Not dispatchMain(): it never services the run loop NSWorkspace delivers app-switch, launch, quit and sleep events on
+    // (measured: none arrive). Distributed notifications and the main queue work either way. This is still no NSApplication.
+    RunLoop.main.run()
+    exit(1)   // run() returns at once if the run loop has no sources; never go on to become an application: launchd starts it again
+}
+
+// `Later --agent-off` and `--agent-on` change the background agent's registration from a shell, then exit.
+if arguments.contains("--agent-off") {
+    try? SMAppService.agent(plistName: LoginItem.plistName).unregister()
+    exit(0)
+}
+if arguments.contains("--agent-on") {
+    try? SMAppService.agent(plistName: LoginItem.plistName).register()
+    exit(0)
+}
 
 let app = NSApplication.shared
-let arguments = CommandLine.arguments
 
 #if DEBUG
 // Development only: dark mode for visual checks without touching the system appearance.
@@ -23,13 +48,10 @@ if arguments.contains("--reset") {
 }
 #endif
 
-if arguments.contains("--verify") {
-    app.setActivationPolicy(.accessory)
-    let verifier = Verifier()
-    verifier.start()
-    app.run()
-} else {
-    let delegate = AppDelegate()
-    app.delegate = delegate
-    app.run()
-}
+#if DEBUG
+// Development only: skips onboarding (which needs a click) so a dry run can register the development agent.
+if arguments.contains("--dev-agent") { UserDefaults.standard.set(true, forKey: "onboarded") }
+#endif
+let delegate = AppDelegate()
+app.delegate = delegate
+app.run()

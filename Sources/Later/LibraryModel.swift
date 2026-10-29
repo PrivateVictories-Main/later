@@ -202,6 +202,14 @@ enum Motion {
     static var listChange: Animation? { reduced ? .easeOut(duration: 0.12) : .smooth(duration: 0.3) }
     /// Folding, notices and other layout changes.
     static var standard: Animation? { reduced ? nil : .smooth(duration: 0.26) }
+    /// A row lighting up under the pointer.
+    static var hoverFade: Animation? { reduced ? nil : .easeOut(duration: 0.14) }
+    /// A button confirming itself ("Copied").
+    static var quick: Animation? { reduced ? nil : .snappy }
+    /// The notice bar arriving.
+    static var notice: AnyTransition { reduced ? .opacity : .move(edge: .top).combined(with: .opacity) }
+    /// An icon swapping for another.
+    static var symbolSwap: ContentTransition { reduced ? .identity : .symbolEffect(.replace) }
     /// A row's Open and Done coming up under the pointer: they grow into place, or only fade in.
     static var hover: AnyTransition { reduced ? .opacity : .opacity.combined(with: .scale(scale: 0.85, anchor: .trailing)) }
 }
@@ -219,6 +227,8 @@ struct OpenRequest {
 struct ItemActions {
     let model: LibraryModel
     private var engine: Engine { model.engine }
+    /// False while the list is read-only (see Engine.canEdit): every change is off.
+    var canEdit: Bool { engine.canEdit }
 
     /// Opening more pages than this at once asks first, wherever it's asked for: Return, double-click, the menus or the
     /// inspector.
@@ -255,9 +265,9 @@ struct ItemActions {
     /// Every change here is undoable, with Undo and Redo registered by the library (see LibraryUndo). Several pages
     /// changed at once are one Undo, since they're registered in the same turn of the run loop.
     private func change(_ items: [Item], _ body: () -> Void) {
-        guard !items.isEmpty else { return }
+        guard !items.isEmpty, engine.canEdit else { return }   // read-only: the buttons are disabled, and keys do nothing
         // Out of the search field first, so Edit ▸ Undo undoes this change, not the typing. The search text stays.
-        for window in NSApp.windows where window.firstResponder is NSText { window.makeFirstResponder(nil) }
+        for window in NSApp?.windows ?? [] where window.firstResponder is NSText { window.makeFirstResponder(nil) }
         model.perform(on: Set(items.map(\.id)), body)
     }
 }

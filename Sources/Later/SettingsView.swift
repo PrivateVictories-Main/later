@@ -3,40 +3,6 @@ import LaterCore
 import ServiceManagement
 import SwiftUI
 
-/// Launch at login. Only the copy installed in /Applications registers, so development builds never
-/// add a login item or trigger background-item alerts.
-/// One shared state, so Settings shows what the automatic attempts did too.
-@MainActor @Observable
-final class LoginItem {
-    static let shared = LoginItem()
-    /// Set once launch at login has been decided, by the first-run default or by the user's own toggle, so it's never forced again.
-    static let defaultAppliedKey = "loginDefaultApplied"
-    static var isInstalled: Bool { Bundle.main.bundlePath.hasPrefix("/Applications/") }
-    private(set) var status = SMAppService.mainApp.status
-    /// Why macOS refused the last change; nil once a change goes through.
-    private(set) var failure: String?
-
-    func setEnabled(_ on: Bool) {
-        guard Self.isInstalled, !Sample.enabled else { return }   // a sample run changes nothing, this included
-        UserDefaults.standard.set(true, forKey: Self.defaultAppliedKey)
-        do {
-            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            failure = nil
-        } catch {
-            Perf.log.error("login item change failed")   // the reason shows in Settings; logs carry no payload
-            failure = error.localizedDescription
-        }
-        refresh()
-    }
-
-    /// On by default, unless it was already decided.
-    func applyDefault() {
-        if !UserDefaults.standard.bool(forKey: Self.defaultAppliedKey) { setEnabled(true) }
-    }
-
-    func refresh() { status = SMAppService.mainApp.status }
-}
-
 /// Once the user has said no to macOS's prompt it never shows again; only System Settings can change it.
 @MainActor
 func openAutomationSettings() {
@@ -70,8 +36,8 @@ struct SettingsView: View {
                 // Shows what macOS actually did, so a failed registration flips back.
                 Toggle(isOn: Binding(get: { login.status == .enabled || login.status == .requiresApproval },
                                      set: { login.setEnabled($0) })) {
-                    SettingLabel(symbol: "power", color: .green, title: "Open at login",
-                                 detail: "Later starts in the background when you log in, with no window.")
+                    SettingLabel(symbol: "power", color: .green, title: "Keep watching when Later is closed",
+                                 detail: "A small background helper keeps saving your tabs after you quit Later, and starts when you log in.")
                 }
                 .disabled(!LoginItem.isInstalled)
                 if LoginItem.isInstalled, login.status == .requiresApproval {
@@ -100,11 +66,13 @@ struct SettingsView: View {
             } footer: {
                 Group {
                     if !LoginItem.isInstalled {
-                        Text("Open at login is available once Later is in your Applications folder.")
+                        Text("Keep watching is available once Later is in your Applications folder.")
                     } else if let failure = login.failure {
-                        Text("macOS didn't accept the login item: \(failure) Try again, or use Login Items in System Settings.")
+                        Text("macOS didn't accept the background helper: \(failure) Try again, or use Login Items in System Settings.")
                     } else if login.status == .notFound {
-                        Text("macOS can't find Later's login item right now.")
+                        Text("macOS can't find Later's background helper right now.")
+                    } else if login.notRestored {
+                        Text("The background helper wasn't running, and Later couldn't start it again. It tries again each time Later opens.")
                     }
                 }
                 .footnote()

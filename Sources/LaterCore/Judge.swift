@@ -54,6 +54,8 @@ public final class Judge {
     /// again on every read. Nil: a link that's never tracked.
     private var judged: [Browser: [TabKey: OpenPage?]] = [:]
     public private(set) var frontBrowser: Browser?
+    /// The Mac is asleep or locked: nobody is looking, so no page is on screen and no page is off screen.
+    private var away = false
     /// Whether home feeds (the YouTube home, X's Home) are kept too. Changing it judges every open tab again.
     public var savesFeedHomes: Bool {
         didSet { if savesFeedHomes != oldValue { judged = [:] } }
@@ -173,6 +175,16 @@ public final class Judge {
         evaluate(now: now, threshold: threshold)
     }
 
+    /// The Mac went to sleep or locked (or came back). Time up to now keeps its credit; the time away counts as neither
+    /// reading nor leaving a page open, so a page in front when the lid closes isn't saved for the night it sat there.
+    public func setAway(_ value: Bool, now: Date) {
+        guard value != away else { return }
+        evaluate(now: now, threshold: library.dwellThreshold)
+        away = value
+        updateScreen(now: now)
+        if value { for key in records.keys { records[key]?.offScreenSince = nil } }   // starts again at the wake
+    }
+
     /// The browser's last copy quit. Time before now keeps its credit; then its pages are forgotten without
     /// ending them, so a relaunch that restores the session is a first read: no visits, nothing "came back".
     public func browserQuit(_ browser: Browser, now: Date) {
@@ -231,7 +243,7 @@ public final class Judge {
 
     /// The active tab of the front window of the front browser.
     private var onScreenKey: Key? {
-        guard let browser = frontBrowser, let pages = open[browser] else { return nil }
+        guard !away, let browser = frontBrowser, let pages = open[browser] else { return nil }
         return pages.first { $0.value.tab.isActive && $0.value.tab.windowIndex == 0 }?.key
     }
 
@@ -248,7 +260,7 @@ public final class Judge {
                 record.activeSeconds += now.timeIntervalSince(since)
                 record.onScreenSince = nil
                 record.offScreenSince = now
-            } else if record.offScreenSince == nil {
+            } else if record.offScreenSince == nil, !away {   // no clock starts while away; the wake starts it
                 record.offScreenSince = now
             }
             records[key] = record

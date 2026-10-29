@@ -133,6 +133,31 @@ public final class Library {
         return (data.items.count, changed, toTools)
     }
 
+    /// Swaps in the list as it is on disk now, for a process that showed an older read of it.
+    public func replace(with data: LibraryData) {
+        self.data = data
+        changed(reindexing: true)
+    }
+
+    /// Removes saved pages whose link carries a secret in its path (a reset or invite link saved before the rule existed).
+    /// Runs once when the list loads. Returns how many went away: counts only, for the log.
+    @discardableResult
+    public func dropSecretLinks() -> Int {
+        let before = data.items.count
+        data.items.removeAll { item in
+            guard let url = URL(string: item.url) else { return false }
+            var path = url.path(percentEncoded: false).split(separator: "/").map(String.init)
+            // A hash route (#/accept/<token>) is a path too.
+            if let route = url.fragment(percentEncoded: false), route.hasPrefix("/") || route.hasPrefix("!") {
+                path += route.dropFirst(route.hasPrefix("!") ? 1 : 0).prefix { $0 != "?" }.split(separator: "/").map(String.init)
+            }
+            return Structure.hasSecretPath(path)
+        }
+        let removed = before - data.items.count
+        if removed > 0 { changed(reindexing: true) }
+        return removed
+    }
+
     /// Folds saved pages that are really one page (the same link written two ways) into one item: the earliest save, all
     /// the visits, the latest sighting and title, done if a copy was marked done after the others were last seen. the user's kind for a page type is kept.
     /// Runs once when the list loads. Returns how many items went away.
