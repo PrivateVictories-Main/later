@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Windows.Win32.Foundation;
 using Windows.Win32.System.Com;
 using Windows.Win32.UI.Accessibility;
 using Later.Windows.Native;
@@ -127,7 +128,7 @@ internal sealed unsafe class UiaTest : IDisposable
 
     IUIAutomationElement* Root(nint hwnd)
     {
-        return session.Automation->ElementFromHandle(new Windows.Win32.Foundation.HWND(hwnd));
+        return session.Automation->ElementFromHandle(new HWND(hwnd));
     }
 
     /// Live elements of the given control types in tree order; the caller releases each.
