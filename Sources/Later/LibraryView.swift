@@ -183,6 +183,7 @@ struct ListHeader: View {
                 .buttonStyle(.glass)
                 .tint(nil)
                 .help("Delete everything in Done (Edit ▸ Undo brings it back)")
+                .disabled(!model.engine.canEdit)
             }
         }
         .padding(.leading, 6)

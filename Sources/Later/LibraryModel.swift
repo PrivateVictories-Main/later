@@ -227,6 +227,8 @@ struct OpenRequest {
 struct ItemActions {
     let model: LibraryModel
     private var engine: Engine { model.engine }
+    /// False while the list is read-only (see Engine.canEdit): every change is off.
+    var canEdit: Bool { engine.canEdit }
 
     /// Opening more pages than this at once asks first, wherever it's asked for: Return, double-click, the menus or the
     /// inspector.

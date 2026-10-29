@@ -80,6 +80,7 @@ struct ItemRow: View, @MainActor Equatable {
                                 .help("Open in your browser")
                             Button(action: toggleDone) { Image(systemName: done ? "arrow.uturn.backward" : "checkmark") }
                                 .help(done ? "Move back to Later" : "Mark Done")
+                                .disabled(!model.engine.canEdit)
                         }
                         .buttonStyle(.glass)
                         .buttonBorderShape(.circle)
@@ -198,12 +199,14 @@ struct RowActions: View {
         let allDone = picked.allSatisfy { $0.status == .done }
         Button("Open") { actions.open(picked) }
         Button("Copy Link") { actions.copyLinks(picked) }
-        Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
-        ForEach(Kind.allCases.filter { kind in !picked.allSatisfy { $0.kind == kind } }) { kind in
-            Button("Move to \(kind.title)") { actions.move(picked, to: kind) }
+        if model.engine.canEdit {
+            Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
+            ForEach(Kind.allCases.filter { kind in !picked.allSatisfy { $0.kind == kind } }) { kind in
+                Button("Move to \(kind.title)") { actions.move(picked, to: kind) }
+            }
+            Button("Not an Idea") { actions.notAnIdea(picked) }
+            Button("Delete") { actions.delete(picked) }
         }
-        Button("Not an Idea") { actions.notAnIdea(picked) }
-        Button("Delete") { actions.delete(picked) }
     }
 }
 
@@ -223,16 +226,19 @@ struct RowMenu: View {
         }
         Button(many ? "Copy \(picked.count) Links" : "Copy Link") { actions.copyLinks(picked) }
         Divider()
-        Menu("Move To") {
-            ForEach(Kind.allCases) { kind in
-                Button { actions.move(picked, to: kind) } label: { Label(kind.title, systemImage: kind.symbol) }
-                    .disabled(picked.allSatisfy { $0.kind == kind })
+        Group {
+            Menu("Move To") {
+                ForEach(Kind.allCases) { kind in
+                    Button { actions.move(picked, to: kind) } label: { Label(kind.title, systemImage: kind.symbol) }
+                        .disabled(picked.allSatisfy { $0.kind == kind })
+                }
             }
+            Button("Not an Idea") { actions.notAnIdea(picked) }
+            Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
+            Divider()
+            Button("Delete", role: .destructive) { actions.delete(picked) }
         }
-        Button("Not an Idea") { actions.notAnIdea(picked) }
-        Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
-        Divider()
-        Button("Delete", role: .destructive) { actions.delete(picked) }
+        .disabled(!model.engine.canEdit)
     }
 }
 
