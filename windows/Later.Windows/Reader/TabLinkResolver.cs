@@ -21,8 +21,16 @@ public sealed class TabLinkResolver
     public static string? FromSession(string title, IReadOnlyList<SessionTab> session, HashSet<string> ambiguous)
     {
         if (ambiguous.Contains(title)) return null;
-        var urls = session.Where(s => string.Equals(TabNames.Clean(s.Title), title, StringComparison.Ordinal)).Select(s => s.Url).Distinct(StringComparer.Ordinal).Take(2).ToList();
+        var urls = session.Where(s => string.Equals(TabNames.Clean(s.Title), title, StringComparison.Ordinal) || IsAddressName(title, s.Url))
+            .Select(s => s.Url).Distinct(StringComparer.Ordinal).Take(2).ToList();
         return urls.Count == 1 ? urls[0] : null;
+    }
+
+    /// A restored tab the browser has not loaded yet is named by its address without the scheme ("example.com/p/2").
+    static bool IsAddressName(string name, string url)
+    {
+        static string Bare(string text) => (text.StartsWith("https://", StringComparison.Ordinal) ? text[8..] : text.StartsWith("http://", StringComparison.Ordinal) ? text[7..] : text).TrimEnd('/');
+        return name.Length > 0 && string.Equals(Bare(name), Bare(url), StringComparison.Ordinal);
     }
 
     /// From History (most recent URL for the exact title), on a title no other open tab shares.

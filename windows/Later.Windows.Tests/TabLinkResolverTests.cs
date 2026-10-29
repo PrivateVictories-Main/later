@@ -51,6 +51,17 @@ public class TabLinkResolverTests
     }
 
     [Fact]
+    public void AnUnloadedRestoredTabNamedByItsAddressMatchesTheSessionUrl()
+    {
+        var none = new HashSet<string>();
+        var session = new[] { Saved("http://a.example/p/2", ""), Saved("https://b.example/", "") };
+        Assert.Equal("http://a.example/p/2", TabLinkResolver.FromSession("a.example/p/2", session, none));
+        Assert.Equal("https://b.example/", TabLinkResolver.FromSession("b.example", session, none));
+        Assert.Null(TabLinkResolver.FromSession("a.example/p/3", session, none));
+        Assert.Null(TabLinkResolver.FromSession("", session, none));
+    }
+
+    [Fact]
     public void PruneDropsClosedTabsAndForgetDropsAll()
     {
         var r = new TabLinkResolver();
