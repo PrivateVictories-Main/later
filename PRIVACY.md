@@ -1,6 +1,6 @@
 # Privacy
 
-Later works only on your Mac. This page says exactly what it reads, what it stores, and what it never does. It describes version 1.2.0, and everything here can be checked in the source.
+Later works only on your Mac. This page says exactly what it reads, what it stores, and what it never does. It describes version 1.3.0, and everything here can be checked in the source.
 
 ## No network
 
@@ -21,12 +21,13 @@ Later has read-only access to exactly two folders for this: Helium's and Chrome'
 
 Everything is in Later's own sandbox container, where other apps cannot read it:
 
-- **Your list** (`library.json`, with `library.json.bak` and one-time safety copies of older lists): for each saved page its cleaned link, title, kind, browser, when it was saved and last seen, visit counts, and whether you marked it Done. Also your corrections (for example, moving a type of page to another kind).
+- **Your list** (`library.json`, and `library.json.bak`, the list one save back; the copies of older lists that an upgrade from 1.1 or 1.2 left are removed 30 days after they were made, once the list has loaded cleanly; a damaged list that was set aside, `library.corrupt-….json`, stays until you delete it): for each saved page its cleaned link, title, kind, browser, when it was saved and last seen, visit counts, and whether you marked it Done. Also your corrections (for example, moving a type of page to another kind).
 - **Fingerprints, not links.** To avoid saving a page you deleted or rejected, Later keeps SHA-256 hashes of links, never the links themselves, along with a short list of on-screen times (numbers only).
+- **A status note**, only while the background helper can't do its job (the list is damaged, the storage folder can't be opened or a save failed): a state word and a count, never a link or a title. It is shown in Later's window and removed.
 - **Site icons**, as small PNG files in its cache folder.
 - **Your settings**, such as sort order, keep watching when Later is closed, and pause.
 
-Links are cleaned before they are saved: tracking parameters are removed, and a link that carries something secret-looking (a token, code, session, key or password) is never saved at all. Links with a username or password in them, local addresses and ports are never saved either.
+Links are cleaned before they are saved: tracking parameters are removed, and a link that carries something secret-looking (a token, code, session, key or password, in its query or as a long random section of its path after a word like reset, invite, magic or confirm) is never saved at all, and a page saved by an earlier version whose link has one is removed when the list loads. Links with a username or password in them, local addresses and ports are never saved either.
 
 **Logs.** Later writes a few lines to the macOS unified log: counts and timings, such as how many tabs were read and how long that took. They never contain links, titles or page contents.
 
@@ -36,7 +37,7 @@ Links are cleaned before they are saved: tracking parameters are removed, and a 
 - Read page contents, cookies, passwords, bookmarks or your browsing history beyond the saved-pages lookups above.
 - Read tabs in private windows.
 - Send, sync or upload anything.
-- Run on a timer: it only wakes when a browser changes or you switch to one. While Later is closed, the background helper sleeps until then.
+- Run on a timer. It wakes briefly when you switch apps, when an app opens or quits, or when the Mac sleeps or locks, and reads a browser only when its tabs change or you switch to it. While nothing happens, the background helper sleeps.
 
 ## Your control
 

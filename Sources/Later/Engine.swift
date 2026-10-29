@@ -437,7 +437,7 @@ final class Engine {
         } catch {
             unreadable(browser)
             setStatus(browser, .readFailed)
-            Perf.log.error("ring \(browser.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            Perf.log.error("ring \(browser.rawValue, privacy: .public) failed: \((error as NSError).domain, privacy: .public) \((error as NSError).code, privacy: .public)")
         }
     }
 
@@ -491,7 +491,7 @@ final class Engine {
         writer.async { [weak self] in
             let ok: Bool
             do { try store.save(data); ok = true } catch {
-                Perf.log.error("save failed: \(String(describing: error), privacy: .public)")
+                Perf.log.error("save failed: \((error as NSError).domain, privacy: .public) \((error as NSError).code, privacy: .public)")
                 ok = false
             }
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.saveFinished(ok: ok) } }
