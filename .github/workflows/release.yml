@@ -50,6 +50,20 @@ jobs:
       - name: Check entitlements
         run: scripts/check-entitlements.sh build/Later.app
 
+      # An update signed differently resets the Automation permission the watcher depends on, so a release
+      # (and any dry run that has the certificate) fails unless the stable certificate signed it.
+      - name: Check the signature and the background helper
+        env:
+          HAS_CERT: ${{ secrets.MAC_SIGN_P12_BASE64 != '' }}
+        run: |
+          app=build/Later.app
+          if [[ "$HAS_CERT" == "true" || "$GITHUB_EVENT_NAME" == "push" ]]; then
+            codesign -dvv "$app" 2>&1 | grep -q '^Authority=Later Release Signing$' \
+              || { echo "error: the app is not signed by the Later Release Signing certificate" >&2; exit 1; }
+          fi
+          [[ -f "$app/Contents/Library/LaunchAgents/com.ryan.later.agent.plist" ]] \
+            || { echo "error: the background helper's plist is missing from the app" >&2; exit 1; }
+
       - name: Check the version matches the tag
         if: github.event_name == 'push'
         run: |
