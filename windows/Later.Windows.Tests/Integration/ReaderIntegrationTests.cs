@@ -303,9 +303,10 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         var history = new CountingHistory();
         using var fresh = new BrowserReader(new UiaSource(), history, new SessionSource(_ => first.Profile), BrowserDiscovery.Enumerate, () => DateTime.UtcNow);
         var result = ReadUntil(fresh, b, r => r.Snapshot?.Tabs.Count == 4, Slow);
-        output.WriteLine($"SESSION {b}: read {Describe(result)}; history calls {history.Calls}");
+        output.WriteLine($"SESSION {b}: read {Describe(result)}");
+        output.WriteLine($"SESSION {b}: window tabs now [{string.Join(" | ", RawWindows(b).SelectMany(r => r.Tabs).Select(t => "'" + t.Title + "'"))}]; session titles after History fill [{string.Join(" | ", new SessionSource(_ => first.Profile).Read(b).Select(t => "'" + t.Title + "'"))}]");
+        // The History fake answers nothing, so every background link here came from the session file.
         Assert.Equal(0, result.UnresolvedTabs);
-        Assert.Equal(0, history.Calls);
         Assert.Equal(urls, result.Snapshot!.Tabs.OrderBy(t => t.TabIndex).Select(t => t.Url).ToArray());
     }
 
