@@ -49,7 +49,7 @@ internal sealed unsafe class UiaTest : IDisposable
             foreach (var p in found)
             {
                 var e = (IUIAutomationElement*)p;
-                if (UiaSession.Current(e, UiaIds.ControlType) is UiaIds.Document) continue;
+                if (UiaSession.Current(e, UiaIds.ControlType) is UiaIds.Document || UiaSession.Current(e, UiaIds.ClassName) as string != "Tab") continue;
                 result.Add(new TabInfo(result.Count, UiaSession.Current(e, UiaIds.Name) as string ?? "", UiaSession.Current(e, UiaIds.IsSelected) is true,
                     UiaSession.Current(e, UiaIds.ClassName) as string ?? "", UiaSession.Current(e, UiaIds.AutomationId) as string ?? ""));
             }

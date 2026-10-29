@@ -57,6 +57,15 @@ internal sealed unsafe class UiaSession : IDisposable
         return Automation->CreatePropertyCondition((UIA_PROPERTY_ID)UiaIds.ControlType, v);
     }
 
+    /// A condition `property == value` for a string property; the caller releases it.
+    public IUIAutomationCondition* StringIs(int propertyId, string value)
+    {
+        VARIANT v = default;
+        Marshal.GetNativeVariantForObject(value, (nint)(&v));
+        try { return Automation->CreatePropertyCondition((UIA_PROPERTY_ID)propertyId, v); }
+        finally { _ = Com.VariantClear((nint)(&v)); }
+    }
+
     public IUIAutomationCondition* Or(IUIAutomationCondition* a, IUIAutomationCondition* b) => Automation->CreateOrCondition(a, b);
 
     public IUIAutomationCondition* True() => Automation->CreateTrueCondition();
