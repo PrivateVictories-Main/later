@@ -45,7 +45,7 @@ extension Library {
 
     /// "Keep in my list" and "This is a regular" change the page type's correction and every saved page of that type, so
     /// Undo puts back both.
-    public func keepInList(_ id: UUID, undo: UndoManager) { choose(id, "Keep in My List", undo: undo) { $0.keepInList(id) } }
+    public func keepInList(_ id: UUID, undo: UndoManager) { choose(id, "Keep Pages Like This", undo: undo) { $0.keepInList(id) } }
     public func markRegular(_ id: UUID, undo: UndoManager) { choose(id, "Mark as Regular", undo: undo) { $0.markRegular(id) } }
 
     private func choose(_ id: UUID, _ name: String, undo: UndoManager, change: @escaping @MainActor (Library) -> Void) {

@@ -99,7 +99,7 @@ struct ItemDetail: View {
                     }
                     if let regular = item.regular {
                         Button { regular ? actions.keepInList([item]) : actions.markRegular([item]) } label: {
-                            Label(regular ? "Keep in My List" : "This Is a Regular",
+                            Label(regular ? "Keep Pages Like This" : "This Is a Regular",
                                   systemImage: regular ? "tray.and.arrow.down" : "repeat").frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.glass)

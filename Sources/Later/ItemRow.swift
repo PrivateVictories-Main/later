@@ -80,7 +80,7 @@ struct ItemRow: View, @MainActor Equatable {
                                 .help("Open in your browser")
                             if item.isActiveRegular {
                                 Button { ItemActions(model: model).keepInList([item]) } label: { Image(systemName: "tray.and.arrow.down") }
-                                    .help("Keep in my list")
+                                    .help("Keep pages like this in my list")
                                     .disabled(!model.engine.canEdit)
                             } else {
                                 Button(action: toggleDone) { Image(systemName: done ? "arrow.uturn.backward" : "checkmark") }
@@ -207,7 +207,7 @@ struct RowActions: View {
         Button("Copy Link") { actions.copyLinks(picked) }
         if model.engine.canEdit {
             if picked.allSatisfy(\.isActiveRegular) {
-                Button("Keep in My List") { actions.keepInList(picked) }
+                Button("Keep Pages Like This") { actions.keepInList(picked) }
             } else {
                 Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
             }
@@ -246,7 +246,7 @@ struct RowMenu: View {
             }
             Button("Not an Idea") { actions.notAnIdea(picked) }
             if picked.allSatisfy(\.isActiveRegular) {
-                Button("Keep in My List") { actions.keepInList(picked) }
+                Button("Keep Pages Like This") { actions.keepInList(picked) }
             } else {
                 Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
             }
