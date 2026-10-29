@@ -27,7 +27,7 @@ public class LibraryTests
         lib.Save(Link, "Desk", Product, Browser.Helium, T0);
         lib.Save("https://a.com/account/settings/billing", "Billing", Product, Browser.Helium, T0);
         Assert.Equal(3, lib.DropSecretLinks());
-        Assert.Equal(new[] { "Desk", "Billing" }, lib.Data.Items.Select(i => i.Title));
+        Assert.Equal("Desk,Billing", string.Join(',', lib.Data.Items.Select(i => i.Title)));
         Assert.False(lib.Contains("https://a.com/reset-password/Xk9fA2bQ7zLm"));
         Assert.Equal(0, lib.DropSecretLinks());
     }
