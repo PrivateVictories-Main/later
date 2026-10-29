@@ -10,9 +10,8 @@ public struct LibraryStore: Sendable {
     var backupTempURL: URL { backupURL.appendingPathExtension("tmp") }
     /// This process read or wrote the primary file itself, so a save needn't decode it first. Shared by copies.
     private let primaryKnownGood = OSAllocatedUnfairLock(initialState: false)
-    /// The one-time safety copy has been looked at by this process. Shared by copies.
-    private let safetyCopyDone = OSAllocatedUnfairLock(initialState: false)
-    /// The list as v1.0 and v1.1 left it, kept next to it for good.
+    /// The list as v1.0 and v1.1 left it. Nothing makes them any more (1.3 reads and writes the same format); the ones an
+    /// upgrade finds are removed 30 days after they were made, once the current list has loaded cleanly.
     var safetyCopyURLs: [URL] {
         ["library-before-1.1.json", "library-before-1.2.json"].map { fileURL.deletingLastPathComponent().appendingPathComponent($0) }
     }
@@ -35,7 +34,7 @@ public struct LibraryStore: Sendable {
         public var data: LibraryData
         /// A plain sentence for the window when something had to be recovered.
         public var notice: String?
-        /// False when an unreadable list couldn't be set aside; the app must not save until it can.
+        /// False when an unreadable list couldn't be set aside; the app must not save for the rest of its session.
         public var writable: Bool
 
         public init(data: LibraryData, notice: String?, writable: Bool = true) {
@@ -45,9 +44,22 @@ public struct LibraryStore: Sendable {
         }
     }
 
+    /// Whether `load()` would have to recover something (a damaged list, or a missing one with a backup). The agent leaves
+    /// that to the window app, which tells the user what happened.
+    public var needsRecovery: Bool {
+        decode(fileURL) == nil && [fileURL, backupURL].contains { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// The list as it is on disk, touching no file: for a process that doesn't hold the engine lock, so it neither recovers
+    /// nor saves. Falls back to the backup copy, then to an empty list.
+    public func peek(notice: String) -> Loaded {
+        Loaded(data: decode(fileURL) ?? decode(backupURL) ?? LibraryData(), notice: notice, writable: false)
+    }
+
     public func load() -> Loaded {
         if let data = decode(fileURL) {
             primaryKnownGood.withLock { $0 = true }
+            removeOldSafetyCopies()
             return Loaded(data: data, notice: nil)
         }
         primaryKnownGood.withLock { $0 = false }
@@ -63,7 +75,7 @@ public struct LibraryStore: Sendable {
             let name = "library.corrupt-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).json"
             guard (try? fm.moveItem(at: fileURL, to: fileURL.deletingLastPathComponent().appendingPathComponent(name))) != nil else {
                 return Loaded(data: decode(backupURL) ?? LibraryData(),
-                              notice: "Later couldn't set aside a damaged copy of your list, so it won't save changes until it can. Nothing has been deleted.",
+                              notice: "Later couldn't set aside a damaged copy of your list, so it won't save changes this time. Nothing has been deleted. Quit Later and open it again to try once more.",
                               writable: false)
             }
             keptAs = name
@@ -77,19 +89,23 @@ public struct LibraryStore: Sendable {
         return Loaded(data: LibraryData(), notice: nil)
     }
 
+    /// So a page deleted since then doesn't live on in a file the app never rewrites.
+    private func removeOldSafetyCopies(now: Date = .now) {
+        let cutoff = now.addingTimeInterval(-30 * 86400)
+        for url in safetyCopyURLs {
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { continue }
+            // The later of the two dates, since a copy may carry the date of the list it was made from.
+            let made = max(attributes[.creationDate] as? Date ?? .distantPast, attributes[.modificationDate] as? Date ?? .distantPast)
+            if made < cutoff { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
     public func save(_ data: LibraryData) throws {
         let bytes = try JSONEncoder().encode(data)
         let fm = FileManager.default
         // Never rotate an unreadable list over the good backup.
         if !primaryKnownGood.withLock({ $0 }), fm.fileExists(atPath: fileURL.path), decode(fileURL) == nil {
             throw CocoaError(.fileReadCorruptFile)
-        }
-        // Before this version's first save, keep the list as it was; an older build can't read what this one writes.
-        if !safetyCopyDone.withLock({ $0 }) {
-            for copy in safetyCopyURLs where !fm.fileExists(atPath: copy.path) && fm.fileExists(atPath: fileURL.path) {
-                try fm.copyItem(at: fileURL, to: copy)
-            }
-            safetyCopyDone.withLock { $0 = true }
         }
         guard fm.createFile(atPath: tempURL.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
             throw CocoaError(.fileWriteUnknown)

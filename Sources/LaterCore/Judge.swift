@@ -17,6 +17,8 @@ public final class Judge {
         var tab: Tab
         var url: URL
         var pageKey: String
+        /// Its host without "www.", for noting which days the site is visited.
+        var site: String
         /// Its verdict by the rules alone, before the user's corrections, which are applied on every read.
         var verdict: Verdict
     }
@@ -54,6 +56,8 @@ public final class Judge {
     /// again on every read. Nil: a link that's never tracked.
     private var judged: [Browser: [TabKey: OpenPage?]] = [:]
     public private(set) var frontBrowser: Browser?
+    /// The Mac is asleep or locked: nobody is looking, so no page is on screen and no page is off screen.
+    private var away = false
     /// Whether home feeds (the YouTube home, X's Home) are kept too. Changing it judges every open tab again.
     public var savesFeedHomes: Bool {
         didSet { if savesFeedHomes != oldValue { judged = [:] } }
@@ -82,13 +86,14 @@ public final class Judge {
         let windowIDs = Set(snapshot.tabs.map(\.windowID)).sorted()
         let rank = Dictionary(uniqueKeysWithValues: windowIDs.enumerated().map { ($1, $0) })
         var places: [String: (tab: Int, window: Int)] = [:]
+        var sites: Set<String> = []
         let before = judged[browser] ?? [:]
         var after: [TabKey: OpenPage?] = [:]
         for tab in snapshot.tabs {
             let tabKey = TabKey(url: tab.url, title: tab.title)
             // A cached nil stays nil: that link is never tracked.
             let known = before[tabKey] ?? after[tabKey] ?? LinkCleaner.clean(tab.url).map {
-                OpenPage(tab: tab, url: $0, pageKey: LinkCleaner.pageKey($0),
+                OpenPage(tab: tab, url: $0, pageKey: LinkCleaner.pageKey($0), site: Library.host(of: $0.absoluteString),
                          verdict: PageRules.judge($0, title: tab.title, savesFeedHomes: savesFeedHomes))
             }
             after[tabKey] = known
@@ -96,6 +101,9 @@ public final class Judge {
             page.tab = tab   // the same page, but maybe now on screen or in another window
             let key = Key(browser: browser, page: page.pageKey)
             copies[page.pageKey, default: 0] += 1
+            // Only what is in front counts as a visit, and only where the browser's own history can't say: a tab left open
+            // in the background is not a day spent on its site.
+            if !browser.hasReadableHistory, !away, frontBrowser == browser, tab.isActive, tab.windowIndex == 0 { sites.insert(page.site) }
             let place = (tab: tab.tabIndex, window: rank[tab.windowID] ?? 0)
             if places[page.pageKey].map({ (place.window, place.tab) < ($0.window, $0.tab) }) ?? true {
                 places[page.pageKey] = place
@@ -105,6 +113,7 @@ public final class Judge {
             current[key] = page
         }
         judged[browser] = after
+        library.noteSitesOpen(sites, day: Familiarity.dayNumber(of: now))
         copyCounts[browser] = copies
         updateCopies()
         let previous = open[browser]
@@ -173,6 +182,16 @@ public final class Judge {
         evaluate(now: now, threshold: threshold)
     }
 
+    /// The Mac went to sleep or locked (or came back). Time up to now keeps its credit; the time away counts as neither
+    /// reading nor leaving a page open, so a page in front when the lid closes isn't saved for the night it sat there.
+    public func setAway(_ value: Bool, now: Date) {
+        guard value != away else { return }
+        evaluate(now: now, threshold: library.dwellThreshold)
+        away = value
+        updateScreen(now: now)
+        if value { for key in records.keys { records[key]?.offScreenSince = nil } }   // starts again at the wake
+    }
+
     /// The browser's last copy quit. Time before now keeps its credit; then its pages are forgotten without
     /// ending them, so a relaunch that restores the session is a first read: no visits, nothing "came back".
     public func browserQuit(_ browser: Browser, now: Date) {
@@ -231,7 +250,7 @@ public final class Judge {
 
     /// The active tab of the front window of the front browser.
     private var onScreenKey: Key? {
-        guard let browser = frontBrowser, let pages = open[browser] else { return nil }
+        guard !away, let browser = frontBrowser, let pages = open[browser] else { return nil }
         return pages.first { $0.value.tab.isActive && $0.value.tab.windowIndex == 0 }?.key
     }
 
@@ -248,7 +267,7 @@ public final class Judge {
                 record.activeSeconds += now.timeIntervalSince(since)
                 record.onScreenSince = nil
                 record.offScreenSince = now
-            } else if record.offScreenSince == nil {
+            } else if record.offScreenSince == nil, !away {   // no clock starts while away; the wake starts it
                 record.offScreenSince = now
             }
             records[key] = record

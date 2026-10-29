@@ -62,7 +62,11 @@ struct ItemDetail: View {
                         }
                         Spacer(minLength: 4)
                         KindMenu(kind: item.kind) { actions.move([item], to: $0) }
+                            .disabled(!actions.canEdit)
                     }
+                    Label(why, systemImage: item.regular == true ? "repeat" : "sparkle.magnifyingglass")
+                        .font(.callout)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 VStack(spacing: 8) {
                     Button { actions.open([item]) } label: {
@@ -76,19 +80,33 @@ struct ItemDetail: View {
                         HStack(spacing: 8) {
                             Button {
                                 actions.copyLinks([item])
-                                withAnimation(.snappy) { copied = true }
+                                withAnimation(Motion.quick) { copied = true }
                             } label: {
                                 Label(copied ? "Copied" : "Copy Link", systemImage: copied ? "checkmark" : "link")
-                                    .contentTransition(.symbolEffect(.replace))
+                                    .contentTransition(Motion.symbolSwap)
                                     .frame(maxWidth: .infinity)
                             }
-                            Button { actions.setDone([item], !done) } label: {
-                                Label(done ? "Move Back" : "Mark Done", systemImage: done ? "arrow.uturn.backward" : "checkmark.circle")
-                                    .frame(maxWidth: .infinity)
+                            if !item.isActiveRegular {
+                                Button { actions.setDone([item], !done) } label: {
+                                    Label(done ? "Move Back" : "Mark Done", systemImage: done ? "arrow.uturn.backward" : "checkmark.circle")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .disabled(!actions.canEdit)
                             }
                         }
                         .buttonStyle(.glass)
                         .controlSize(.large)
+                    }
+                    if let regular = item.regular {
+                        Button { regular ? actions.keepInList([item]) : actions.markRegular([item]) } label: {
+                            Label(regular ? "Keep Pages Like This" : "This Is a Regular",
+                                  systemImage: regular ? "tray.and.arrow.down" : "repeat").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.large)
+                        .help(regular ? "Move this page, and pages like it, back to your list (Edit ▸ Undo undoes it)"
+                                      : "Move this page, and pages like it, out of your list (Edit ▸ Undo brings them back)")
+                        .disabled(!actions.canEdit)
                     }
                 }
                 DetailsCard {
@@ -120,6 +138,7 @@ struct ItemDetail: View {
                     .help("Delete this page (Edit ▸ Undo brings it back)")
                 }
                 .buttonStyle(.glass)
+                .disabled(!actions.canEdit)
             }
             .padding(.horizontal, 20)
             .padding(.top, 14)
@@ -127,6 +146,13 @@ struct ItemDetail: View {
         }
         .background(alignment: .top) { AmbientWash(color: hue) }
         .onChange(of: item.id) { copied = false }   // the pane stays and updates in place as the selection moves
+    }
+
+    /// One line on why the page is where it is: from the site's days and the user's own choice for its page type.
+    private var why: String {
+        let library = engine.library
+        return Familiarity.why(regular: item.regular, days: library.visitDays(site: item.host, today: Familiarity.dayNumber(of: now)),
+                               correction: library.data.corrections[item.pageType])
     }
 
     private func fact(_ label: String, _ value: String) -> some View {
@@ -283,6 +309,7 @@ struct SelectionSummary: View {
                                 Label(allDone ? "Move Back" : "Mark Done", systemImage: allDone ? "arrow.uturn.backward" : "checkmark.circle")
                                     .frame(maxWidth: .infinity)
                             }
+                            .disabled(!actions.canEdit)
                         }
                         .buttonStyle(.glass)
                         .controlSize(.large)
@@ -298,6 +325,7 @@ struct SelectionSummary: View {
                     .help("Delete these pages (Edit ▸ Undo brings them back)")
                 }
                 .buttonStyle(.glass)
+                .disabled(!actions.canEdit)
             }
             .padding(.horizontal, 20)
             .padding(.top, 14)

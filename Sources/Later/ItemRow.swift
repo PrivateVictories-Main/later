@@ -78,8 +78,15 @@ struct ItemRow: View, @MainActor Equatable {
                         HStack(spacing: 6) {
                             Button(action: open) { Image(systemName: "arrow.up.forward") }
                                 .help("Open in your browser")
-                            Button(action: toggleDone) { Image(systemName: done ? "arrow.uturn.backward" : "checkmark") }
-                                .help(done ? "Move back to Later" : "Mark Done")
+                            if item.isActiveRegular {
+                                Button { ItemActions(model: model).keepInList([item]) } label: { Image(systemName: "tray.and.arrow.down") }
+                                    .help("Keep pages like this in my list")
+                                    .disabled(!model.engine.canEdit)
+                            } else {
+                                Button(action: toggleDone) { Image(systemName: done ? "arrow.uturn.backward" : "checkmark") }
+                                    .help(done ? "Move back to Later" : "Mark Done")
+                                    .disabled(!model.engine.canEdit)
+                            }
                         }
                         .buttonStyle(.glass)
                         .buttonBorderShape(.circle)
@@ -95,7 +102,7 @@ struct ItemRow: View, @MainActor Equatable {
         .padding(.vertical, 9)
         .background { background.animation(Motion.selection, value: selected) }
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .onHover { inside in withAnimation(.easeOut(duration: 0.14)) { hovering = inside } }
+        .onHover { inside in withAnimation(Motion.hoverFade) { hovering = inside } }
         .onTapGesture(perform: tap)
         .contextMenu { RowMenu(item: item, model: model) }
         // One element, instead of SwiftUI combining the row's texts (which costs every new row a query of each one):
@@ -198,12 +205,19 @@ struct RowActions: View {
         let allDone = picked.allSatisfy { $0.status == .done }
         Button("Open") { actions.open(picked) }
         Button("Copy Link") { actions.copyLinks(picked) }
-        Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
-        ForEach(Kind.allCases.filter { kind in !picked.allSatisfy { $0.kind == kind } }) { kind in
-            Button("Move to \(kind.title)") { actions.move(picked, to: kind) }
+        if model.engine.canEdit {
+            if picked.allSatisfy(\.isActiveRegular) {
+                Button("Keep Pages Like This") { actions.keepInList(picked) }
+            } else {
+                Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
+            }
+            if picked.allSatisfy({ $0.regular == false }) { Button("This Is a Regular") { actions.markRegular(picked) } }
+            ForEach(Kind.allCases.filter { kind in !picked.allSatisfy { $0.kind == kind } }) { kind in
+                Button("Move to \(kind.title)") { actions.move(picked, to: kind) }
+            }
+            Button("Not an Idea") { actions.notAnIdea(picked) }
+            Button("Delete") { actions.delete(picked) }
         }
-        Button("Not an Idea") { actions.notAnIdea(picked) }
-        Button("Delete") { actions.delete(picked) }
     }
 }
 
@@ -223,16 +237,24 @@ struct RowMenu: View {
         }
         Button(many ? "Copy \(picked.count) Links" : "Copy Link") { actions.copyLinks(picked) }
         Divider()
-        Menu("Move To") {
-            ForEach(Kind.allCases) { kind in
-                Button { actions.move(picked, to: kind) } label: { Label(kind.title, systemImage: kind.symbol) }
-                    .disabled(picked.allSatisfy { $0.kind == kind })
+        Group {
+            Menu("Move To") {
+                ForEach(Kind.allCases) { kind in
+                    Button { actions.move(picked, to: kind) } label: { Label(kind.title, systemImage: kind.symbol) }
+                        .disabled(picked.allSatisfy { $0.kind == kind })
+                }
             }
+            Button("Not an Idea") { actions.notAnIdea(picked) }
+            if picked.allSatisfy(\.isActiveRegular) {
+                Button("Keep Pages Like This") { actions.keepInList(picked) }
+            } else {
+                Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
+            }
+            if picked.allSatisfy({ $0.regular == false }) { Button("This Is a Regular") { actions.markRegular(picked) } }
+            Divider()
+            Button("Delete", role: .destructive) { actions.delete(picked) }
         }
-        Button("Not an Idea") { actions.notAnIdea(picked) }
-        Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
-        Divider()
-        Button("Delete", role: .destructive) { actions.delete(picked) }
+        .disabled(!model.engine.canEdit)
     }
 }
 

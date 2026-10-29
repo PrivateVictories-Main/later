@@ -26,6 +26,7 @@ final class Harness {
 
     func wait(_ seconds: TimeInterval) { now += seconds }
     func show(_ tabs: Tab...) { judge.ingest(Snapshot(browser: .helium, tabs: tabs), now: now) }
+    func show(in browser: Browser, _ tabs: Tab...) { judge.ingest(Snapshot(browser: browser, tabs: tabs), now: now) }
     var saved: [String] { library.data.items.map(\.url) }
 }
 
@@ -48,6 +49,55 @@ final class Harness {
         #expect(h.saved == [productA])
         h.wait(5); h.show(tab(shopHome, "Shop", active: true))   // the same tab goes back to the homepage
         #expect(h.saved == [productA])
+    }
+
+    @Test func aNightAsleepIsNotReadingTime() {
+        let h = Harness()
+        h.show(tab(productA, active: true))
+        h.wait(5); h.judge.setAway(true, now: h.now)   // the lid closes with the page in front
+        h.wait(8 * 3600); h.judge.setAway(false, now: h.now)
+        h.show(tab(productA, active: true))
+        #expect(h.saved.isEmpty)
+        h.show(tab(productA))   // closed after a look of five seconds
+        h.show()
+        #expect(h.saved.isEmpty)
+        #expect(h.library.data.dwellSamples == [5])
+    }
+
+    @Test func aNightAsleepIsNotTimeLeftOpenEither() {
+        let h = Harness()
+        h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        h.wait(10); h.judge.setAway(true, now: h.now)
+        h.wait(8 * 3600); h.judge.setAway(false, now: h.now)
+        h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        #expect(h.saved.isEmpty)
+        h.wait(61); h.show(tab(shopHome, "Shop", active: true), tab(productA))   // a minute awake and off screen
+        #expect(h.saved == [productA])
+    }
+
+    @Test func readsWhileAwayStartNoClocks() {
+        let h = Harness()
+        h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        h.wait(10); h.judge.setAway(true, now: h.now)   // locked, but the browser keeps writing its session files
+        h.wait(30); h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        h.wait(61); h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        #expect(h.saved.isEmpty)
+        h.wait(3600); h.judge.setAway(false, now: h.now)
+        h.show(tab(shopHome, "Shop", active: true), tab(productA))
+        #expect(h.saved.isEmpty)
+        h.wait(61); h.show(tab(shopHome, "Shop", active: true), tab(productA))   // a minute awake and off screen
+        #expect(h.saved == [productA])
+    }
+
+    @Test func timeAwakeAroundASleepStillCounts() {
+        let h = Harness()
+        h.show(tab(productA, active: true))
+        h.wait(100); h.judge.setAway(true, now: h.now)
+        h.wait(3600); h.judge.setAway(false, now: h.now)
+        h.show(tab(productA, active: true))
+        #expect(h.saved.isEmpty)
+        h.wait(30); h.show(tab(productA, active: true))
+        #expect(h.saved == [productA])   // the 100 s before the sleep and 30 s after it make the 120
     }
 
     @Test func backgroundTabLeftOpenIsSaved() {

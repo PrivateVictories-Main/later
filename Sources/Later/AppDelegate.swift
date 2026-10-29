@@ -1,13 +1,17 @@
 import AppKit
 import LaterCore
 import SwiftUI
-#if DEBUG
 import notify
-#endif
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
-    let engine = Engine()
+    /// Created only once the engine lock is held (see takeEngineLock), because creating it loads the list.
+    lazy var engine = Engine(readOnly: handoff?.isReadOnly ?? false)
+    /// Holds the engine lock for as long as this process lives; the kernel frees it when Later quits or dies, and the agent
+    /// resumes. If the agent never handed the list over, the engine only shows it, until the lock is free (see retryLock).
+    private var handoff: WindowHandoff?
+    /// No agent held the lock although watching in the background is wanted: it is registered again (see LoginItem).
+    private var helperMissing = false
     /// nil until macOS sends the launch 'oapp' event; then whether that event marks a login launch.
     private var loginLaunch: Bool?
     /// Kept in memory for sample runs, so they never write the real setting.
@@ -38,10 +42,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(openApplication(_:reply:)),
                                                      forEventClass: AEEventClass(kCoreEventClass),
                                                      andEventID: AEEventID(kAEOpenApplication))
+        takeEngineLock()
     }
 
-    // shortcut: 'lgit' is the documented login-item marker, but whether SMAppService.mainApp login launches carry it is
-    // unverified until the /Applications copy logs in once; if the window opens at login, switch to SMAppService.agent.
+    /// Only one process watches and writes the list. If the background agent has it, ask it to hand over and wait for it
+    /// (it answers in a few milliseconds; nothing polls on its side). With no agent running, the lock is simply free.
+    private func takeEngineLock() {
+        guard !Sample.enabled else { return }
+        guard let lock = Handoff.lock() else {
+            Perf.log.error("no lock file; carrying on")   // the agent exits in the same case, so no other process is watching
+            return
+        }
+        let handoff = WindowHandoff(lock: lock)
+        self.handoff = handoff
+        let start = ContinuousClock.now
+        let outcome = handoff.take()
+        if outcome != .immediate { Perf.log.info("handoff waited \(Perf.ms(since: start), format: .fixed(precision: 1), privacy: .public)ms") }
+        if outcome == .readOnly { Perf.log.error("handoff timed out; showing the list read-only") }
+        helperMissing = LoginItem.helperWasMissing(outcome, wanted: UserDefaults.standard.bool(forKey: LoginItem.wantedKey),
+                                                   installed: LoginItem.isInstalled)
+        if helperMissing { Perf.log.error("the background helper wasn't running") }
+        // What the agent couldn't do while the window was closed, shown with the other startup notices. Only by the process
+        // that now owns the list: it is cleared here, and the agent writes it again if the trouble goes on.
+        if outcome != .readOnly, let problem = Handoff.statusFile()?.take() {
+            engine.showBackgroundProblem(problem.notice)
+            Perf.log.info("agent reported \(problem.state.rawValue, privacy: .public) items=\(problem.count, privacy: .public)")
+        }
+        Perf.log.info("app took the list items=\(self.engine.library.data.items.count, privacy: .public)")
+    }
+
+    /// The window was shown or activated again while the list is read-only: ask the agent once more, and take over if it lets go.
+    private func retryLock() {
+        guard handoff?.isReadOnly == true, handoff?.retry() == true else { return }
+        Perf.log.info("took the list on retry")
+        engine.becomeWritable()
+        if onboarded { engine.start() }
+    }
+
+    // 'lgit' marks a launch by 1.2's login item, which the first launch of 1.3 removes; the agent has no window to open.
     @objc private func openApplication(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
         loginLaunch = event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
     }
@@ -55,10 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if Sample.settings { openSettings() }
         #endif
         if onboarded {
-            // The copy in /Applications turns launch at login on once, even if onboarding ran from a development build.
-            LoginItem.shared.applyDefault()
+            // The copy in /Applications registers the background agent, even if onboarding ran from a development build.
+            LoginItem.shared.applyDefault(helperMissing: helperMissing)
             engine.start()
-            if loginLaunch == false, !Sample.noWindow {
+            if loginLaunch == false, !Sample.noWindow, !arguments.contains("--hidden") {
                 libraryWindow.show()
             } else {
                 // At login (or with no launch event at all) Later stays out of sight, but gets ready to open fast.
@@ -70,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        retryLock()
         if onboarded { libraryWindow.show() } else { onboardingWindow.show() }
         return false
     }
@@ -77,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// A window shown while Later wasn't allowed to come forward (`open -g`) isn't key when Later later activates,
     /// so ⌘W and typing would reach nothing. Make the front window key.
     func applicationDidBecomeActive(_ notification: Notification) {
+        retryLock()
         if NSApp.keyWindow == nil { NSApp.orderedWindows.first { $0.isVisible && $0.canBecomeKey }?.makeKey() }
     }
 
@@ -218,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Also `.down` (the down arrow), `.type` (the next letter of "walnut" in the search, then clear) and `.section` (the
     /// next section), `.group` (the next grouping), each timed to its frame (see Perf.frame), and `.scroll` (two seconds
     /// of scrolling down the list).
-    private var devTokens: [Int32] = [0, 0, 0, 0, 0, 0, 0]
+    private var devTokens: [Int32] = [0, 0, 0, 0, 0, 0, 0, 0]
     private var devTyped = 0
     private func listenForDevCommands() {
         let commands: [(String, @MainActor (AppDelegate) -> Void)] = [
@@ -252,6 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 model.grouping = all[((all.firstIndex(of: model.grouping) ?? 0) + 1) % all.count]
             }),
             ("scroll", { $0.libraryWindow.scrollTest() }),
+            ("add", { $0.engine.addDevPage() }),
         ]
         for (index, (name, command)) in commands.enumerated() {
             notify_register_dispatch("com.ryan.later.dev." + name, &devTokens[index], .main) { [weak self] _ in
@@ -264,7 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func finishOnboarding() {
         onboarded = true
         if !Sample.enabled { UserDefaults.standard.set(true, forKey: "onboarded") }
-        LoginItem.shared.applyDefault()   // outside /Applications, the installed copy applies it on first launch
+        LoginItem.shared.applyDefault(helperMissing: helperMissing)   // outside /Applications, the installed copy applies it on first launch
         engine.start()
         libraryWindow.show()   // before closing, so the window count never hits zero and the Dock icon doesn't flicker
         onboardingWindow.close()

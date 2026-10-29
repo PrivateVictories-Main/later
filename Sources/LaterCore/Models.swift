@@ -25,6 +25,10 @@ public enum Browser: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Whether Later can read the browser's own history. Where it can't, the only record of the days a site was visited
+    /// is what Later saw on the front tab itself.
+    public var hasReadableHistory: Bool { self == .helium }
+
     /// The browser's data folder, relative to the user's real home folder.
     public var dataFolder: String {
         switch self {
@@ -169,11 +173,17 @@ public struct Verdict: Equatable, Sendable {
     public var kind: Kind
     /// Host plus path shape, e.g. "x.com/*/status/*". Corrections are stored per page type.
     public var pageType: String
+    /// A site's home, a dashboard, a feed or a plain section page: somewhere you go, not a thing. See `Familiarity`.
+    public var isPlace: Bool
+    /// A sign-in step, inbox, error or one-time link: no correction brings it back. See `Structure.isHardSkip`.
+    public var isHardSkip: Bool
 
-    public init(isSpecific: Bool, kind: Kind, pageType: String) {
+    public init(isSpecific: Bool, kind: Kind, pageType: String, isPlace: Bool = false, isHardSkip: Bool = false) {
+        self.isHardSkip = isHardSkip
         self.isSpecific = isSpecific
         self.kind = kind
         self.pageType = pageType
+        self.isPlace = isPlace
     }
 }
 
@@ -181,10 +191,13 @@ public struct Verdict: Equatable, Sendable {
 public struct Correction: Codable, Equatable, Sendable {
     public var isSpecific: Bool?
     public var kind: Kind?
+    /// "This is a regular" (true) or its undoing (false) for a place page type; nil: left to `Familiarity`. Absent in older files.
+    public var regular: Bool?
 
-    public init(isSpecific: Bool? = nil, kind: Kind? = nil) {
+    public init(isSpecific: Bool? = nil, kind: Kind? = nil, regular: Bool? = nil) {
         self.isSpecific = isSpecific
         self.kind = kind
+        self.regular = regular
     }
 }
 
@@ -215,6 +228,11 @@ public struct Item: Codable, Identifiable, Equatable, Sendable {
     /// The link the browser's history was asked about at launch without finding the page, so it is asked again only if
     /// the link changes. Absent in older files.
     public var historyChecked: String?
+    /// For a place page (a site's home, a dashboard, a feed): true when the site is a regular one, so the page shows only
+    /// under Regulars; false when it is kept in the list. Nil for a page that is a thing. Absent in older files.
+    public var regular: Bool?
+    /// A regular that is still active: the only kind that lives under Regulars. A Done page is always shown in Done.
+    public var isActiveRegular: Bool { regular == true && status == .active }
 
     /// When the page was opened, else when Later first saw it.
     public var opened: Date { openedAt ?? firstSaved }
@@ -232,8 +250,26 @@ public struct LibraryData: Codable, Equatable, Sendable {
     public var dwellSamples: [Double] = []
     /// SHA-256 of cleaned links the user deleted → when; kept until the page's tab closes. Absent in older files.
     public var dismissed: [String: Date] = [:]
+    /// SHA-256 of a site's host (without "www.") → the days (see `Familiarity.dayNumber`) of the last 28 on which a read
+    /// found it open in a tab. Never hostnames. Absent in older files, which ignore it.
+    public var siteDays: [String: [Int]] = [:]
 
     public init() {}
+
+    private enum CodingKeys: String, CodingKey { case version, items, corrections, seen, dwellSamples, dismissed, siteDays }
+
+    /// Like the synthesized one, but `siteDays` is only written once there is something in it: a list that never noted a
+    /// site stays byte-for-byte what an older build wrote.
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(version, forKey: .version)
+        try c.encode(items, forKey: .items)
+        try c.encode(corrections, forKey: .corrections)
+        try c.encode(seen, forKey: .seen)
+        try c.encode(dwellSamples, forKey: .dwellSamples)
+        try c.encode(dismissed, forKey: .dismissed)
+        if !siteDays.isEmpty { try c.encode(siteDays, forKey: .siteDays) }
+    }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -243,5 +279,6 @@ public struct LibraryData: Codable, Equatable, Sendable {
         seen = try c.decode([String: Date].self, forKey: .seen)
         dwellSamples = try c.decode([Double].self, forKey: .dwellSamples)
         dismissed = try c.decodeIfPresent([String: Date].self, forKey: .dismissed) ?? [:]
+        siteDays = try c.decodeIfPresent([String: [Int]].self, forKey: .siteDays) ?? [:]
     }
 }

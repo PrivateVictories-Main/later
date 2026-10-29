@@ -65,6 +65,41 @@ import Testing
         #expect(await !rings.next(within: .seconds(1)))
     }
 
+    @Test func ringsWhenANewProfileGetsItsFirstSession() async throws {
+        let root = fm.temporaryDirectory.appendingPathComponent("LaterDoorbell-\(UUID().uuidString)").path
+        defer { try? fm.removeItem(atPath: root) }
+        try fm.createDirectory(atPath: root + "/Default/Sessions", withIntermediateDirectories: true)
+        let rings = RingWaiter()
+        let bell = Doorbell { rings.ring() }
+        #expect(bell.start(folder: root))
+        defer { bell.stop() }
+
+        try fm.createDirectory(atPath: root + "/Profile 1", withIntermediateDirectories: true)
+        #expect(await rings.next(within: .seconds(2)))
+        while await rings.next(within: .seconds(1)) {}
+        try fm.createDirectory(atPath: root + "/Profile 1/Sessions", withIntermediateDirectories: true)
+        #expect(await rings.next(within: .seconds(2)))
+        while await rings.next(within: .seconds(1)) {}
+        #expect(fm.createFile(atPath: root + "/Profile 1/Sessions/Session_1", contents: Data("a".utf8)))
+        #expect(await rings.next(within: .seconds(2)))
+    }
+
+    @Test func writesOutsideSessionsRingNothing() async throws {
+        let root = fm.temporaryDirectory.appendingPathComponent("LaterDoorbell-\(UUID().uuidString)").path
+        defer { try? fm.removeItem(atPath: root) }
+        try fm.createDirectory(atPath: root + "/Default/Sessions", withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: root + "/Default/Cache", withIntermediateDirectories: true)
+        let rings = RingWaiter()
+        let bell = Doorbell { rings.ring() }
+        #expect(bell.start(folder: root))
+        defer { bell.stop() }
+
+        #expect(fm.createFile(atPath: root + "/Default/Cache/entry", contents: Data("a".utf8)))
+        try append(root + "/Default/Cache/entry")
+        #expect(fm.createFile(atPath: root + "/Default/History-journal", contents: Data("a".utf8)))
+        #expect(await !rings.next(within: .seconds(1.5)))
+    }
+
     @Test func missingFolderCannotStart() {
         let bell = Doorbell {}
         #expect(!bell.start(folder: fm.temporaryDirectory.appendingPathComponent("LaterDoorbell-missing-\(UUID().uuidString)").path))

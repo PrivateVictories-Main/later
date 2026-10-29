@@ -27,7 +27,7 @@ struct ListPane: View {
                     ListHeader(model: model, summary: listing.summary)
                     if model.showsNotice, let notice = model.engine.notice {
                         NoticeBar(text: notice) { withAnimation(Motion.standard) { model.dismissedGeneration = model.engine.noticeGeneration } }
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .transition(Motion.notice)
                     }
                     if listing.items.isEmpty {
                         EmptyLibrary(model: model)
@@ -183,6 +183,7 @@ struct ListHeader: View {
                 .buttonStyle(.glass)
                 .tint(nil)
                 .help("Delete everything in Done (Edit ▸ Undo brings it back)")
+                .disabled(!model.engine.canEdit)
             }
         }
         .padding(.leading, 6)
@@ -297,6 +298,7 @@ struct EmptyLibrary: View {
         case .kind(let kind): kind.emptyTitle
         case .older: "Nothing older"
         case .done: "Nothing done yet"
+        case .regulars: "No regulars yet"
         }
     }
 
@@ -308,6 +310,7 @@ struct EmptyLibrary: View {
         case .kind(let kind): kind.emptyMessage
         case .older: "Pages you haven't been back to in two weeks move here. Later never deletes anything on its own."
         case .done: "Mark a page Done once you've dealt with it. It waits here until you empty Done."
+        case .regulars: "The home pages and dashboards of sites you visit all the time wait here, out of your list. Keep any of them in your list whenever you like."
         }
     }
 }

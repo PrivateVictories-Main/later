@@ -16,6 +16,11 @@ public final class Library {
     @ObservationIgnored private var lastPrune: Date?
     /// Links of Helium pages saved since the history was last asked, so each is asked about once. Not saved.
     @ObservationIgnored private var awaitingHistory: [String] = []
+    /// Sites (host without "www.") → the days of the last 28 the browser's own history shows a visit. Read afresh each day
+    /// and never saved; the hashed days Later saw itself are in `data.siteDays`.
+    private var historyDays: [String: Set<Int>] = [:]
+    /// The sites already noted on one day, so a read asks nothing of the list for a site it has noted before.
+    @ObservationIgnored private var notedToday: (day: Int, sites: Set<String>) = (0, [])
 
     public static let cameBackWindow: TimeInterval = 30 * 86_400
     static let maxDwellSamples = 200
@@ -47,13 +52,141 @@ public final class Library {
         guard index[key] == nil else { return false }
         let host = Self.host(of: url)
         let blank = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let regular = verdict.isPlace
+            ? disposition(of: verdict, site: host, today: Familiarity.dayNumber(of: now)) == .regular : nil
         data.items.append(Item(id: UUID(), url: url, title: blank ? host : title, host: host, kind: verdict.kind,
                                pageType: verdict.pageType, browser: browser, firstSaved: now, lastSeen: now,
-                               visits: 1, status: .active, doneAt: nil))
+                               visits: 1, status: .active, doneAt: nil, regular: regular))
         if browser == .helium { awaitingHistory.append(url) }
         index[key] = data.items.count - 1
         changed()
         return true
+    }
+
+    // MARK: Regulars
+
+    /// Replaces what the browser's history says about which days each site was visited.
+    /// An empty answer (a failed or partial read) never replaces a good one.
+    public func setHistoryDays(_ days: [String: Set<Int>]) {
+        if days.isEmpty && !historyDays.isEmpty { return }
+        historyDays = days
+    }
+
+    /// Whether there is enough to tell a regular site from a new one: at least as many different past days of the window,
+    /// over all sites, as it takes to be a regular. Before that, no page can be told apart, and a flag set now would be
+    /// permanent.
+    public func hasVisitDays(today: Int) -> Bool {
+        var days = Set<Int>()
+        for set in historyDays.values { days.formUnion(set) }
+        for list in data.siteDays.values { days.formUnion(list) }
+        return Familiarity.count(days, today: today) >= Familiarity.regularDays
+    }
+
+    /// Notes that these sites were open on `day`: for a browser whose history Later can't read, the only record of its days.
+    /// Hashed like `seen`, so no hostnames are stored.
+    public func noteSiteDays(_ sites: some Sequence<String>, days: Set<Int>) {
+        var any = false
+        for site in sites {
+            let key = Self.hash(site)
+            let known = Set(data.siteDays[key] ?? [])
+            guard !days.isSubset(of: known) else { continue }
+            data.siteDays[key] = (known.union(days)).sorted()
+            any = true
+        }
+        if any { changed() }
+    }
+
+    public func noteSiteDay(_ site: String, day: Int) { noteSiteDays(CollectionOfOne(site), days: [day]) }
+
+    /// Notes sites seen open on `day`, skipping the ones already noted today without touching the list.
+    public func noteSitesOpen(_ sites: Set<String>, day: Int) {
+        if notedToday.day != day { notedToday = (day, []) }
+        let fresh = sites.subtracting(notedToday.sites)
+        guard !fresh.isEmpty else { return }
+        notedToday.sites.formUnion(fresh)
+        noteSiteDays(fresh, days: [day])
+    }
+
+    /// On how many different days of the last 28 (never today) the site was visited, by the history and by Later's own notes.
+    public func visitDays(site: String, today: Int) -> Int {
+        var days = historyDays[site] ?? []
+        if let noted = data.siteDays[Self.hash(site)] { days.formUnion(noted) }
+        return Familiarity.count(days, today: today)
+    }
+
+    public func disposition(of verdict: Verdict, site: String, today: Int) -> Familiarity.Disposition {
+        guard verdict.isPlace else { return .save }
+        return Familiarity.disposition(of: verdict, days: visitDays(site: site, today: today), correction: data.corrections[verdict.pageType])
+    }
+
+    /// How many sites count as regular today, for the log: counts only.
+    public func regularSiteCount(today: Int) -> Int {
+        let known = Set(historyDays.keys.map(Self.hash))
+        let fromHistory = historyDays.keys.filter { visitDays(site: $0, today: today) >= Familiarity.regularDays }.count
+        let noted = data.siteDays.filter { !known.contains($0.key) && Familiarity.count(Set($0.value), today: today) >= Familiarity.regularDays }.count
+        return fromHistory + noted
+    }
+
+    /// Looks once at every saved page from before Regulars (no flag yet): a place on a regular site becomes a regular.
+    /// Nothing is deleted. Returns counts only: the places looked at, and how many of them moved.
+    @discardableResult
+    public func migrateRegulars(today: Int) -> (migrated: Int, of: Int) {
+        var migrated = 0, of = 0
+        guard hasVisitDays(today: today) else { return (0, 0) }
+        for i in data.items.indices where data.items[i].regular == nil {
+            let item = data.items[i]
+            guard let url = URL(string: item.url), url.host != nil else { continue }
+            guard PageRules.judge(url, title: item.title).isPlace else { continue }
+            of += 1
+            // The page type saved with the item is the one the user's corrections are stored under.
+            let verdict = Verdict(isSpecific: true, kind: item.kind, pageType: item.pageType, isPlace: true)
+            data.items[i].regular = disposition(of: verdict, site: item.host, today: today) == .regular
+            if data.items[i].regular == true { migrated += 1 }
+        }
+        if of > 0 { changed() }
+        return (migrated, of)
+    }
+
+    /// Takes the flag off saved pages that the current rules no longer call places (a deeper page, a file, a page named by a
+    /// query value): they are things, kept in the list with the rest. Runs once when the list loads. Nothing is deleted.
+    /// Returns how many regulars went back to the list: counts only, for the log.
+    @discardableResult
+    public func refreshPlaces() -> Int {
+        var moved = 0, any = false
+        for i in data.items.indices where data.items[i].regular != nil {
+            // "This Is a Regular" covers the whole page type: the user's choice stands.
+            guard data.corrections[data.items[i].pageType]?.regular != true,
+                  let url = URL(string: data.items[i].url), url.host != nil,
+                  !PageRules.judge(url, title: data.items[i].title).isPlace else { continue }
+            if data.items[i].regular == true { moved += 1 }
+            data.items[i].regular = nil
+            any = true
+        }
+        if any { changed() }
+        return moved
+    }
+
+    /// "Keep in my list": the page type is kept from now on, and its regulars move back to their kind.
+    public func keepInList(_ id: UUID) {
+        guard let item = data.items.first(where: { $0.id == id }) else { return }
+        data.corrections[item.pageType, default: Correction()].isSpecific = true
+        data.corrections[item.pageType]?.regular = nil
+        for i in data.items.indices where data.items[i].pageType == item.pageType && data.items[i].regular != nil { data.items[i].regular = false }
+        changed()
+    }
+
+    /// "This is a regular": the page type is left to the regulars, whatever the days say.
+    public func markRegular(_ id: UUID) {
+        guard let item = data.items.first(where: { $0.id == id }) else { return }
+        data.corrections[item.pageType, default: Correction()].regular = true
+        for i in data.items.indices where data.items[i].pageType == item.pageType && data.items[i].regular != nil { data.items[i].regular = true }
+        changed()
+    }
+
+    /// Puts pages' regular flags back as they were before a choice, for Undo.
+    public func setRegulars(_ flags: [UUID: Bool?]) {
+        for i in data.items.indices { if let flag = flags[data.items[i].id] { data.items[i].regular = flag } }
+        changed()
     }
 
     // MARK: Opened time and place
@@ -131,6 +264,31 @@ public final class Library {
             if kind == .tools { toTools += 1 }
         }
         return (data.items.count, changed, toTools)
+    }
+
+    /// Swaps in the list as it is on disk now, for a process that showed an older read of it.
+    public func replace(with data: LibraryData) {
+        self.data = data
+        changed(reindexing: true)
+    }
+
+    /// Removes saved pages whose link carries a secret in its path (a reset or invite link saved before the rule existed).
+    /// Runs once when the list loads. Returns how many went away: counts only, for the log.
+    @discardableResult
+    public func dropSecretLinks() -> Int {
+        let before = data.items.count
+        data.items.removeAll { item in
+            guard let url = URL(string: item.url) else { return false }
+            var path = url.path(percentEncoded: false).split(separator: "/").map(String.init)
+            // A hash route (#/accept/<token>) is a path too.
+            if let route = url.fragment(percentEncoded: false), route.hasPrefix("/") || route.hasPrefix("!") {
+                path += route.dropFirst(route.hasPrefix("!") ? 1 : 0).prefix { $0 != "?" }.split(separator: "/").map(String.init)
+            }
+            return Structure.hasSecretPath(path)
+        }
+        let removed = before - data.items.count
+        if removed > 0 { changed(reindexing: true) }
+        return removed
     }
 
     /// Folds saved pages that are really one page (the same link written two ways) into one item: the earliest save, all
@@ -296,9 +454,15 @@ public final class Library {
         lastPrune = now
         let recent = { (when: Date) in now.timeIntervalSince(when) <= Self.cameBackWindow }
         let seen = data.seen.filter { recent($0.value) }, dismissed = data.dismissed.filter { recent($0.value) }
-        guard seen.count != data.seen.count || dismissed.count != data.dismissed.count else { return }
+        let first = Familiarity.dayNumber(of: now) - Familiarity.window
+        let siteDays = data.siteDays.compactMapValues { days in
+            let kept = days.filter { $0 >= first }
+            return kept.isEmpty ? nil : kept
+        }
+        guard seen.count != data.seen.count || dismissed.count != data.dismissed.count || siteDays != data.siteDays else { return }
         data.seen = seen
         data.dismissed = dismissed
+        data.siteDays = siteDays
         changed()
     }
 

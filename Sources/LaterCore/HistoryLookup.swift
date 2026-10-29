@@ -41,6 +41,63 @@ public enum HistoryLookup {
         return results
     }
 
+    /// On which days (see `Familiarity.dayNumber`, in the user's own time zone) each site was visited since `since`, from the
+    /// same read-only, immutable history files: one question, asked once a day. Sites are hosts without `www.`; only web
+    /// pages count, and a frame loaded inside a page does not. Visits are grouped in 15-minute steps by the database, so a
+    /// busy history costs a few rows per page. Nothing is written, and a file that can't be read adds nothing.
+    public static func visitDays(in databases: [String], since: Date, calendar: Calendar = .current) -> [String: Set<Int>] {
+        let step: Int64 = 900_000_000   // 15 minutes in microseconds: every time zone's midnight falls on a step
+        let from = Int64((since.timeIntervalSince1970 + 11_644_473_600) * 1_000_000)
+        var days: [String: Set<Int>] = [:]
+        var dayOfStep: [Int64: Int] = [:]
+        var siteOfLink: [String: String?] = [:]
+        for path in databases {
+            var db: OpaquePointer?
+            var query: OpaquePointer?
+            defer {
+                sqlite3_finalize(query)
+                sqlite3_close_v2(db)
+            }
+            let uri = URL(fileURLWithPath: path).absoluteString + "?immutable=1&mode=ro"
+            guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK,
+                  sqlite3_prepare_v2(db, """
+                      SELECT u.url, v.visit_time / ?2 FROM visits v JOIN urls u ON u.id = v.url
+                      WHERE v.visit_time >= ?1 AND (v.transition & 255) NOT IN (3, 4) GROUP BY v.url, v.visit_time / ?2
+                      """, -1, &query, nil) == SQLITE_OK else { continue }
+            sqlite3_bind_int64(query, 1, from)
+            sqlite3_bind_int64(query, 2, step)
+            while sqlite3_step(query) == SQLITE_ROW {
+                guard let text = sqlite3_column_text(query, 0) else { continue }
+                let link = String(cString: text)
+                let site: String?
+                if let known = siteOfLink[link] { site = known } else {
+                    site = Self.site(ofLink: link)
+                    siteOfLink[link] = .some(site)
+                }
+                guard let site else { continue }
+                let bucket = sqlite3_column_int64(query, 1)
+                let day: Int
+                if let known = dayOfStep[bucket] { day = known } else {
+                    day = Familiarity.dayNumber(of: date(chromiumTime: bucket * step), calendar: calendar)
+                    dayOfStep[bucket] = day
+                }
+                days[site, default: []].insert(day)
+            }
+        }
+        return days
+    }
+
+    /// The host of a web link without `www.`, lowercased; nil for anything that isn't http or https.
+    static func site(ofLink link: String) -> String? {
+        guard let marker = link.range(of: "://"), ["http", "https"].contains(link[..<marker.lowerBound].lowercased()) else { return nil }
+        var host = link[marker.upperBound...].prefix { !"/?#".contains($0) }
+        if let at = host.lastIndex(of: "@") { host = host[host.index(after: at)...] }
+        if let colon = host.firstIndex(of: ":") { host = host[..<colon] }
+        let site = host.lowercased()
+        let bare = site.hasPrefix("www.") ? String(site.dropFirst(4)) : site
+        return bare.isEmpty ? nil : bare
+    }
+
     /// The link as written, then with the slash toggled, then the same two on the other `www.` spelling.
     static func variants(of link: String) -> [String] {
         guard var parts = URLComponents(string: link), let host = parts.host else { return [link] }
