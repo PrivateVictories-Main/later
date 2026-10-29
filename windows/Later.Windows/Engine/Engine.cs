@@ -20,6 +20,7 @@ public interface IBrowserIO
     bool IsInstalled(Browser b);
     ReadResult Read(Browser b);                                                   // any thread; the real one serializes
     Dictionary<string, HistoryResult> History(IReadOnlyList<string> links);       // any thread
+    Dictionary<string, HashSet<int>> VisitDays(DateTime since);                  // any thread
     IReadOnlyCollection<nint> KnownWindows(Browser b);
     void BrowserQuit(Browser b);
     Browser? FrontBrowser();
@@ -27,11 +28,13 @@ public interface IBrowserIO
 }
 
 /// Glue: wake-up (hook, app switch, wake from sleep) → reader → judge → library → file. Everything runs on the engine thread
-/// except the reads, the history questions and the file writes. The only timers are one-shots: the save coalescer, and a
-/// retry when a read could not resolve every tab.
+/// except the reads, the history questions and the file writes. The only timers are one-shots: the save coalescer, a
+/// retry when a read could not resolve every tab, and, while a page could still be saved by time alone, one read at the moment
+/// it would be (so a page left open or read for a long while is saved though the browser reports nothing).
 public sealed class Engine
 {
     static readonly TimeSpan SaveDelay = TimeSpan.FromSeconds(1), RetryDelay = TimeSpan.FromSeconds(15);
+    static readonly TimeSpan DeadlineSlack = TimeSpan.FromSeconds(1);
     const int MaxRetries = 2;
     const string SaveFailedNotice = "Later couldn't save its list. It'll try again with your next change.";
 
@@ -48,18 +51,24 @@ public sealed class Engine
     readonly HashSet<Browser> reading = [], readAgain = [];
     /// Bumped on pause and stop: a read that began before then belongs to a judge or session that's gone.
     readonly Dictionary<Browser, int> generation = [], retries = [];
-    readonly Dictionary<Browser, IDisposable> retryTimers = [];
+    /// Consecutive reads of a browser with a window the reader could not see into, across wake-ups.
+    readonly Dictionary<Browser, int> unrecognized = [];
+    readonly Dictionary<Browser, IDisposable> retryTimers = [], deadlineTimers = [];
     readonly Dictionary<nint, Browser> windowOwner = [];
-    /// The reasons nobody is looking: "sleep" and "lock". Away until all have ended.
+    /// The reasons nobody is looking: "sleep", "screen" (display off) and "lock". Away until all have ended.
     readonly HashSet<string> away = [];
     IReadOnlyDictionary<string, int> openCopies = new Dictionary<string, int>();
     bool started, stopped, saveScheduled, saveFailed;
+    /// The day (see `Familiarity.Today`) the history was last asked which days each site was visited.
+    int? visitDaysAsOf;
     IDisposable? saveTimer;
 
     // The writer: the newest copy wins, and nothing older is written after something newer.
     readonly object writeGate = new(), diskGate = new();
     LibraryData? pending; long pendingSequence, sequence, written;
     bool writing;
+    /// Tests only: runs in the write loop after it took its data and before it asks for the disk.
+    internal Action? BeforeDiskWrite;
 
     public Engine(Library library, Judge judge, IBrowserIO io, IEngineHost host, LibraryStore? store, Settings settings, Func<DateTime>? clock = null, string? loadNotice = null)
         : this(library, judge, io, host, store is null ? null : (Action<LibraryData>)store.Save, settings, clock, loadNotice) { }
@@ -81,6 +90,12 @@ public sealed class Engine
     /// The load notice, or, over it, the save-failed notice (which goes once saving works again).
     public string? Notice => saveFailed ? SaveFailedNotice : loadNotice;
     public IReadOnlyDictionary<string, int> OpenCopies => openCopies;
+    /// Whether this engine has a file to save to; false for a list that must not be written (see `EngineHost.Open`).
+    public bool CanSave => save is not null;
+    /// The last save failed (and none has worked since).
+    public bool SaveFailed => saveFailed;
+    /// Raised when saving starts failing (true) or works again (false), for a process with no window to say so in.
+    public event Action<bool>? SaveFailedChanged;
 
     /// Raised when a status, the notice, the copies or the pause changed.
     public event Action? StateChanged;
@@ -101,6 +116,7 @@ public sealed class Engine
         library.Prune(clock());
         judge = MakeJudge();
         BackfillHistory();
+        RefreshVisitDays();
         RingFrontFirst();
     }
 
@@ -112,10 +128,16 @@ public sealed class Engine
         foreach (var b in BrowserInfo.All) generation[b] = generation.GetValueOrDefault(b) + 1;
         foreach (var t in retryTimers.Values) t.Dispose();
         retryTimers.Clear();
+        CancelDeadlines();
         saveTimer?.Dispose(); saveTimer = null;
         library.Changed -= OnLibraryChanged;
-        if (!flush) return;
-        try { Flush(); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        if (flush)
+        {
+            try { Flush(); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }   // reported by SaveFailedChanged
+        }
+        // Whatever the flush did, a write that was queued earlier must not land after this: the lock is let go next, and the
+        // process that takes it writes the list from then on.
+        lock (diskGate) written = long.MaxValue;
     }
 
     /// Writes the list now, waiting for it to finish. Throws if the write failed. Without a store it does nothing: the notice
@@ -217,9 +239,18 @@ public sealed class Engine
             case ReadStatus.Ok:
                 // A normal window the read could not see into may hold tabs: judging without it would count them as closed. Look
                 // again; if it stays unreadable, this is the best view there is.
-                if (result.UnrecognizedWindows > 0 && ScheduleRetry(b)) return;
+                // The count runs over consecutive reads of this browser, wake-ups included: a window that stays unclassifiable must
+                // not keep the judge waiting for as long as the user is active.
+                if (result.UnrecognizedWindows > 0)
+                {
+                    int streak = unrecognized[b] = unrecognized.GetValueOrDefault(b) + 1;
+                    if (streak <= MaxRetries && ScheduleRetry(b)) return;
+                }
+                else unrecognized[b] = 0;
+                RefreshVisitDays();
                 var judgeTimer = Stopwatch.StartNew();
-                judge.Ingest(result.Snapshot!, clock());
+                var ingestedAt = clock();
+                judge.Ingest(result.Snapshot!, ingestedAt);
                 var judgeMs = judgeTimer.Elapsed.TotalMilliseconds;
                 LookUpHistory(library.TakeAwaitingHistory());
                 PublishCopies();
@@ -229,9 +260,12 @@ public sealed class Engine
                 PerfLog.Log.Ring(b.Wire(), readMs, judgeMs, result.Snapshot!.Tabs.Count, result.PrivateWindowsSkipped, result.UnresolvedTabs, library.Data.Items.Count);
                 ReadApplied?.Invoke(b);
                 if (result.UnresolvedTabs == 0 || !ScheduleRetry(b)) CancelRetry(b);
+                ArmDeadline(b, ingestedAt);
                 break;
             case ReadStatus.NotRunning:
                 CancelRetry(b);
+                CancelDeadline(b);
+                unrecognized[b] = 0;
                 judge.BrowserQuit(b, clock());   // not running: known to have nothing open
                 foreach (var gone in windowOwner.Where(o => o.Value == b).Select(o => o.Key).ToList()) windowOwner.Remove(gone);
                 PublishCopies();
@@ -241,6 +275,7 @@ public sealed class Engine
             case ReadStatus.Transient:
                 break;   // the next wake-up catches up
             default:
+                CancelDeadline(b);
                 judge.BrowserUnreadable(b);
                 PublishCopies();
                 SetStatus(b, BrowserStatus.ReadFailed);
@@ -263,6 +298,27 @@ public sealed class Engine
         if (retryTimers.Remove(b, out var timer)) timer.Dispose();
     }
 
+    /// While the judge holds a page of this browser that time alone could still save (off screen for a minute, or on screen
+    /// long enough), one read is armed for that moment, plus a second. It replaces the one armed before; with nothing pending
+    /// there is no timer at all.
+    void ArmDeadline(Browser b, DateTime now)
+    {
+        CancelDeadline(b);
+        if (judge.NextDeadline(b, now) is not { } at) return;
+        deadlineTimers[b] = host.After(at - now + DeadlineSlack, () => { deadlineTimers.Remove(b); Ring(b); });
+    }
+
+    void CancelDeadline(Browser b)
+    {
+        if (deadlineTimers.Remove(b, out var timer)) timer.Dispose();
+    }
+
+    void CancelDeadlines()
+    {
+        foreach (var timer in deadlineTimers.Values) timer.Dispose();
+        deadlineTimers.Clear();
+    }
+
     /// Switching into or out of a browser is a moment to look: the one being left and the one being entered are read now.
     public void FrontAppChanged(Browser? browser)
     {
@@ -281,11 +337,12 @@ public sealed class Engine
         foreach (var b in BrowserInfo.All) if (b != front) Ring(b);
     }
 
-    /// Asleep or locked: `reason` is "sleep" or "lock". Time away is neither reading nor leaving a page open.
+    /// Asleep, display off or locked: `reason` is "sleep", "screen" or "lock". Time away is neither reading nor leaving a page open.
     public void SetAway(string reason, bool on)
     {
         if (on) away.Add(reason); else away.Remove(reason);
         judge.SetAway(away.Count > 0, clock());
+        if (away.Count > 0) CancelDeadlines();   // nothing can be saved by time while away; the wake reads again
     }
 
     // MARK: Actions
@@ -295,6 +352,7 @@ public sealed class Engine
         settings = settings with { Paused = value };
         SettingsChanged?.Invoke(settings);
         foreach (var b in BrowserInfo.All) { generation[b] = generation.GetValueOrDefault(b) + 1; CancelRetry(b); }
+        CancelDeadlines();
         if (value) { StateChanged?.Invoke(); return; }
         // Start judging afresh: the judge's last view of the screen is stale, and paused time isn't reading time.
         judge = MakeJudge();
@@ -321,6 +379,34 @@ public sealed class Engine
     }
 
     // MARK: History
+
+    /// Asks the history which days of the last 28 each site was visited, off the engine thread: as the engine starts, and again
+    /// at the first read after the local date changes. Then pages saved before Regulars that are places on regular sites move
+    /// there, once. Nothing is read in between (no timer), and a failed or empty answer keeps the last good one. Logs counts
+    /// and time only.
+    void RefreshVisitDays()
+    {
+        var now = clock();
+        int today = Familiarity.Today(now);
+        if (visitDaysAsOf == today) return;
+        visitDaysAsOf = today;
+        var since = now.ToLocalTime().Date.AddDays(-Familiarity.Window);   // the start of the day 28 days back
+        var timer = Stopwatch.StartNew();
+        host.RunBackground(() =>
+        {
+            Dictionary<string, HashSet<int>> days;
+            try { days = io.VisitDays(since); }
+            catch (Exception e) when (e is not OutOfMemoryException) { days = []; }
+            host.Post(() =>
+            {
+                if (stopped) return;
+                library.SetHistoryDays(days);
+                PerfLog.Log.VisitDays(days.Count, library.RegularSiteCount(today), timer.Elapsed.TotalMilliseconds);
+                var (migrated, of) = library.MigrateRegulars(today);
+                if (of > 0) PerfLog.Log.RegularsMigrated(migrated, of);
+            });
+        });
+    }
 
     /// Once, as the engine starts: when the history says saved pages were opened, for those it doesn't say yet and wasn't
     /// already asked about at an earlier launch.
@@ -400,16 +486,17 @@ public sealed class Engine
                 if (pending is null) { writing = false; return; }
                 data = pending; mine = pendingSequence; pending = null;
             }
-            bool ok = true;
+            BeforeDiskWrite?.Invoke();
+            bool? ok = null;   // nothing to report when a newer write (or the stop) made this one unnecessary
             lock (diskGate)
             {
                 if (mine > written)
                 {
-                    try { save!(data); written = mine; }
+                    try { save!(data); written = mine; ok = true; }
                     catch (Exception e) when (e is IOException or UnauthorizedAccessException) { ok = false; PerfLog.Log.SaveFailed(); }
                 }
             }
-            host.Post(() => SaveFinished(ok));
+            if (ok is { } result) host.Post(() => SaveFinished(result));
         }
     }
 
@@ -417,6 +504,7 @@ public sealed class Engine
     {
         if (saveFailed != ok) return;
         saveFailed = !ok;
+        SaveFailedChanged?.Invoke(saveFailed);
         StateChanged?.Invoke();
     }
 }

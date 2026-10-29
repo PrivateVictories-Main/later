@@ -27,9 +27,21 @@ public class EngineTests
         }
 
         public readonly List<Shot> Shots = [];
+        /// With `Defer`, background work waits until `RunDeferred`: a slow read or write that ends later.
+        public bool Defer;
+        readonly List<Action> background = [];
         public void Post(Action a) => a();
         public IDisposable After(TimeSpan delay, Action a) { var s = new Shot(delay, a, Shots); Shots.Add(s); return s; }
-        public void RunBackground(Action work) => work();
+        public void RunBackground(Action work) { if (Defer) lock (background) background.Add(work); else work(); }
+        public void RunDeferred()
+        {
+            while (true)
+            {
+                Action work;
+                lock (background) { if (background.Count == 0) return; work = background[0]; background.RemoveAt(0); }
+                work();
+            }
+        }
         public void Fire() { foreach (var s in Shots.ToList()) { Shots.Remove(s); s.Action(); } }
     }
 
@@ -38,6 +50,8 @@ public class EngineTests
         public readonly HashSet<Browser> Installed = [Browser.Helium];
         public readonly List<Browser> Reads = [];
         public readonly List<IReadOnlyList<string>> HistoryAsks = [];
+        public readonly List<DateTime> VisitDayAsks = [];
+        public Func<DateTime, Dictionary<string, HashSet<int>>> OnVisitDays = _ => [];
         public readonly Dictionary<nint, Browser> Owners = [];
         public readonly Dictionary<Browser, HashSet<nint>> Known = [];
         public Func<Browser, ReadResult> OnRead = _ => Ended(ReadStatus.NotRunning);
@@ -47,6 +61,7 @@ public class EngineTests
         public bool IsInstalled(Browser b) => Installed.Contains(b);
         public ReadResult Read(Browser b) { Reads.Add(b); return OnRead(b); }
         public Dictionary<string, HistoryResult> History(IReadOnlyList<string> links) { HistoryAsks.Add(links); return OnHistory(links); }
+        public Dictionary<string, HashSet<int>> VisitDays(DateTime since) { VisitDayAsks.Add(since); return OnVisitDays(since); }
         public IReadOnlyCollection<nint> KnownWindows(Browser b) => Known.TryGetValue(b, out var k) ? k : [];
         public void BrowserQuit(Browser b) { }
         public Browser? FrontBrowser() => Front;
@@ -249,7 +264,7 @@ public class EngineTests
     public void AnUnrecognizedWindowIsNotJudgedAsTabsClosedUntilTheRetriesRunOut()
     {
         var r = new Rig();
-        ReadResult current = Ok(T(Product, active: true));
+        ReadResult current = Ok(T(ShopHome, "Shop", active: true));   // a general page: nothing waits on the clock
         r.IO.OnRead = _ => current;
         r.Engine.Start();
         Assert.Single(r.Engine.OpenCopies);
@@ -262,6 +277,258 @@ public class EngineTests
         r.Host.Fire();                               // the last try: this is the best view there is
         Assert.Empty(r.Engine.OpenCopies);
         Assert.Empty(r.Host.Shots);
+    }
+
+    static ReadResult Unrecognized() => new(ReadStatus.Ok, new Snapshot(Browser.Helium, []), 0, 0, 0, UnrecognizedWindows: 1);
+
+    [Fact]
+    public void UnrecognizedReadsAreCountedAcrossWakeUpsSoTheJudgeIsNotStarved()
+    {
+        var r = new Rig();
+        ReadResult current = Ok(T(ShopHome, "Shop", active: true));
+        r.IO.OnRead = _ => current;
+        r.Engine.Start();
+        current = Unrecognized();
+        r.Engine.Ring(Browser.Helium);                 // 1: not applied
+        Assert.Single(r.Engine.OpenCopies);
+        r.Engine.Ring(Browser.Helium);                 // 2: a title change in between does not start the count again
+        Assert.Single(r.Engine.OpenCopies);
+        r.Engine.Ring(Browser.Helium);                 // 3: the best view there is
+        Assert.Empty(r.Engine.OpenCopies);
+        Assert.Empty(r.Host.Shots);
+    }
+
+    [Fact]
+    public void AReadWithNothingUnrecognizedStartsTheCountAgain()
+    {
+        var r = new Rig();
+        ReadResult current = Ok(T(ShopHome, "Shop", active: true));
+        r.IO.OnRead = _ => current;
+        r.Engine.Start();
+        var unrecognized = Unrecognized();
+        current = unrecognized;
+        r.Engine.Ring(Browser.Helium); r.Engine.Ring(Browser.Helium);   // 1, 2
+        current = Ok(T(ShopHome, "Shop", active: true));
+        r.Engine.Ring(Browser.Helium);                                  // a clean read
+        current = unrecognized;
+        r.Engine.Ring(Browser.Helium); r.Engine.Ring(Browser.Helium);   // 1, 2 again
+        Assert.Single(r.Engine.OpenCopies);
+        r.Engine.Ring(Browser.Helium);
+        Assert.Empty(r.Engine.OpenCopies);
+    }
+
+    // A page that time alone could still save: one read is armed for its moment, and only while there is such a page.
+
+    [Fact]
+    public void APageLeftOpenArmsOneReadForTheMomentItQualifiesPlusASecond()
+    {
+        var r = new Rig();
+        r.IO.OnRead = _ => Ok(T(ShopHome, "Shop", active: true), T(Product));
+        r.Engine.Start();
+        Assert.Equal(TimeSpan.FromSeconds(61), Assert.Single(r.Host.Shots).Delay);
+    }
+
+    [Fact]
+    public void AnythingNotWaitingOnTheClockArmsNothing()
+    {
+        var r = new Rig();
+        ReadResult current = Ok();
+        r.IO.OnRead = _ => current;
+        r.Engine.Start();
+        Assert.Empty(r.Host.Shots);
+        current = Ok(T(ShopHome, "Shop", active: true));   // a general page is never tracked
+        r.Engine.Ring(Browser.Helium);
+        Assert.Empty(r.Host.Shots);
+    }
+
+    [Fact]
+    public void EachReadReplacesTheArmedReadInsteadOfStackingAnother()
+    {
+        var r = new Rig();
+        r.IO.OnRead = _ => Ok(T(ShopHome, "Shop", active: true), T(Product));
+        r.Engine.Start();
+        r.Wait(10); r.Engine.Ring(Browser.Helium);
+        r.Wait(10); r.Engine.Ring(Browser.Helium);
+        Assert.Equal(TimeSpan.FromSeconds(41), Assert.Single(r.Host.Shots).Delay);   // 60 s from the first sighting, 20 s gone, plus a second
+    }
+
+    [Fact]
+    public void TheArmedReadFindsThePageLeftOpenAndSavesItWithNoOtherWakeUp()
+    {
+        var r = new Rig();
+        r.IO.OnRead = _ => Ok(T(ShopHome, "Shop", active: true), T(Product));
+        r.Engine.Start();
+        r.Wait(61); r.Host.Fire();
+        Assert.Equal([Product], r.Library.Data.Items.Select(i => i.Url).ToArray());
+        Assert.DoesNotContain(r.Host.Shots, s => s.Delay > TimeSpan.FromSeconds(2));   // nothing waits any more (only the save coalescer is armed)
+    }
+
+    [Fact]
+    public void APageReadOnScreenForLongEnoughIsSavedByTheArmedReadToo()
+    {
+        var r = new Rig();
+        r.IO.OnRead = _ => Ok(T(Product, active: true));
+        r.Engine.Start();
+        Assert.Equal(TimeSpan.FromSeconds(121), Assert.Single(r.Host.Shots).Delay);
+        r.Wait(121); r.Host.Fire();
+        Assert.Equal([Product], r.Library.Data.Items.Select(i => i.Url).ToArray());
+    }
+
+    [Fact]
+    public void PauseAwayAndStopCancelTheArmedRead()
+    {
+        var r = new Rig();
+        r.IO.OnRead = _ => Ok(T(ShopHome, "Shop", active: true), T(Product));
+        r.Engine.Start();
+        Assert.Single(r.Host.Shots);
+        r.Engine.SetPaused(true);
+        Assert.Empty(r.Host.Shots);
+        r.Engine.SetPaused(false);
+        Assert.Single(r.Host.Shots);
+        r.Engine.SetAway("screen", true);
+        Assert.Empty(r.Host.Shots);
+        r.Engine.SetAway("screen", false);
+        r.Engine.Ring(Browser.Helium);
+        Assert.Single(r.Host.Shots);
+        r.Engine.Stop(flush: false);
+        Assert.Empty(r.Host.Shots);
+    }
+
+    [Fact]
+    public void ABrowserThatQuitHasNothingArmed()
+    {
+        var r = new Rig();
+        ReadResult current = Ok(T(ShopHome, "Shop", active: true), T(Product));
+        r.IO.OnRead = _ => current;
+        r.Engine.Start();
+        Assert.Single(r.Host.Shots);
+        current = Ended(ReadStatus.NotRunning);
+        r.Engine.Ring(Browser.Helium);
+        Assert.Empty(r.Host.Shots);
+    }
+
+    // Letting go of the list: a read in flight or a queued write must not outlive the stop.
+
+    [Fact]
+    public void ASlowReadThatEndsAfterTheStopTouchesNothing()
+    {
+        var saves = 0;
+        var r = new Rig(save: _ => saves++);
+        r.Host.Defer = true;
+        r.IO.OnRead = _ => Ok(T(Product, active: true));
+        r.Engine.Start();                                   // the read has begun and is slow
+        r.Library.Save("https://a.com/1", "One", new Verdict(true, Kind.Reading, "a.com/*"), Browser.Helium, T0);
+        r.Engine.Stop(flush: true);                         // returns at once, with the list written
+        Assert.Equal(1, saves);
+        r.Wait(130);
+        r.Host.RunDeferred();                               // now the read ends
+        r.Host.Fire();
+        Assert.Equal(1, saves);
+        Assert.Single(r.Library.Data.Items);                // nothing was judged or saved from it
+        Assert.Empty(r.Engine.OpenCopies);
+        Assert.Equal(BrowserStatus.NotRunning, r.Engine.Status[Browser.Helium]);
+    }
+
+    [Fact]
+    public void AWriteQueuedBeforeAFailedFinalFlushNeverLandsAfterTheStop()
+    {
+        int writes = 0; bool failFirst = true;
+        var r = new Rig(save: _ => { if (failFirst) { failFirst = false; throw new IOException("disk"); } writes++; });
+        r.Host.Defer = true;
+        r.Library.Save("https://a.com/1", "One", new Verdict(true, Kind.Reading, "a.com/*"), Browser.Helium, T0);
+        r.Host.Fire();                                      // the save coalescer fires: the write loop is queued
+        using var taken = new ManualResetEventSlim(); using var go = new ManualResetEventSlim();
+        r.Engine.BeforeDiskWrite = () => { taken.Set(); go.Wait(10_000); };
+        var writer = new Thread(r.Host.RunDeferred);        // it has its data and waits before the disk
+        writer.Start();
+        Assert.True(taken.Wait(10_000));
+        r.Engine.Stop(flush: true);                         // the final flush fails
+        go.Set();
+        Assert.True(writer.Join(10_000));
+        Assert.Equal(0, writes);                            // and the older write does not land over whatever the app writes next
+        Assert.True(r.Engine.SaveFailed);
+    }
+
+    // Regulars: the history's days, once a day, and what they do to pages saved before.
+
+    static readonly Verdict OldPlace = new(true, Kind.Tools, "dash.example.com/~");   // as 1.3 saved it, no flag
+
+    static Dictionary<string, HashSet<int>> DashDays(DateTime now, int count) =>
+        new() { ["dash.example.com"] = Enumerable.Range(1, count).Select(d => Familiarity.Today(now) - d).ToHashSet() };
+
+    [Fact]
+    public void TheDaysAreAskedAtStartFromAWindowBackAndOldPlacesOnRegularSitesMove()
+    {
+        var library = new Library();
+        library.Save("https://dash.example.com/", "Dash", OldPlace, Browser.Helium, T0);
+        var r = new Rig(library: library);
+        r.IO.OnVisitDays = _ => DashDays(T0, 5);
+        r.Engine.Start();
+        Assert.True(library.Data.Items[0].Regular);
+        Assert.Equal(T0.ToLocalTime().Date.AddDays(-Familiarity.Window), Assert.Single(r.IO.VisitDayAsks));
+        Assert.Equal(5, library.VisitDays("dash.example.com", Familiarity.Today(T0)));
+    }
+
+    [Fact]
+    public void ItIsNotAskedAgainTheSameDayButIsAtTheFirstReadOnTheNextOne()
+    {
+        var r = new Rig();
+        r.IO.OnRead = _ => Ok(T(ShopHome, "Shop", active: true));
+        r.Engine.Start();
+        r.Wait(3_600); r.Engine.Ring(Browser.Helium);
+        Assert.Single(r.IO.VisitDayAsks);
+        r.Wait(86_400); r.Engine.Ring(Browser.Helium);
+        Assert.Equal(2, r.IO.VisitDayAsks.Count);
+        r.Engine.Ring(Browser.Helium);
+        Assert.Equal(2, r.IO.VisitDayAsks.Count);
+    }
+
+    [Fact]
+    public void WithNoDaysToGoByNothingIsMigrated()
+    {
+        var library = new Library();
+        library.Save("https://dash.example.com/", "Dash", OldPlace, Browser.Helium, T0);
+        var r = new Rig(library: library);
+        r.Engine.Start();
+        Assert.Null(library.Data.Items[0].Regular);   // not marked "kept": it is looked at again when there are days
+    }
+
+    [Fact]
+    public void AFailedOrEmptyAnswerKeepsTheLastGoodOne()
+    {
+        var r = new Rig();
+        r.IO.OnRead = _ => Ok(T(ShopHome, "Shop", active: true));
+        r.IO.OnVisitDays = _ => DashDays(T0, 5);
+        r.Engine.Start();
+        r.IO.OnVisitDays = _ => throw new InvalidOperationException("locked");
+        r.Wait(86_400); r.Engine.Ring(Browser.Helium);
+        r.IO.OnVisitDays = _ => [];
+        r.Wait(86_400); r.Engine.Ring(Browser.Helium);
+        Assert.Equal(3, r.IO.VisitDayAsks.Count);
+        Assert.Equal(5, r.Library.VisitDays("dash.example.com", Familiarity.Today(T0)));
+    }
+
+    [Fact]
+    public void APlaceOnARegularSiteIsSavedAsARegularThroughTheEngine()
+    {
+        var r = new Rig();
+        r.IO.OnVisitDays = _ => DashDays(T0, 6);
+        r.IO.OnRead = _ => Ok(T("https://dash.example.com/", "Dash", active: true));
+        r.Engine.Start();
+        r.Wait(130); r.Engine.Ring(Browser.Helium);
+        Assert.Equal(new List<bool?> { true }, r.Library.Data.Items.Select(i => i.Regular).ToList());
+    }
+
+    [Fact]
+    public void ADisplayOffAllNightIsNotReadingTime()
+    {
+        var r = new Rig();
+        r.IO.OnRead = _ => Ok(T(Product, active: true));
+        r.Engine.Start();
+        r.Wait(5); r.Engine.SetAway("screen", true);
+        r.Wait(8 * 3600); r.Engine.SetAway("screen", false);
+        r.Engine.Ring(Browser.Helium);
+        Assert.Empty(r.Library.Data.Items);
     }
 
     [Fact]

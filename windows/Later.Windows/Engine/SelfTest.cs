@@ -35,6 +35,7 @@ public static class SelfTest
         public bool IsInstalled(Browser b) => false;
         public ReadResult Read(Browser b) => new(ReadStatus.NotRunning, null, 0, 0, 0);
         public Dictionary<string, HistoryResult> History(IReadOnlyList<string> links) => [];
+        public Dictionary<string, HashSet<int>> VisitDays(DateTime since) => [];
         public IReadOnlyCollection<nint> KnownWindows(Browser b) => [];
         public void BrowserQuit(Browser b) { }
         public Browser? FrontBrowser() => null;

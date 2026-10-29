@@ -42,6 +42,8 @@ public sealed class EngineHost : IDisposable
         var merged = library.MergeDuplicates();
         var refreshed = library.RefreshKinds();
         PerfLog.Log.Opened(merged, refreshed.Items, refreshed.Changed, refreshed.ToTools);
+        int backToList = library.RefreshPlaces();
+        PerfLog.Log.PlacesRefreshed(backToList, library.Data.Items.Count(i => i.IsActiveRegular), library.Data.Items.Count(i => i.Status == ItemStatus.Done), library.Data.Items.Count);
         return new Opened(library, loaded.Writable ? store : null, loaded.Notice, settings);
     }
 
@@ -89,14 +91,28 @@ public sealed class EngineHost : IDisposable
         Retarget();
 
         notifier = new SessionNotifier();
-        notifier.Locked += () => engine.SetAway("lock", true);
-        notifier.Unlocked += () => { engine.SetAway("lock", false); WakeUp(); };
-        notifier.Suspending += () => engine.SetAway("sleep", true);
-        notifier.Resumed += () => { engine.SetAway("sleep", false); WakeUp(); };
+        notifier.Locked += () => GoAway("lock");
+        notifier.Unlocked += () => Back("lock");
+        notifier.Suspending += () => GoAway("sleep");
+        notifier.Resumed += () => Back("sleep");
+        notifier.DisplayChanged += on => { if (on) Back("screen"); else GoAway("screen"); };
         notifier.SessionEnding += () => { Stop(flush: true); sessionEnded?.Invoke(); };
     }
 
-    /// After a sleep or a lock the set of browser processes may be different, and what changed meanwhile is read.
+    /// Nobody is looking: time from now is neither reading nor leaving a page open. The browsers are read so what is open now is known.
+    void GoAway(string reason)
+    {
+        Engine.SetAway(reason, true);
+        Engine.RingAll();
+    }
+
+    void Back(string reason)
+    {
+        Engine.SetAway(reason, false);
+        WakeUp();
+    }
+
+    /// After a sleep, a lock or the display coming back the set of browser processes may be different, and what changed meanwhile is read.
     void WakeUp()
     {
         Retarget();

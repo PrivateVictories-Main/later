@@ -27,6 +27,9 @@ sealed class RealBrowserIO(Func<Browser, string>? dataFolder = null) : IBrowserI
     public Dictionary<string, HistoryResult> History(IReadOnlyList<string> links) =>
         HistoryLookupStore.Lookup(links, BrowserInfo.All.SelectMany(b => HistoryLookupStore.Databases(Folder(b))).ToList());
 
+    public Dictionary<string, HashSet<int>> VisitDays(DateTime since) =>
+        HistoryLookupStore.VisitDays(BrowserInfo.All.SelectMany(b => HistoryLookupStore.Databases(Folder(b))).ToList(), since);
+
     public Browser? FrontBrowser() => BrowserDiscovery.FrontBrowser();
 
     public Browser? BrowserOfWindow(nint hwnd) => BrowserDiscovery.BrowserOfWindow(hwnd);

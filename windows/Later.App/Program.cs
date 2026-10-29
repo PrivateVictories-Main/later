@@ -32,8 +32,7 @@ public static class Program
     {
         var paths = Later.Windows.Platform.AppPaths.Default;
         using var gate = Later.Windows.Engine.EngineLock.Open(paths.InstanceSuffix);
-        gate.SignalHandoff();
-        if (!gate.TryAcquire(TimeSpan.FromSeconds(10))) return 2;
+        if (!gate.AcquireForApp(TimeSpan.FromSeconds(10))) return 2;
         File.WriteAllText(Path.Combine(paths.DataDir, "held.txt"), "held");
         Console.Out.WriteLine("held");
         if (crash) Environment.FailFast("test crash");

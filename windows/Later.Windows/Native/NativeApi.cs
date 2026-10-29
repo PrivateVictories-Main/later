@@ -52,9 +52,16 @@ internal static unsafe partial class NativeApi
     [LibraryImport("user32.dll", EntryPoint = "DefWindowProcW")] internal static partial nint DefWindowProc(nint hwnd, uint message, nuint wParam, nint lParam);
     [LibraryImport("user32.dll")] internal static partial int DestroyWindow(nint hwnd);
 
+    [LibraryImport("user32.dll", SetLastError = true)] internal static partial nint RegisterPowerSettingNotification(nint recipient, in Guid setting, uint flags);
+    [LibraryImport("user32.dll")] internal static partial int UnregisterPowerSettingNotification(nint handle);
+
     [LibraryImport("wtsapi32.dll", SetLastError = true)] internal static partial int WTSRegisterSessionNotification(nint hwnd, uint flags);
     [LibraryImport("wtsapi32.dll")] internal static partial int WTSUnRegisterSessionNotification(nint hwnd);
 }
+
+/// POWERBROADCAST_SETTING for a setting whose data is one DWORD (the console display state is).
+[StructLayout(LayoutKind.Sequential)]
+internal struct PowerBroadcastSetting { public Guid PowerSetting; public uint DataLength; public int Data; }
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct ProcessMemory

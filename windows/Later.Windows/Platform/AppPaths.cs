@@ -18,6 +18,8 @@ public sealed record AppPaths(string DataDir)
 
     public string Library => Path.Combine(DataDir, "library.json");
     public string Settings => Path.Combine(DataDir, "settings.json");
+    /// What the background process tells the app when it could not do its job (see `AgentStatusFile`).
+    public string AgentStatus => Path.Combine(DataDir, "agent-status.json");
     public string IconsDir => Path.Combine(DataDir, "icons");
 
     /// Unique per data folder, so a test run never touches a real install's mutex, event or instance key.

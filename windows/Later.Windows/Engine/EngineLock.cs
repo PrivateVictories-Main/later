@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using Later.Windows.Native;
 
 namespace Later.Windows.Engine;
@@ -36,6 +37,24 @@ public sealed class EngineLock : IDisposable
             _ => throw new Win32Exception(),
         };
     }
+
+    /// The app's way in: takes the engine now, or asks the agent for it and waits, up to `timeout`. The request is made again every
+    /// 250 ms: an agent that has just been handed the lock clears the request before it starts watching, and one request that
+    /// lands in that moment would be lost. Each step waits on the mutex itself, so the wait ends the moment it is free. Engine thread.
+    public bool AcquireForApp(TimeSpan timeout)
+    {
+        if (TryAcquire(TimeSpan.Zero)) return true;
+        var elapsed = Stopwatch.StartNew();
+        while (true)
+        {
+            SignalHandoff();
+            var left = timeout - elapsed.Elapsed;
+            if (left <= TimeSpan.Zero) return false;
+            if (TryAcquire(left < NudgeEvery ? left : NudgeEvery)) return true;
+        }
+    }
+
+    static readonly TimeSpan NudgeEvery = TimeSpan.FromMilliseconds(250);
 
     public void Release()
     {

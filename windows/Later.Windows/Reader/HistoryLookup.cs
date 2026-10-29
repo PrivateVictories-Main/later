@@ -11,6 +11,10 @@ public static class HistoryLookupStore
     const string VisitsSql = @"SELECT u.visit_count, COALESCE((SELECT MIN(v.visit_time) FROM visits v WHERE v.url = u.id), u.last_visit_time)
         FROM urls u WHERE u.url = ?1";
     const string TitleSql = "SELECT url, last_visit_time FROM urls WHERE title = ?1 AND last_visit_time >= ?2 ORDER BY last_visit_time DESC LIMIT 1";
+    // One row per page and 15-minute step, so a busy history costs a few rows per page. Frames (3) and manual subframes (4) are no visits.
+    const string VisitDaysSql = @"SELECT u.url, v.visit_time / ?2 FROM visits v JOIN urls u ON u.id = v.url
+        WHERE v.visit_time >= ?1 AND (v.transition & 255) NOT IN (3, 4) GROUP BY v.url, v.visit_time / ?2";
+    const long StepMicros = 900_000_000;   // 15 minutes: every time zone's midnight falls on a step
     const long EpochMicros = 11_644_473_600L * 1_000_000;   // 1601-01-01 to 1970-01-01
 
     /// The `History` files of a Chromium data folder's profiles.
@@ -43,6 +47,57 @@ public static class HistoryLookupStore
             catch (SqliteException) { }
         }
         return results;
+    }
+
+    /// On which days (see `Familiarity.DayNumber`, in `zone`, the user's own by default) each site was visited since `since`,
+    /// from the same read-only, immutable files: one question, asked once a day. Sites are hosts without `www.`; only web
+    /// pages count. Nothing is written, and a file that can't be read adds nothing.
+    public static Dictionary<string, HashSet<int>> VisitDays(IReadOnlyList<string> databases, DateTime since, TimeZoneInfo? zone = null)
+    {
+        zone ??= TimeZoneInfo.Local;
+        long from = (since.ToUniversalTime() - DateTime.UnixEpoch).Ticks / 10 + EpochMicros;
+        var days = new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
+        var dayOfStep = new Dictionary<long, int>();
+        var siteOfLink = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var path in databases)
+        {
+            try
+            {
+                using var db = new SqliteDb(path);
+                using var q = db.Prepare(VisitDaysSql);
+                q.Bind(1, from).Bind(2, StepMicros);
+                while (q.Step())
+                {
+                    var link = q.Text(0);
+                    if (!siteOfLink.TryGetValue(link, out var site)) siteOfLink[link] = site = SiteOf(link);
+                    if (site is null) continue;
+                    long step = q.Long(1);
+                    if (!dayOfStep.TryGetValue(step, out var day))
+                        dayOfStep[step] = day = Familiarity.DayNumber(TimeZoneInfo.ConvertTimeFromUtc(DateOf(step * StepMicros), zone));
+                    if (!days.TryGetValue(site, out var set)) days[site] = set = [];
+                    set.Add(day);
+                }
+            }
+            catch (SqliteException) { }
+        }
+        return days;
+    }
+
+    /// The host of a web link without `www.`, lowercased; null for anything that isn't http or https.
+    internal static string? SiteOf(string link)
+    {
+        int marker = link.IndexOf("://", StringComparison.Ordinal);
+        if (marker < 0) return null;
+        var scheme = link[..marker];
+        if (!scheme.Equals("http", StringComparison.OrdinalIgnoreCase) && !scheme.Equals("https", StringComparison.OrdinalIgnoreCase)) return null;
+        var rest = link[(marker + 3)..];
+        int end = rest.AsSpan().IndexOfAny('/', '?', '#');
+        var host = end < 0 ? rest : rest[..end];
+        if (host.LastIndexOf('@') is >= 0 and var at) host = host[(at + 1)..];
+        if (host.IndexOf(':', StringComparison.Ordinal) is >= 0 and var colon) host = host[..colon];
+        host = host.ToLowerInvariant();
+        if (host.StartsWith("www.", StringComparison.Ordinal)) host = host[4..];
+        return host.Length == 0 ? null : host;
     }
 
     /// For each title an open tab carries, the most recently visited link with exactly that title since `since`, across profiles.

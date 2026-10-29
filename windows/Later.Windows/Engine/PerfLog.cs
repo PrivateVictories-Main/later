@@ -37,4 +37,22 @@ public sealed class PerfLog : EventSource
     {
         if (IsEnabled()) WriteEvent(5, browser, errorClass);
     }
+
+    [Event(6, Level = EventLevel.Informational)]
+    public void VisitDays(int sites, int regularSites, double ms)
+    {
+        if (IsEnabled()) WriteEvent(6, sites, regularSites, ms);
+    }
+
+    [Event(7, Level = EventLevel.Informational)]
+    public void RegularsMigrated(int migrated, int of)
+    {
+        if (IsEnabled()) WriteEvent(7, migrated, of);
+    }
+
+    [Event(8, Level = EventLevel.Informational)]
+    public void PlacesRefreshed(int backToList, int regulars, int done, int items)
+    {
+        if (IsEnabled()) WriteEvent(8, backToList, regulars, done, items);
+    }
 }

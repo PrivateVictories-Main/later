@@ -208,7 +208,7 @@ jobs:
         env:
           LATER_EXE: '${{ github.workspace }}/windows/out-debug/${{ matrix.rid }}/Later.exe'
         run: dotnet test windows/Later.Windows.Tests -c Release --filter "Category=Integration&FullyQualifiedName~AgentIntegration" --logger "console;verbosity=detailed"
-      - name: Cold agent memory and CPU (Release)
+      - name: Agent memory and CPU, cold and warm (Release)
         shell: pwsh
         run: ./windows/scripts/measure-agent.ps1 -Exe "windows/out/${{ matrix.rid }}/Later.exe" -Seconds 30
       - name: Nothing left behind

@@ -4,6 +4,7 @@ using Later.Core;
 using Later.Windows.Engine;
 using Later.Windows.Native;
 using Later.Windows.Platform;
+using Later.Windows.Reader;
 using Xunit;
 using Xunit.Abstractions;
 using static Later.Windows.Tests.Integration.ItSupport;
@@ -37,6 +38,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
             psi.Environment["LATER_DATA_DIR"] = dataDir;
             psi.Environment["LATER_TEST_LEFT_OPEN_SECONDS"] = "5";
             psi.Environment["LATER_TEST_PROFILE"] = profile;
+            psi.Environment["LATER_TEST_LOAD_RETRY_SECONDS"] = "2";   // a list that is only locked is asked for again after two seconds
             return new AgentProcess(Process.Start(psi)!);
         }
 
@@ -65,8 +67,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
                 {
                     using var gate = EngineLock.Open(suffix);
                     var timer = Stopwatch.StartNew();
-                    gate.SignalHandoff();
-                    Got = gate.TryAcquire(TimeSpan.FromSeconds(5)); Took = timer.Elapsed;
+                    Got = gate.AcquireForApp(TimeSpan.FromSeconds(5)); Took = timer.Elapsed;
                     acquired.Set();
                     if (Got) { release.Wait(); gate.Release(); }
                 }
@@ -108,8 +109,8 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
 
     static Item? Saved(string dir, int page) => ReadLibrary(dir)?.Items.FirstOrDefault(i => PageOf(i.Url) == page);
 
-    /// A page is left open in the background for five seconds, and it is saved at the next read; reads follow what changes in the
-    /// browser. So the test changes the tab now and then (the way a user does) until the condition holds.
+    /// Only where a test truly needs a new event: a tab opened in front of the others is on screen, and it is saved once it has been
+    /// left in the background, which takes a tab change. So the test changes the tab now and then (the way a user does).
     static bool Poll(Func<bool> done, TimeSpan timeout, UiaTest uia, Func<nint> window)
     {
         var timer = Stopwatch.StartNew(); int next = 0;
@@ -130,9 +131,44 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
 
     static string Suffix(string dir) => new AppPaths(dir).InstanceSuffix;
 
+    /// The classes (and whether each is visible) of the top-level windows a process owns.
+    static List<(string Class, bool Visible)> WindowsOfProcess(Process process)
+    {
+        var pid = (uint)process.Id;
+        var found = new List<(string, bool)>();
+        User32.EnumWindows((hwnd, lParam) =>
+        {
+            _ = User32.GetWindowThreadProcessId(hwnd, out var owner);
+            if (owner == pid) found.Add((User32.Class(hwnd), User32.IsWindowVisible(hwnd) != 0));
+            return 1;
+        }, 0);
+        return found;
+    }
+
+    /// The agent has an engine only while its hidden session window exists.
+    static bool Watching(AgentProcess agent) => WindowsOfProcess(agent.Process).Any(w => w.Class == "Later.Hidden");
+
     void ReportSaved(string what, Browser b, string dir) =>
         output.WriteLine($"AGENT {what} {b}: saved pages = {string.Join(",", (ReadLibrary(dir)?.Items ?? []).Select(i => PageOf(i.Url)).Order())}");
 
+    /// Brings the browser's window to the front if Windows lets this process (an Alt tap lifts the foreground lock; the Arm
+    /// runner's first-boot screen may still hold it). True when the browser is in front afterwards.
+    static bool BringToFront(Browser b, nint hwnd)
+    {
+        for (int attempt = 0; attempt < 2 && BrowserDiscovery.FrontBrowser() != b; attempt++)
+        {
+            NativeTest.keybd_event(0x12, 0, 0, 0); NativeTest.keybd_event(0x12, 0, 2, 0);
+            _ = NativeTest.SetForegroundWindow(hwnd);
+            if (WaitUntil(() => BrowserDiscovery.FrontBrowser() == b, TimeSpan.FromSeconds(3))) break;
+            _ = NativeTest.ShowWindow(hwnd, NativeTest.SwMinimize);
+            _ = NativeTest.ShowWindow(hwnd, NativeTest.SwRestore);
+            WaitUntil(() => BrowserDiscovery.FrontBrowser() == b, TimeSpan.FromSeconds(3));
+        }
+        return BrowserDiscovery.FrontBrowser() == b;
+    }
+
+    /// The claim itself: pages open in background tabs are saved by the one read the engine arms for the moment they qualify,
+    /// with no tab change, title change or any other event after the start. The page on screen is not saved.
     [Theory, MemberData(nameof(Browsers))]
     public void TheAgentSavesAPageLeftOpenInABackgroundTab(Browser b)
     {
@@ -141,10 +177,12 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
+        bool inFront = BringToFront(b, WindowsOf(b)[0].Hwnd);
+        output.WriteLine($"AGENT {b}: browser in front before the start = {inFront}");
         using var agent = AgentProcess.Start(dir.Path, f.Profile);
 
-        Assert.True(Poll(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90), uia, () => WindowsOf(b)[0].Hwnd),
-            "pages 1 and 2 were not saved");
+        Assert.True(WaitUntil(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90)),
+            "pages 1 and 2 were not saved by the armed read alone");
         ReportSaved("background tabs", b, dir.Path);
         foreach (var page in new[] { 1, 2 })
         {
@@ -153,6 +191,8 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
             Assert.True(item.Kind is Kind.Tools or Kind.Other, $"kind {item.Kind}");
             Assert.Equal(b, item.Browser);
         }
+        if (inFront && BrowserDiscovery.FrontBrowser() == b) Assert.Null(Saved(dir.Path, 3));   // on screen, and far from its two minutes
+        else output.WriteLine($"AGENT {b}: tab 3 not asserted, the browser was not in front (the Arm runner's first-boot screen holds it)");
         Assert.False(agent.Process.HasExited);
     }
 
@@ -166,7 +206,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
         using var agent = AgentProcess.Start(dir.Path, f.Profile);
         Func<nint> window = () => WindowsOf(b)[0].Hwnd;
-        Assert.True(Poll(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90), uia, window), "pages 1 and 2 were not saved");
+        Assert.True(WaitUntil(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90)), "pages 1 and 2 were not saved");
 
         using var app = new AppStandIn(Suffix(dir.Path));
         Assert.True(app.WaitAcquired());
@@ -195,7 +235,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
         using var agent = AgentProcess.Start(dir.Path, f.Profile);
         Func<nint> window = () => WindowsOf(b)[0].Hwnd;
-        Assert.True(Poll(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90), uia, window), "pages 1 and 2 were not saved");
+        Assert.True(WaitUntil(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90)), "pages 1 and 2 were not saved");
 
         int page = expectCrash ? 5 : 6;
         using var holder = AgentProcess.Start(dir.Path, f.Profile, flag: flag);   // takes the engine, then ends (badly, or after three seconds)
@@ -227,22 +267,69 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
     }
 
     [Fact]
+    public void ASecondAgentLeavesAtOnceAndTouchesNothingWhileTheFirstKeepsTheEngine()
+    {
+        using var dir = new TempDir();
+        using var first = AgentProcess.Start(dir.Path, dir.At("no-profile"));
+        Assert.True(WaitUntil(() => Watching(first), Slow), "the first agent never started its engine");
+        var before = Directory.GetFileSystemEntries(dir.Path).Select(p => Path.GetFileName(p)!).Order().ToArray();
+        using var second = AgentProcess.Start(dir.Path, dir.At("no-profile"));
+        Assert.True(second.Process.WaitForExit(3000), "a second agent kept running");
+        Assert.Equal(0, second.Process.ExitCode);
+        Assert.Equal(before, Directory.GetFileSystemEntries(dir.Path).Select(p => Path.GetFileName(p)!).Order().ToArray());
+        Assert.False(first.Process.HasExited);
+        Assert.True(Watching(first));
+        using var app = new AppStandIn(Suffix(dir.Path));   // the first agent still answers the app, so nobody else holds the lock
+        Assert.True(app.WaitAcquired());
+        Assert.True(app.Got, "the first agent did not give the engine up");
+    }
+
+    [Fact]
+    public void ADamagedListIsLeftToTheAppAndSaidSo()
+    {
+        using var dir = new TempDir();
+        var damaged = "{garbage"u8.ToArray();
+        File.WriteAllBytes(Path.Combine(dir.Path, "library.json"), damaged);
+        using var agent = AgentProcess.Start(dir.Path, dir.At("no-profile"));
+        var statusFile = new AgentStatusFile(Path.Combine(dir.Path, "agent-status.json"));
+        Assert.True(WaitUntil(() => statusFile.Read() is not null, Slow), "no status was written");
+        Assert.Equal(AgentState.NeedsRecovery, statusFile.Read()!.State);
+        Thread.Sleep(3000);
+        Assert.False(Watching(agent), "the agent watched with a damaged list");
+        Assert.Equal(damaged, File.ReadAllBytes(Path.Combine(dir.Path, "library.json")));
+        Assert.DoesNotContain(Directory.GetFiles(dir.Path), f => Path.GetFileName(f).StartsWith("library.corrupt-", StringComparison.Ordinal));   // set aside by the app, not here
+        using var app = new AppStandIn(Suffix(dir.Path));   // the idle agent still lets the app have the lock
+        Assert.True(app.WaitAcquired());
+        Assert.True(app.Got && app.Took < TimeSpan.FromSeconds(2));
+        Assert.Equal(AgentState.NeedsRecovery, statusFile.Read()!.State);   // for the app to show and clear
+    }
+
+    [Fact]
+    public void AListThatIsOnlyLockedIsAskedForAgainAndThenWatched()
+    {
+        using var dir = new TempDir();
+        var path = Path.Combine(dir.Path, "library.json");
+        File.WriteAllBytes(path, LibraryJson.Encode(new LibraryData()));
+        var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        try
+        {
+            using var agent = AgentProcess.Start(dir.Path, dir.At("no-profile"));
+            Thread.Sleep(5000);   // several tries of two seconds
+            Assert.False(agent.Process.HasExited);
+            Assert.False(Watching(agent), "the agent watched with a list it could not read");
+            Assert.False(File.Exists(Path.Combine(dir.Path, "agent-status.json")));   // not damaged: nothing to tell the app
+            locked.Dispose();
+            Assert.True(WaitUntil(() => Watching(agent), Slow), "the agent never came back to the list");
+        }
+        finally { locked.Dispose(); }
+    }
+
+    [Fact]
     public void NoWindowIsCreated()
     {
         using var dir = new TempDir();
         using var agent = AgentProcess.Start(dir.Path, dir.At("no-profile"));
-        var pid = (uint)agent.Process.Id;
-        List<(string Class, bool Visible)> Windows()
-        {
-            var found = new List<(string, bool)>();
-            User32.EnumWindows((hwnd, lParam) =>
-            {
-                _ = User32.GetWindowThreadProcessId(hwnd, out var owner);
-                if (owner == pid) found.Add((User32.Class(hwnd), User32.IsWindowVisible(hwnd) != 0));
-                return 1;
-            }, 0);
-            return found;
-        }
+        List<(string Class, bool Visible)> Windows() => WindowsOfProcess(agent.Process);
         Assert.True(WaitUntil(() => Windows().Any(w => w.Class == "Later.Hidden"), Slow), "the session window never appeared");
         Thread.Sleep(2000);
         var all = Windows();
