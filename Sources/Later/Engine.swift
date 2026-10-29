@@ -51,8 +51,14 @@ final class Engine {
     @ObservationIgnored private(set) var judge: Judge
     private(set) var status: [Browser: BrowserStatus] = [:]
     /// A failed save shows over the startup notice, which returns once saving works again.
-    var notice: String? { saveFailed ? Self.saveFailedNotice : loadNotice }
-    private let loadNotice: String?
+    var notice: String? {
+        if saveFailed { return Self.saveFailedNotice }
+        let text = [backgroundNotice, loadNotice].compactMap { $0 }.joined(separator: " ")
+        return text.isEmpty ? nil : text
+    }
+    private var loadNotice: String?
+    /// What the background helper reported while the window was closed (see AgentStatus).
+    private var backgroundNotice: String?
     private var saveFailed = false
     /// Bumped whenever the notice changes, so a notice the user dismissed shows again when it comes back,
     /// even if it went and came back between two renders with the same text.
@@ -65,9 +71,14 @@ final class Engine {
     private(set) var savesFeedHomes: Bool
     static let savesFeedHomesKey = "savesFeedHomes"
 
-    private let store: LibraryStore?
-    private let readOnly: Bool
-    static let readOnlyNotice = "Another copy of Later is still watching, so this window shows your list but won't save changes. Quit Later and open it again to make changes."
+    private var store: LibraryStore?
+    /// The store even while read-only, for taking over once the lock is free.
+    private let candidate: LibraryStore?
+    /// False while another process holds the engine lock: the list is shown, never changed or saved.
+    private(set) var canEdit: Bool
+    static let readOnlyNotice = "The background helper hasn't let go of your list yet, so it's read-only for now. Later tries again each time you come back to this window."
+    /// Called when saving starts failing (true) or works again (false), for a process with no window to show it in.
+    @ObservationIgnored var onSaveFailedChange: ((Bool) -> Void)?
     private let writer = DispatchQueue(label: "later.writer", qos: .utility)
     @ObservationIgnored private var bells: [Browser: Doorbell] = [:]
     /// Browsers macOS won't let Later watch for changes (Chrome's data folder is protected). They are read when the user
@@ -90,7 +101,7 @@ final class Engine {
     /// `readOnly`: another process holds the engine lock, so this one shows the list as it is on disk and never recovers,
     /// watches or saves.
     init(readOnly: Bool = false) {
-        self.readOnly = readOnly
+        canEdit = !readOnly
         io = BrowserIO()
         let feeds = !Sample.enabled && UserDefaults.standard.bool(forKey: Self.savesFeedHomesKey)
         savesFeedHomes = feeds
@@ -105,14 +116,9 @@ final class Engine {
             ?? LibraryStore.Loaded(data: LibraryData(), notice: nil)
         // A damaged file that couldn't be set aside blocks saving, so it can never be overwritten.
         self.store = loaded.writable ? store : nil
+        candidate = store
         library = Library(data: loaded.data)
-        if sample == nil {   // old pages take the current rules; saved by the next change
-            let merged = library.mergeDuplicates()
-            secretsDropped = library.dropSecretLinks()
-            let r = library.refreshKinds()
-            Perf.log.info("dropSecretLinks removed=\(self.secretsDropped, privacy: .public)")
-            Perf.log.info("mergeDuplicates removed=\(merged, privacy: .public) refreshKinds items=\(r.items, privacy: .public) changed=\(r.changed, privacy: .public) toTools=\(r.toTools, privacy: .public)")
-        }
+        if sample == nil { secretsDropped = Self.tidy(library) }
         // A sample list's icons stay in memory, like the list itself.
         icons = SiteIcons(library: library, folder: sample == nil ? SiteIcons.folder : nil)
         judge = Judge(library: library, watched: [], savesFeedHomes: feeds)   // replaced in start(), once the watched browsers are known
@@ -138,16 +144,18 @@ final class Engine {
     #if DEBUG
     /// Tests only: an engine around `library`, in memory: nothing is read or saved, and no browser is looked at.
     init(testing library: Library, io: BrowserIO = BrowserIO(isRunning: { _ in false }, permission: { _ in .notRunning },
-                                                             read: { _ in throw ReadError.notRunning }), store: LibraryStore? = nil) {
+                                                             read: { _ in throw ReadError.notRunning }), store: LibraryStore? = nil,
+                  readOnly: Bool = false) {
         self.library = library
         self.io = io
-        readOnly = false
+        canEdit = !readOnly
         icons = SiteIcons(library: library, folder: nil)
         judge = Judge(library: library, watched: [])
-        loadNotice = nil
+        loadNotice = readOnly ? Self.readOnlyNotice : nil
         paused = false
         savesFeedHomes = false
-        self.store = store
+        self.store = readOnly ? nil : store
+        candidate = store
     }
 
     /// Tests only: waits for the reads in flight.
@@ -157,7 +165,7 @@ final class Engine {
     #endif
 
     func start() {
-        guard !started, !Sample.enabled, !readOnly else { return }   // a sample list watches no browser
+        guard !started, !Sample.enabled, canEdit else { return }   // a sample list watches no browser
         started = true
         // Watching is the whole job: macOS must not quietly quit Later once its last window closes.
         ProcessInfo.processInfo.disableAutomaticTermination("Later watches your open tabs")
@@ -228,6 +236,36 @@ final class Engine {
         switchOnly = []
         for browser in Browser.allCases { generation[browser, default: 0] += 1 }
         try write()
+    }
+
+    /// Old pages take the current rules (saved by the next change): merged copies, no links with a secret, kinds as the rules
+    /// say now. Returns how many pages with a secret went away. Logs counts only.
+    private static func tidy(_ library: Library) -> Int {
+        let merged = library.mergeDuplicates()
+        let secrets = library.dropSecretLinks()
+        let r = library.refreshKinds()
+        Perf.log.info("dropSecretLinks removed=\(secrets, privacy: .public)")
+        Perf.log.info("mergeDuplicates removed=\(merged, privacy: .public) refreshKinds items=\(r.items, privacy: .public) changed=\(r.changed, privacy: .public) toTools=\(r.toTools, privacy: .public)")
+        return secrets
+    }
+
+    /// The window app held the list read-only because the helper didn't hand it over, and now holds the engine lock: load
+    /// the list as it is now (recovering it if need be) and take over. The caller starts watching.
+    func becomeWritable() {
+        guard !canEdit, let candidate else { return }
+        let loaded = candidate.load()
+        store = loaded.writable ? candidate : nil
+        loadNotice = loaded.notice
+        library.replace(with: loaded.data)
+        secretsDropped = Self.tidy(library)
+        canEdit = true
+        noticeGeneration += 1
+    }
+
+    /// Shows what the background helper reported while the window was closed, over the startup notice.
+    func showBackgroundProblem(_ text: String) {
+        backgroundNotice = text
+        noticeGeneration += 1
     }
 
     /// Once, as Later starts: when the history says saved pages were opened, for those it doesn't say yet and wasn't already
@@ -466,6 +504,7 @@ final class Engine {
         if saveFailed == ok {
             saveFailed = !ok
             noticeGeneration += 1
+            onSaveFailedChange?(!ok)
         }
     }
 }

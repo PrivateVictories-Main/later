@@ -263,9 +263,9 @@ struct ItemActions {
     /// Every change here is undoable, with Undo and Redo registered by the library (see LibraryUndo). Several pages
     /// changed at once are one Undo, since they're registered in the same turn of the run loop.
     private func change(_ items: [Item], _ body: () -> Void) {
-        guard !items.isEmpty else { return }
+        guard !items.isEmpty, engine.canEdit else { return }   // read-only: the buttons are disabled, and keys do nothing
         // Out of the search field first, so Edit ▸ Undo undoes this change, not the typing. The search text stays.
-        for window in NSApp.windows where window.firstResponder is NSText { window.makeFirstResponder(nil) }
+        for window in NSApp?.windows ?? [] where window.firstResponder is NSText { window.makeFirstResponder(nil) }
         model.perform(on: Set(items.map(\.id)), body)
     }
 }

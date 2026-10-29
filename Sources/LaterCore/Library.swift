@@ -133,6 +133,12 @@ public final class Library {
         return (data.items.count, changed, toTools)
     }
 
+    /// Swaps in the list as it is on disk now, for a process that showed an older read of it.
+    public func replace(with data: LibraryData) {
+        self.data = data
+        changed(reindexing: true)
+    }
+
     /// Removes saved pages whose link carries a secret in its path (a reset or invite link saved before the rule existed).
     /// Runs once when the list loads. Returns how many went away: counts only, for the log.
     @discardableResult
