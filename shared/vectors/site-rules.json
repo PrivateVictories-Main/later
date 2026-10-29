@@ -320,7 +320,7 @@
     {"url": "https://example.com/reference/api/callback", "title": "Callbacks | Reference", "specific": true},
     {"url": "https://example.com/manual/chapter/success", "title": "Success | Manual", "specific": true},
     {"url": "https://example.com/guide/getting-started/redirect", "title": "Redirects | Guide", "specific": true},
-    {"url": "https://example.com/api-reference/users/verify", "title": "Verify a user | API reference", "specific": true},
+    {"url": "https://example.com/api-reference/accounts/verify", "title": "Verify a user | API reference", "specific": true},
     {"url": "https://example.com/wiki/Consent", "title": "Consent - Wikipedia", "specific": true},
     {"url": "https://example.com/p/article", "title": "Forbidden – Example", "specific": false},
     {"url": "https://example.com/p/article", "title": "Captcha | Example", "specific": false},

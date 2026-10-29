@@ -159,7 +159,7 @@ import Testing
         #expect(lib.data.items[0].regular == nil)   // nil is shown as a normal page and looked at again later
     }
 
-    @Test func aFailedHistoryAnswerDoesNotForgetTheLastGoodOne() {
+    @Test func aFailedHistoryReadDoesNotForgetTheLastGoodOne() {
         let lib = Library()
         lib.setHistoryDays(["a.com": [today - 1, today - 2, today - 3, today - 4]])
         lib.setHistoryDays([:])
