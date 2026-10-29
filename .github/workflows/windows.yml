@@ -82,3 +82,82 @@ jobs:
           if ($p.HasExited) { throw "Later.exe exited early with $($p.ExitCode)" }
           $p | Stop-Process -Force
           Write-Host 'app started and stayed up for 6 s'
+
+  # Decides whether this push asks for the diagnostic probe (a commit message containing the marker, or a manual run).
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      probe: ${{ steps.m.outputs.probe }}
+    steps:
+      - id: m
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          msg=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA" --jq .commit.message)
+          case "$msg" in *'[probe]'*) echo probe=true >> "$GITHUB_OUTPUT" ;; *) echo probe=$MANUAL >> "$GITHUB_OUTPUT" ;; esac
+
+  probe:
+    name: probe (${{ matrix.arch }})
+    needs: gate
+    if: needs.gate.outputs.probe == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2025, arch: x64 }
+          - { os: windows-11-arm, arch: arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: windows/global.json
+      - name: Find browsers
+        shell: pwsh
+        run: ./windows/scripts/find-browsers.ps1
+      - name: Probe
+        run: dotnet test windows/Later.Windows.Tests -c Release --filter "Category=Probe" --logger "console;verbosity=detailed"
+        env:
+          LATER_REQUIRE_BROWSERS: '1'
+
+  integration:
+    name: integration (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2025, arch: x64 }
+          - { os: windows-11-arm, arch: arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LATER_REQUIRE_BROWSERS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: windows/global.json
+      - name: Find browsers
+        shell: pwsh
+        run: ./windows/scripts/find-browsers.ps1
+      - name: Reader integration tests
+        run: dotnet test windows/Later.Windows.Tests -c Release --filter "Category=Integration" --logger "console;verbosity=detailed"
+      - name: Nothing left behind
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force
+          Remove-Item -Recurse -Force (Join-Path $env:RUNNER_TEMP 'helium') -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force (Join-Path $env:RUNNER_TEMP 'helium-dl') -ErrorAction SilentlyContinue
+          Get-ChildItem $env:TEMP -Filter 'LaterIT-*' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
