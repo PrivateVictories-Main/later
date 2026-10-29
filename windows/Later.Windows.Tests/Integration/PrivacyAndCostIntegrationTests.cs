@@ -126,6 +126,12 @@ public class PrivacyAndCostIntegrationTests(ITestOutputHelper output) : IClassFi
         for (int i = 0; i < N; i++) { ReadAll(out _, out _); Thread.Sleep(150); }
         double own = OwnCpuMs() - own0; clock.Stop();
         var s1 = BrowserUse(marker);
+        // Control with accessibility already switched on and no reader: the page keeps changing, and the browser serves that tree now.
+        var a0 = BrowserUse(marker); var aClock = Stopwatch.StartNew();
+        Thread.Sleep(6000);
+        var a1 = BrowserUse(marker); aClock.Stop();
+        idleRate = (a1.CpuMs - a0.CpuMs) / aClock.Elapsed.TotalSeconds;
+        output.WriteLine($"HEAVY {b} idle with accessibility on, no reader: {idleRate:F0} ms/s");
         double browserTotal = s1.CpuMs - s0.CpuMs, browserExtra = browserTotal - idleRate * clock.Elapsed.TotalSeconds;
         double perRead = own / N;
         output.WriteLine($"HEAVY {b} bounded read of 2 windows / 6 heavy tabs x{N}: later {perRead:F1} ms per read; browser cpu {browserTotal:F0} ms total ({browserExtra / N:F1} ms per read above idle); private {(s1.PrivateBytes - s0.PrivateBytes) / 1048576.0:+0.0;-0.0} MB");
