@@ -284,7 +284,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         using var second = BrowserFixture.Start(ExeOf(b), server, [], profile: first.Profile, restore: true);
         Assert.True(WaitUntil(() => WindowsOf(b).Any() && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 4, Slow), "the restored window did not get four tabs");
         var sessionsDir = Path.Combine(first.Profile, "Default", "Sessions");
-        foreach (var file in Directory.Exists(sessionsDir) ? Directory.GetFiles(sessionsDir).OrderBy(x => x, StringComparer.Ordinal) : [])
+        foreach (string file in (Directory.Exists(sessionsDir) ? Directory.GetFiles(sessionsDir) : []).OrderBy(x => x, StringComparer.Ordinal))
         {
             try
             {
