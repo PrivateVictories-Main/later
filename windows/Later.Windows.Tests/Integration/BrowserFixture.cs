@@ -40,10 +40,17 @@ internal sealed class BrowserFixture : IDisposable
         for (int i = 0; i < 40; i++)   // the browser lets go of its files a moment after exit
         {
             try { if (Directory.Exists(Profile)) Directory.Delete(Profile, true); return; }
-            catch (IOException) { Thread.Sleep(250); }
-            catch (UnauthorizedAccessException) { Thread.Sleep(250); }
+            catch (IOException) { KillProfileProcesses(); Thread.Sleep(250); }
+            catch (UnauthorizedAccessException) { KillProfileProcesses(); Thread.Sleep(250); }
         }
         throw new IOException($"could not delete {Profile}");
+    }
+
+    /// Browser processes still holding this profile (children that outlived a failed test) are ended so the folder can go.
+    void KillProfileProcesses()
+    {
+        foreach (var pid in LeftoverGuard.Pids(System.IO.Path.GetFileName(Profile)))
+            try { Process.GetProcessById(pid).Kill(true); } catch (ArgumentException) { } catch (InvalidOperationException) { }
     }
 
     public static string? Exe(Browser b) => Environment.GetEnvironmentVariable(b == Browser.Chrome ? "LATER_CHROME" : "LATER_HELIUM");

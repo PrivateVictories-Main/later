@@ -331,10 +331,10 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
 /// After the class: no browser process whose command line names a throwaway profile may still run (kills and fails otherwise).
 public sealed class LeftoverGuard : IDisposable
 {
-    public static List<int> Pids()
+    public static List<int> Pids(string marker = "LaterIT-")
     {
         var psi = new ProcessStartInfo("powershell.exe") { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
-        foreach (var a in new[] { "-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -like '*LaterIT-*' } | ForEach-Object { $_.ProcessId }" })
+        foreach (var a in new[] { "-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -like '*" + marker + "*' } | ForEach-Object { $_.ProcessId }" })
             psi.ArgumentList.Add(a);
         using var p = Process.Start(psi)!;
         var text = p.StandardOutput.ReadToEnd(); p.WaitForExit();

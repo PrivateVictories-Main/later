@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Later.Core;
 using Later.Windows.Reader;
+using Later.Windows;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -23,10 +24,14 @@ public class ProbeDump(ITestOutputHelper output)
         P($"{browser} version ProductName='{info.ProductName}' FileDescription='{info.FileDescription}' Version={info.FileVersion} CompanyName='{info.CompanyName}'");
         using var server = new FixtureServer();
         using var normal = BrowserFixture.Start(exe, server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
-        Assert.True(ItSupport.WaitUntil(() => ItSupport.WindowsOf(browser).Any(w => w.Title.Contains("Fixture", StringComparison.Ordinal)), TimeSpan.FromSeconds(40)), "normal window did not appear");
+        bool appeared = ItSupport.WaitUntil(() => ItSupport.WindowsOf(browser).Any(w => w.Title.Contains("Fixture", StringComparison.Ordinal)), TimeSpan.FromSeconds(40));
+        P($"normal window appeared={appeared}");
+        AllChromeWindows();
         using var incognito = BrowserFixture.Start(exe, server, [FixtureServer.Url(9)], incognito: true, profile: normal.Profile);
-        Assert.True(ItSupport.WaitUntil(() => ItSupport.WindowsOf(browser).Count >= 2, TimeSpan.FromSeconds(40)), "second window did not appear");
+        bool two = ItSupport.WaitUntil(() => ItSupport.WindowsOf(browser).Count >= 2, TimeSpan.FromSeconds(40));
+        P($"second window appeared={two}");
         Thread.Sleep(5000);   // let titles, tab strips and the accessibility tree settle
+        AllChromeWindows();
         using var uia = new UiaTest();
         using var source = new UiaSource();
         var foreground = BrowserDiscovery.FrontBrowser();
@@ -73,6 +78,20 @@ public class ProbeDump(ITestOutputHelper output)
             P("after 8 s idle: " + string.Join(" | ", uia.Tabs(normalWindow.Hwnd).Select(t => $"{(t.Selected ? "*" : "")}'{t.Name}'")));
         }
         P($"=== end {browser}");
+    }
+
+    /// Every top-level window of class Chrome_WidgetWin_1, listed or not, with why the product may skip it.
+    void AllChromeWindows()
+    {
+        Native.User32.EnumWindows((hwnd, lParam) =>
+        {
+            if (Native.User32.Class(hwnd) == "Chrome_WidgetWin_1")
+            {
+                _ = Native.User32.GetWindowThreadProcessId(hwnd, out var pid);
+                P($"any Chrome_WidgetWin_1 hwnd={hwnd} visible={Native.User32.IsWindowVisible(hwnd)} owner={Native.User32.GetWindow(hwnd, Native.User32.GwOwner)} exstyle=0x{Native.User32.GetWindowLong(hwnd, Native.User32.GwlExStyle):x} pid={pid} title='{Native.User32.Title(hwnd)}' exe={Native.User32.ImagePath(pid)}");
+            }
+            return 1;
+        }, 0);
     }
 
     public static IEnumerable<object[]> Browsers() => ItSupport.Browsers();

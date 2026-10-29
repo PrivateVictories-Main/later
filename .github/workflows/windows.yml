@@ -130,6 +130,8 @@ jobs:
 
   integration:
     name: integration (${{ matrix.arch }})
+    needs: gate
+    if: needs.gate.outputs.probe != 'true'
     strategy:
       fail-fast: false
       matrix:
