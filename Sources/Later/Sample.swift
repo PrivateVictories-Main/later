@@ -92,6 +92,24 @@ enum Sample {
         (.shopping, "https://www.etsy.com/listing/1234567890/handmade-ceramic-coffee-mug", "Handmade Ceramic Coffee Mug, Speckled Stoneware, 12 oz", 160, 1, false),
     ]
 
+    /// (link, title, days ago, days of the last 28 the site was visited): home pages and dashboards, which the sample's
+    /// history makes regulars when visited on four or more.
+    private static let places: [(String, String, Double, Int)] = [
+        ("https://github.com/", "GitHub", 0.1, 24),
+        ("https://news.ycombinator.com/", "Hacker News", 0.3, 19),
+        ("https://www.reddit.com/", "reddit: the front page of the internet", 0.9, 14),
+        ("https://www.theatlantic.com/", "The Atlantic", 2.2, 6),
+        ("https://tinytools.example.net/", "Tiny Tools: small utilities for everyday jobs", 1.4, 1),
+    ]
+
+    /// What the sample's browser history says: how many of the last 28 days each place's site was visited.
+    @MainActor static func visitDays(now: Date = .now) -> [String: Set<Int>] {
+        let today = Familiarity.dayNumber(of: now)
+        return Dictionary(uniqueKeysWithValues: places.map { place in
+            (Library.host(of: place.0), Set((1...place.3).map { today - $0 }))
+        })
+    }
+
     /// Nil without `--sample`. Built through `Library`'s own calls, so the items are shaped like real saves.
     @MainActor static func data(now: Date = .now) -> LibraryData? {
         guard enabled else { return nil }
@@ -103,6 +121,12 @@ enum Sample {
                          browser: .helium, now: when)
             for _ in 1..<visits { library.recordVisit(url: url, now: when) }
             if done, let item = library.data.items.last { library.setDone(item.id, true, now: when.addingTimeInterval(3_600)) }
+        }
+        library.setHistoryDays(visitDays(now: now))
+        for (url, title, daysAgo, _) in places {
+            let host = Library.host(of: url)
+            library.save(url: url, title: title, verdict: Verdict(isSpecific: true, kind: .tools, pageType: host + "/~", isPlace: true),
+                         browser: .helium, now: now.addingTimeInterval(-daysAgo * 86_400))
         }
         // What Helium's history would add, for most pages: when each was first opened, earlier than Later saw it, and a
         // visit count; and the places of the pages in open tabs, across two windows. Every fourth page has no history.

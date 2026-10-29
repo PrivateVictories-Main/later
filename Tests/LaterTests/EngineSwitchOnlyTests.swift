@@ -14,6 +14,9 @@ final class FakeBrowsers: @unchecked Sendable {
     /// What the browser's history says, by link, and the links it was asked about (never the real history).
     var historyAnswers: [String: HistoryLookup.Result] = [:]
     private(set) var historyAsked: [String] = []
+    /// Which days the history says each site was visited, and the starting dates it was asked from.
+    var visitDayAnswers: [String: Set<Int>] = [:]
+    private(set) var visitDaysAsked: [Date] = []
 
     var io: BrowserIO {
         BrowserIO(isRunning: { self.running.contains($0) },
@@ -25,6 +28,10 @@ final class FakeBrowsers: @unchecked Sendable {
                   history: { links in
                       self.historyAsked += links
                       return self.historyAnswers.filter { links.contains($0.key) }
+                  },
+                  visitDays: { since in
+                      self.visitDaysAsked.append(since)
+                      return self.visitDayAnswers
                   })
     }
 }

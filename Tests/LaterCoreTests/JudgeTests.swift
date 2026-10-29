@@ -26,6 +26,7 @@ final class Harness {
 
     func wait(_ seconds: TimeInterval) { now += seconds }
     func show(_ tabs: Tab...) { judge.ingest(Snapshot(browser: .helium, tabs: tabs), now: now) }
+    func show(in browser: Browser, _ tabs: Tab...) { judge.ingest(Snapshot(browser: browser, tabs: tabs), now: now) }
     var saved: [String] { library.data.items.map(\.url) }
 }
 

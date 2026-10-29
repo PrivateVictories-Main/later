@@ -53,7 +53,7 @@ struct SettingsView: View {
                 }
                 Toggle(isOn: Binding(get: { engine.savesFeedHomes }, set: { engine.setSavesFeedHomes($0) })) {
                     SettingLabel(symbol: "rectangle.stack.fill", color: .indigo, title: "Also save feed home pages",
-                                 detail: "Keeps the YouTube, X, Reddit, Facebook, Instagram and Amazon home pages, which Later skips by default.")
+                                 detail: "Keeps the YouTube, X, Reddit, Facebook, Instagram and Amazon home pages, which Later skips by default. On sites you visit all the time they wait in Regulars.")
                 }
                 Picker(selection: $model.sort) {
                     ForEach(LibrarySort.allCases, id: \.self) { Text($0.title).tag($0) }

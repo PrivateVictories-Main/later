@@ -77,6 +77,7 @@ public class VectorTests
             var v = PageRules.Judge(url, c.Title, fixes, c.Feeds ?? false);
             string who = $"{c.Url} [{c.Title}]";
             if (c.Specific is { } s && v.IsSpecific != s) failures.Add($"{who}: specific expected {s} actual {v.IsSpecific}");
+            if (c.Place is { } place && v.IsPlace != place) failures.Add($"{who}: place expected {place} actual {v.IsPlace}");
             if (c.Kind is { } k && v.Kind.Wire() != k) failures.Add($"{who}: kind expected {k} actual {v.Kind.Wire()}");
             if (c.PageType is { } t && v.PageType != t) failures.Add($"{who}: pageType expected {t} actual {v.PageType}");
             if (c.PageTypeSuffix is { } ps && !v.PageType.EndsWith(ps, StringComparison.Ordinal)) failures.Add($"{who}: pageType {v.PageType} should end with {ps}");

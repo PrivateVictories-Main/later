@@ -28,15 +28,49 @@ enum BrowserStatus: Equatable {
     }
 }
 
-/// What the engine asks of the outside world about a browser, so tests can stand in for it.
+/// What the engine asks of the outside world about a browser, so tests can stand in for it. Every default is a stand-in that
+/// answers nothing, so an engine built in a test can never read a real browser or its history; only `real` does.
 struct BrowserIO {
-    var isRunning: (Browser) -> Bool = { BrowserReader.mainInstance(of: $0) != nil }
+    var isRunning: (Browser) -> Bool = { _ in false }
     /// Nil: allowed. Never shows macOS's prompt.
-    var permission: (Browser) async -> ReadError? = { await BrowserReader.checkPermission($0) }
-    var read: (Browser) async throws -> Snapshot = { try await BrowserReader.read($0) }
+    var permission: (Browser) async -> ReadError? = { _ in .notRunning }
+    var read: (Browser) async throws -> Snapshot = { _ in throw ReadError.notRunning }
     /// When Helium's history says each link was first opened, and how often. Reads the History files, read-only.
-    var history: @Sendable ([String]) -> [String: HistoryLookup.Result] = { links in
-        HistoryLookup.lookup(links, in: HistoryLookup.databases(in: RealHome.path + "/" + Browser.helium.dataFolder))
+    var history: @Sendable ([String]) -> [String: HistoryLookup.Result] = { _ in [:] }
+    /// Which days of the last 28 each site was visited, from the same files.
+    var visitDays: @Sendable (Date) -> [String: Set<Int>] = { _ in [:] }
+    /// The browser folder `history` and `visitDays` read. Nil for a stand-in.
+    var historyFolder: String?
+
+    static var real: BrowserIO {
+        let folder = RealHome.path + "/" + Browser.helium.dataFolder
+        return BrowserIO(
+            isRunning: { BrowserReader.mainInstance(of: $0) != nil },
+            permission: { await BrowserReader.checkPermission($0) },
+            read: { try await BrowserReader.read($0) },
+            history: { HistoryLookup.lookup($0, in: HistoryLookup.databases(in: folder)) },
+            visitDays: { since in
+                VisitDaysCache.shared.days(since: since) { HistoryLookup.visitDays(in: HistoryLookup.databases(in: folder), since: $0) }
+            },
+            historyFolder: folder)
+    }
+}
+
+/// The last History answer to "which days was each site visited", kept for the process: an engine started again (each
+/// hand-off between the app and its helper) reuses it within the same day instead of reading the History again. An empty
+/// answer (a failed read) is never kept.
+final class VisitDaysCache: @unchecked Sendable {
+    static let shared = VisitDaysCache()
+    private let lock = NSLock()
+    private var cached: (since: Date, days: [String: Set<Int>])?
+
+    func days(since: Date, ask: (Date) -> [String: Set<Int>]) -> [String: Set<Int>] {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached, cached.since == since { return cached.days }
+        let days = ask(since)
+        if !days.isEmpty { cached = (since, days) }
+        return days
     }
 }
 
@@ -95,6 +129,10 @@ final class Engine {
     @ObservationIgnored private var stopped = false
     @ObservationIgnored private var observers: [(center: NotificationCenter, token: NSObjectProtocol)] = []
     @ObservationIgnored private var historyLookups = 0
+    /// The latest daily History ask, kept so tests can wait for it exactly.
+    @ObservationIgnored private var visitDaysTask: Task<Void, Never>?
+    /// The day (see `Familiarity.dayNumber`) the history was last asked which days each site was visited.
+    @ObservationIgnored private var visitDaysAsOf: Int?
     /// Saved pages removed at load because their link carried a secret; start() saves the list without them.
     @ObservationIgnored private var secretsDropped = 0
 
@@ -104,7 +142,7 @@ final class Engine {
     /// leaves them for the window app, which can tell the user how many went.
     init(readOnly: Bool = false, dropsSecretLinks: Bool = true) {
         canEdit = !readOnly
-        io = BrowserIO()
+        io = .real
         let feeds = !Sample.enabled && UserDefaults.standard.bool(forKey: Self.savesFeedHomesKey)
         savesFeedHomes = feeds
         #if DEBUG
@@ -122,7 +160,8 @@ final class Engine {
         library = Library(data: loaded.data)
         if sample == nil { secretsDropped = Self.tidy(library, dropsSecretLinks: dropsSecretLinks) }
         // A sample list's icons stay in memory, like the list itself.
-        icons = SiteIcons(library: library, folder: sample == nil ? SiteIcons.folder : nil)
+        icons = SiteIcons(library: library, folder: sample == nil ? SiteIcons.folder : nil,
+                          helium: RealHome.path + "/" + Browser.helium.dataFolder)
         judge = Judge(library: library, watched: [], savesFeedHomes: feeds)   // replaced in start(), once the watched browsers are known
         loadNotice = store == nil && sample == nil ? "Later can't open its storage folder, so saves won't be kept." : loaded.notice
         paused = !Sample.enabled && UserDefaults.standard.bool(forKey: "paused")
@@ -134,6 +173,7 @@ final class Engine {
         }
         #if DEBUG
         if sample != nil {
+            library.setHistoryDays(Sample.visitDays())
             status = Sample.statuses
             openCopies = Sample.openCopies(library)
         }
@@ -146,13 +186,11 @@ final class Engine {
 
     #if DEBUG
     /// Tests only: an engine around `library`, in memory: nothing is read or saved, and no browser is looked at.
-    init(testing library: Library, io: BrowserIO = BrowserIO(isRunning: { _ in false }, permission: { _ in .notRunning },
-                                                             read: { _ in throw ReadError.notRunning }), store: LibraryStore? = nil,
-                  readOnly: Bool = false) {
+    init(testing library: Library, io: BrowserIO = BrowserIO(), store: LibraryStore? = nil, readOnly: Bool = false) {
         self.library = library
         self.io = io
         canEdit = !readOnly
-        icons = SiteIcons(library: library, folder: nil)
+        icons = SiteIcons(library: library, folder: nil, helium: "/nonexistent")   // never a real browser folder
         judge = Judge(library: library, watched: [])
         loadNotice = readOnly ? Self.readOnlyNotice : nil
         paused = false
@@ -161,9 +199,13 @@ final class Engine {
         candidate = store
     }
 
+    /// The browser folder this engine reads History from; nil for a stand-in.
+    var historyFolder: String? { io.historyFolder }
+
     /// Tests only: waits for the reads in flight.
     func settle() async {
         for _ in 0..<500 where !reading.isEmpty || !readAgain.isEmpty || historyLookups > 0 { await Task.yield() }
+        await visitDaysTask?.value
     }
     #endif
 
@@ -223,6 +265,7 @@ final class Engine {
         for browser in Browser.allCases where status[browser] != .notInstalled { startWatching(browser) }
         judge = makeJudge()
         backfillHistory()
+        refreshVisitDays()
         frontAppChanged(bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)   // rings the front browser
         for browser in Browser.allCases where browser != judge.frontBrowser { ring(browser) }
     }
@@ -247,6 +290,8 @@ final class Engine {
         let merged = library.mergeDuplicates()
         let secrets = dropsSecretLinks ? library.dropSecretLinks() : 0
         let r = library.refreshKinds()
+        let places = library.refreshPlaces()
+        Perf.log.info("refreshPlaces backToList=\(places, privacy: .public) regulars=\(library.data.items.filter(\.isActiveRegular).count, privacy: .public) done=\(library.data.items.filter { $0.status == .done }.count, privacy: .public) items=\(library.data.items.count, privacy: .public)")
         Perf.log.info("dropSecretLinks removed=\(secrets, privacy: .public)")
         Perf.log.info("mergeDuplicates removed=\(merged, privacy: .public) refreshKinds items=\(r.items, privacy: .public) changed=\(r.changed, privacy: .public) toTools=\(r.toTools, privacy: .public)")
         return secrets
@@ -284,6 +329,27 @@ final class Engine {
     /// Once, as Later starts: when the history says saved pages were opened, for those it doesn't say yet and wasn't already
     /// asked about at an earlier launch.
     func backfillHistory() { lookUpHistory(library.linksMissingHistory(), remembersMisses: true) }
+
+    /// Asks the history which days of the last 28 each site was visited, off the main thread: at launch, and again on the
+    /// first read after the local date changes. Then pages saved before Regulars that are places on regular sites move
+    /// there, once. Nothing is read in between, and logs are counts and time only.
+    func refreshVisitDays(now: Date = .now) {
+        let today = Familiarity.dayNumber(of: now)
+        guard visitDaysAsOf != today, !Sample.enabled else { return }
+        visitDaysAsOf = today
+        let calendar = Calendar.current
+        let since = calendar.date(byAdding: .day, value: -Familiarity.window, to: calendar.startOfDay(for: now)) ?? now
+        let ask = io.visitDays
+        visitDaysTask = Task {
+            let start = ContinuousClock.now
+            let days = await Task.detached(priority: .utility) { ask(since) }.value
+            library.setHistoryDays(days)
+            let ms = Perf.ms(since: start)
+            Perf.log.info("visitDays sites=\(days.count, privacy: .public) regularSites=\(self.library.regularSiteCount(today: today), privacy: .public) \(ms, format: .fixed(precision: 1), privacy: .public)ms")
+            let r = library.migrateRegulars(today: today)
+            if r.of > 0 { Perf.log.info("regulars migrated=\(r.migrated, privacy: .public) of \(r.of, privacy: .public)") }
+        }
+    }
 
     /// Asks the history about these links off the main thread, then records the answers. Only ever for pages that are new
     /// or still unknown, never for a page on every read. Logs counts and time only.
@@ -433,6 +499,7 @@ final class Engine {
         do {
             let snapshot = try outcome.get()
             let judgeStart = ContinuousClock.now
+            refreshVisitDays()
             judge.ingest(snapshot, now: .now)
             lookUpHistory(library.takeAwaitingHistory())
             publishCopies()

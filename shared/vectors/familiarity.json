@@ -1,0 +1,43 @@
+{
+  "counts": {"civil": 6, "days": 7, "disposition": 20},
+  "constants": {"regularDays": 4, "window": 28},
+  "civil": [
+    {"year": 1970, "month": 1, "day": 1, "number": 0},
+    {"year": 1969, "month": 12, "day": 31, "number": -1},
+    {"year": 2000, "month": 3, "day": 1, "number": 11017},
+    {"year": 2024, "month": 2, "day": 29, "number": 19782},
+    {"year": 2026, "month": 10, "day": 29, "number": 20755},
+    {"year": 2026, "month": 12, "day": 31, "number": 20818}
+  ],
+  "days": [
+    {"today": 1000, "visited": [], "count": 0, "note": "no visits"},
+    {"today": 1000, "visited": [1000], "count": 0, "note": "today never counts"},
+    {"today": 1000, "visited": [971], "count": 0, "note": "29 days ago is outside the window"},
+    {"today": 1000, "visited": [972], "count": 1, "note": "28 days ago is the oldest day inside it"},
+    {"today": 1000, "visited": [999, 999, 998], "count": 2, "note": "distinct days, not visits"},
+    {"today": 1000, "visited": [972, 980, 990, 999, 1000, 971], "count": 4, "note": "today and the day before the window are left out"},
+    {"today": 1000, "visited": [1001], "count": 0, "note": "a day in the future never counts"}
+  ],
+  "disposition": [
+    {"place": false, "days": 0, "disposition": "save", "note": "content on a new site"},
+    {"place": false, "days": 4, "disposition": "save", "note": "content on a regular site is still worth remembering"},
+    {"place": false, "days": 28, "disposition": "save"},
+    {"place": true, "days": 0, "disposition": "save", "note": "a place on a new site is a tool you found"},
+    {"place": true, "days": 1, "disposition": "save"},
+    {"place": true, "days": 3, "disposition": "save", "note": "three days is still occasional"},
+    {"place": true, "days": 4, "disposition": "regular"},
+    {"place": true, "days": 5, "disposition": "regular"},
+    {"place": true, "days": 28, "disposition": "regular"},
+    {"place": true, "days": 10, "correction": {"isSpecific": true}, "disposition": "save", "note": "Keep in my list wins over familiarity"},
+    {"place": true, "days": 10, "correction": {"isSpecific": false}, "disposition": "regular", "note": "Not an idea is the judge's call, not familiarity's"},
+    {"place": true, "days": 10, "correction": {"kind": "reading"}, "disposition": "regular", "note": "moving a kind says nothing about regulars"},
+    {"place": true, "days": 0, "correction": {"regular": true}, "disposition": "regular", "note": "This is a regular wins over a new site"},
+    {"place": true, "days": 10, "correction": {"regular": false}, "disposition": "save"},
+    {"place": true, "days": 0, "correction": {"isSpecific": true, "regular": true}, "disposition": "regular", "note": "the later choice is stored as regular"},
+    {"place": true, "days": 10, "correction": {"isSpecific": true, "regular": false}, "disposition": "save"},
+    {"place": false, "days": 10, "correction": {"regular": true}, "disposition": "save", "note": "only places can be regulars"},
+    {"place": false, "days": 0, "correction": {"isSpecific": true}, "disposition": "save"},
+    {"place": true, "days": 3, "correction": {"isSpecific": true}, "disposition": "save"},
+    {"place": true, "days": 4, "correction": {}, "disposition": "regular", "note": "an empty correction is no correction"}
+  ]
+}

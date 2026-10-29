@@ -70,6 +70,7 @@ extension LibrarySection {
         case .kind(let kind): kind.title
         case .older: "Older"
         case .done: "Done"
+        case .regulars: "Regulars"
         }
     }
 
@@ -79,6 +80,7 @@ extension LibrarySection {
         case .kind(let kind): kind.symbol
         case .older: "clock"
         case .done: "checkmark.circle"
+        case .regulars: "repeat"
         }
     }
 
@@ -88,6 +90,7 @@ extension LibrarySection {
         case .kind(let kind): kind.badgeSymbol
         case .older: "clock.fill"
         case .done: "checkmark"
+        case .regulars: "repeat"
         }
     }
 
@@ -98,11 +101,12 @@ extension LibrarySection {
         case .kind(let kind): kind.color
         case .older: Color(nsColor: .systemGray)
         case .done: .green
+        case .regulars: Color(nsColor: .systemGray)
         }
     }
 
     /// The sidebar's order, also the order of ⌘1 to ⌘9.
-    static let ordered: [LibrarySection] = [.all] + Kind.allCases.map(LibrarySection.kind) + [.older, .done]
+    static let ordered: [LibrarySection] = [.all] + Kind.allCases.map(LibrarySection.kind) + [.older, .done, .regulars]
 }
 
 extension LibraryGrouping {

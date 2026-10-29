@@ -21,6 +21,9 @@ struct SidebarPane: View {
                 row(.older, counts)
                 row(.done, counts)
             }
+            Section {
+                row(.regulars, counts)
+            }
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) { StatusLine(engine: model.engine, openSettings: openSettings) }

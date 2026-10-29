@@ -298,6 +298,7 @@ struct EmptyLibrary: View {
         case .kind(let kind): kind.emptyTitle
         case .older: "Nothing older"
         case .done: "Nothing done yet"
+        case .regulars: "No regulars yet"
         }
     }
 
@@ -309,6 +310,7 @@ struct EmptyLibrary: View {
         case .kind(let kind): kind.emptyMessage
         case .older: "Pages you haven't been back to in two weeks move here. Later never deletes anything on its own."
         case .done: "Mark a page Done once you've dealt with it. It waits here until you empty Done."
+        case .regulars: "The home pages and dashboards of sites you visit all the time wait here, out of your list. Keep any of them in your list whenever you like."
         }
     }
 }

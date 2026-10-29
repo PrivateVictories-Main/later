@@ -55,6 +55,12 @@ launchd pins the agent to the code hash (cdhash) of the program it was registere
 
 `PageRules` judges by site rules first, then by the shape of the link: a page is kept unless it is a search, an inbox, a sign-in provider, a local address, a one-time link or an error page. Pages sort into Shopping, Posts, School, Reading, Videos, Tools or Other. When you correct a type of page, the correction applies to every page of that type, now and later.
 
+## Regulars
+
+`PageRules` marks a verdict `isPlace` for a site's home, a single-section page (page type `/~`) and the `general` and `feeds` patterns; a deeper page, a file or a page named by a query value is a thing. `Familiarity` (pure, in `LaterCore`) counts a site's distinct visit days in the last 28, today excluded; 4 or more is a regular. A place on a regular site that passes the attention rule is saved with `regular = true` and shows only under the Regulars section; a thing is always kept. A user correction (`Correction.isSpecific` from "Keep Pages Like This", `Correction.regular` from "This Is a Regular") always wins.
+
+Days come from two sources, merged per site. Helium's History gives host to day set from one read-only, immutable query (`HistoryLookup.visitDays`), run at launch and on the first read after the local date changes: no timer. Later's own notes (`siteDays`, hashed like `seen`) cover browsers whose History it can't read, and note only the active tab of the front window. The History answer is kept for the day in the process, so a hand-off between the app and its helper doesn't read it again. The first launch of 1.4 gives each saved place page with no flag one (`migrateRegulars`), but only once at least 4 different past days are known; until then the pages keep no flag and are looked at again. `refreshPlaces` takes the flag off saved pages the rules no longer call places. Nothing is deleted. Regular is only where an active page lives: Done lists every Done page. `shared/vectors/familiarity.json` holds the day-counting and disposition tables for both platforms. The query and the sidebar are Mac-only for now.
+
 ## Privacy by construction
 
 The sandbox has no network entitlement, so the app cannot open a connection. The only temporary exceptions are the Apple Events targets (Helium and Chrome) and read-only access to the two browsers' data folders. See [PRIVACY.md](../PRIVACY.md). CI fails any build whose signed app carries a `com.apple.security.network.*` entitlement.

@@ -28,6 +28,7 @@ public static class LibraryJson
                 w.WriteStartObject(type);
                 if (c.IsSpecific is { } s) w.WriteBoolean("isSpecific", s);
                 if (c.Kind is { } k) w.WriteString("kind", k.Wire());
+                if (c.Regular is { } regular) w.WriteBoolean("regular", regular);
                 w.WriteEndObject();
             }
             w.WriteEndObject();
@@ -79,7 +80,8 @@ public static class LibraryJson
             {
                 bool? specific = Optional(p.Value, "isSpecific") is { } s ? s.GetBoolean() : null;
                 Kind? kind = Optional(p.Value, "kind") is { } k ? KindInfo.FromWire(k.GetString() ?? throw new FormatException("kind")) : null;
-                data.Corrections[p.Name] = new Correction(specific, kind);
+                bool? regular = Optional(p.Value, "regular") is { } r ? r.GetBoolean() : null;
+                data.Corrections[p.Name] = new Correction(specific, kind, regular);
             }
             foreach (var p in Required(root, "seen").EnumerateObject()) data.Seen[p.Name] = ToDate(p.Value.GetDouble());
             foreach (var e in Required(root, "dwellSamples").EnumerateArray()) data.DwellSamples.Add(e.GetDouble());
