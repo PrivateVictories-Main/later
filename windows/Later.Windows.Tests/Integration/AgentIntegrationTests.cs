@@ -235,7 +235,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         List<(string Class, bool Visible)> Windows()
         {
             var found = new List<(string, bool)>();
-            User32.EnumWindows((hwnd, _) =>
+            User32.EnumWindows((hwnd, lParam) =>
             {
                 _ = User32.GetWindowThreadProcessId(hwnd, out var owner);
                 if (owner == pid) found.Add((User32.Class(hwnd), User32.IsWindowVisible(hwnd) != 0));
