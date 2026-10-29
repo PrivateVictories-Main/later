@@ -27,7 +27,7 @@ public class PreviousSessionTests
         public Snss TabWindow(int window, int tab) { Command(0, Ints(window, tab)); return this; }
         public Snss TabIndex(int tab, int index) { Command(2, Ints(tab, index)); return this; }
         public Snss Selected(int tab, int nav) { Command(7, Ints(tab, nav)); return this; }
-        public Snss TabClosed(int tab) { var m = new MemoryStream(Ints(tab)); m.Position = 4; m.Write(new byte[8]); Command(16, m.ToArray()); return this; }
+        public Snss TabClosed(int tab) { Command(16, [.. Ints(tab), .. new byte[8]]); return this; }
         public Snss Navigation(int tab, int nav, string url, string title)
         {
             var body = new MemoryStream();

@@ -49,19 +49,19 @@ internal sealed class SqliteDb : IDisposable
         return new SqliteStatement(stmt);
     }
 
-    public void Dispose() { if (db != 0) { SqliteNative.close_v2(db); db = 0; } }
+    public void Dispose() { if (db != 0) { _ = SqliteNative.close_v2(db); db = 0; } }
 }
 
 internal sealed class SqliteStatement(nint stmt) : IDisposable
 {
     static readonly nint Transient = new(-1);   // SQLITE_TRANSIENT
 
-    public SqliteStatement Bind(int i, string v) { SqliteNative.bind_text(stmt, i, v, -1, Transient); return this; }
-    public SqliteStatement Bind(int i, long v) { SqliteNative.bind_int64(stmt, i, v); return this; }
+    public SqliteStatement Bind(int i, string v) { _ = SqliteNative.bind_text(stmt, i, v, -1, Transient); return this; }
+    public SqliteStatement Bind(int i, long v) { _ = SqliteNative.bind_int64(stmt, i, v); return this; }
 
     /// True for a row, false at the end; throws SqliteException otherwise.
     public bool Step() { int c = SqliteNative.step(stmt); return c == 100 ? true : c == 101 ? false : throw new SqliteException(c); }
-    public void Reset() { SqliteNative.reset(stmt); SqliteNative.clear_bindings(stmt); }
+    public void Reset() { _ = SqliteNative.reset(stmt); _ = SqliteNative.clear_bindings(stmt); }
     public int Int(int col) => SqliteNative.column_int(stmt, col);
     public long Long(int col) => SqliteNative.column_int64(stmt, col);
     public string Text(int col) => Marshal.PtrToStringUTF8(SqliteNative.column_text(stmt, col)) ?? "";
@@ -72,5 +72,5 @@ internal sealed class SqliteStatement(nint stmt) : IDisposable
         var bytes = new byte[SqliteNative.column_bytes(stmt, col)]; Marshal.Copy(p, bytes, 0, bytes.Length); return bytes;
     }
 
-    public void Dispose() => SqliteNative.finalize(stmt);
+    public void Dispose() => _ = SqliteNative.finalize(stmt);
 }

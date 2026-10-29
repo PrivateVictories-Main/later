@@ -19,6 +19,6 @@ internal static partial class TestSqlite
             code = Exec(db, sql, 0, 0, 0);
             if (code != 0) throw new InvalidOperationException($"exec failed: {code}");
         }
-        finally { SqliteNative.close_v2(db); }
+        finally { _ = SqliteNative.close_v2(db); }
     }
 }
