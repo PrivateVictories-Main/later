@@ -202,6 +202,14 @@ enum Motion {
     static var listChange: Animation? { reduced ? .easeOut(duration: 0.12) : .smooth(duration: 0.3) }
     /// Folding, notices and other layout changes.
     static var standard: Animation? { reduced ? nil : .smooth(duration: 0.26) }
+    /// A row lighting up under the pointer.
+    static var hoverFade: Animation? { reduced ? nil : .easeOut(duration: 0.14) }
+    /// A button confirming itself ("Copied").
+    static var quick: Animation? { reduced ? nil : .snappy }
+    /// The notice bar arriving.
+    static var notice: AnyTransition { reduced ? .opacity : .move(edge: .top).combined(with: .opacity) }
+    /// An icon swapping for another.
+    static var symbolSwap: ContentTransition { reduced ? .identity : .symbolEffect(.replace) }
     /// A row's Open and Done coming up under the pointer: they grow into place, or only fade in.
     static var hover: AnyTransition { reduced ? .opacity : .opacity.combined(with: .scale(scale: 0.85, anchor: .trailing)) }
 }

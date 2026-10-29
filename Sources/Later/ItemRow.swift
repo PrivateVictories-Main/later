@@ -95,7 +95,7 @@ struct ItemRow: View, @MainActor Equatable {
         .padding(.vertical, 9)
         .background { background.animation(Motion.selection, value: selected) }
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .onHover { inside in withAnimation(.easeOut(duration: 0.14)) { hovering = inside } }
+        .onHover { inside in withAnimation(Motion.hoverFade) { hovering = inside } }
         .onTapGesture(perform: tap)
         .contextMenu { RowMenu(item: item, model: model) }
         // One element, instead of SwiftUI combining the row's texts (which costs every new row a query of each one):

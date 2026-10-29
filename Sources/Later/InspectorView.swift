@@ -76,10 +76,10 @@ struct ItemDetail: View {
                         HStack(spacing: 8) {
                             Button {
                                 actions.copyLinks([item])
-                                withAnimation(.snappy) { copied = true }
+                                withAnimation(Motion.quick) { copied = true }
                             } label: {
                                 Label(copied ? "Copied" : "Copy Link", systemImage: copied ? "checkmark" : "link")
-                                    .contentTransition(.symbolEffect(.replace))
+                                    .contentTransition(Motion.symbolSwap)
                                     .frame(maxWidth: .infinity)
                             }
                             Button { actions.setDone([item], !done) } label: {

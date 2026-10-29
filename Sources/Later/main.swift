@@ -12,6 +12,7 @@ if arguments.contains("--agent") {
     // Not dispatchMain(): it never services the run loop NSWorkspace delivers app-switch, launch, quit and sleep events on
     // (measured: none arrive). Distributed notifications and the main queue work either way. This is still no NSApplication.
     RunLoop.main.run()
+    exit(1)   // run() returns at once if the run loop has no sources; never go on to become an application: launchd starts it again
 }
 
 // `Later --agent-off` and `--agent-on` change the background agent's registration from a shell, then exit.
@@ -45,17 +46,10 @@ if arguments.contains("--reset") {
 }
 #endif
 
-if arguments.contains("--verify") {
-    app.setActivationPolicy(.accessory)
-    let verifier = Verifier()
-    verifier.start()
-    app.run()
-} else {
-    #if DEBUG
-    // Development only: skips onboarding (which needs a click) so a dry run can register the development agent.
-    if arguments.contains("--dev-agent") { UserDefaults.standard.set(true, forKey: "onboarded") }
-    #endif
-    let delegate = AppDelegate()
-    app.delegate = delegate
-    app.run()
-}
+#if DEBUG
+// Development only: skips onboarding (which needs a click) so a dry run can register the development agent.
+if arguments.contains("--dev-agent") { UserDefaults.standard.set(true, forKey: "onboarded") }
+#endif
+let delegate = AppDelegate()
+app.delegate = delegate
+app.run()
