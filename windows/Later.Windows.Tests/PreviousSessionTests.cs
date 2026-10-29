@@ -85,15 +85,19 @@ public class PreviousSessionTests
     }
 
     [Fact]
-    public void ReadTakesTheSecondNewestFileOfEachProfile()
+    public void ReadTakesTheNewestReadableFileWithTabs()
     {
         using var dir = new TempDir();
         var sessions = dir.At(Path.Combine("Default", "Sessions")); Directory.CreateDirectory(sessions);
-        File.WriteAllBytes(Path.Combine(sessions, "Session_13400000000000001"), TwoTabsAndAClosedOne().ToArray());
-        File.WriteAllBytes(Path.Combine(sessions, "Session_13400000000000002"), new Snss().ToArray());
-        Assert.Equal(2, PreviousSession.Read(dir.Path).Count);
-        File.Delete(Path.Combine(sessions, "Session_13400000000000001"));
-        Assert.Empty(PreviousSession.Read(dir.Path));   // one file only: it belongs to the running browser
+        var older = Path.Combine(sessions, "Session_13400000000000001"); var newer = Path.Combine(sessions, "Session_13400000000000002");
+        File.WriteAllBytes(older, TwoTabsAndAClosedOne().ToArray());
+        Assert.Equal(2, PreviousSession.Read(dir.Path).Count);                 // a lone file that nobody holds is the previous run's
+        File.WriteAllBytes(newer, new Snss().ToArray());
+        Assert.Equal(2, PreviousSession.Read(dir.Path).Count);                 // a newer file with no tabs yet is passed over
+        File.WriteAllBytes(newer, new Snss().TabWindow(1, 5).TabIndex(5, 0).Navigation(5, 0, "https://a.example/new", "New").Selected(5, 0).ToArray());
+        Assert.Equal("https://a.example/new", Assert.Single(PreviousSession.Read(dir.Path)).Url);
+        using (new FileStream(newer, FileMode.Open, FileAccess.Read, FileShare.None))   // the running browser holds its file exclusively
+            Assert.Equal(2, PreviousSession.Read(dir.Path).Count);
         Assert.Empty(PreviousSession.Read(dir.At("missing")));
     }
 }

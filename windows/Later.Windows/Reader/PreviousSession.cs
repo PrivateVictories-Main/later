@@ -15,7 +15,9 @@ public static class PreviousSession
         public Dictionary<int, (string Url, string Title)> Navs = new();
     }
 
-    /// The second-newest `Session_*` of each profile (the newest belongs to the running browser and is locked), read with sharing allowed.
+    /// Each profile's most recent `Session_*` file that can be read and holds tabs. The running browser keeps its own
+    /// file locked (those are skipped), and a restarted browser may not have written a new one yet, so the newest readable
+    /// file is the previous run's. Read with sharing allowed; nothing is written.
     public static IReadOnlyList<SessionTab> Read(string dataFolder)
     {
         var all = new List<SessionTab>();
@@ -24,17 +26,21 @@ public static class PreviousSession
         {
             var sessions = Path.Combine(profile, "Sessions");
             if (!Directory.Exists(sessions)) continue;
-            var files = Directory.EnumerateFiles(sessions, "Session_*").OrderBy(f => f, StringComparer.Ordinal).ToList();
-            if (files.Count < 2) continue;
-            try
+            foreach (var file in Directory.EnumerateFiles(sessions, "Session_*").OrderByDescending(f => f, StringComparer.Ordinal))
             {
-                using var f = new FileStream(files[^2], FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                if (f.Length > MaxFileBytes) continue;
-                var bytes = new byte[f.Length]; f.ReadExactly(bytes);
-                all.AddRange(Parse(bytes));
+                try
+                {
+                    using var f = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    if (f.Length > MaxFileBytes) continue;
+                    var bytes = new byte[f.Length]; f.ReadExactly(bytes);
+                    var tabs = Parse(bytes);
+                    if (tabs.Count == 0) continue;
+                    all.AddRange(tabs);
+                    break;
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
         }
         return all;
     }
