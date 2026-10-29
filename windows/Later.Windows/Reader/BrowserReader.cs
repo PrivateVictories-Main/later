@@ -103,5 +103,13 @@ sealed class HistorySource(Func<Browser, string>? dataFolder = null) : IHistoryS
 
 sealed class SessionSource(Func<Browser, string>? dataFolder = null) : ISessionSource
 {
-    public IReadOnlyList<SessionTab> Read(Browser b) => PreviousSession.Read((dataFolder ?? BrowserDiscovery.DataFolder)(b));
+    public IReadOnlyList<SessionTab> Read(Browser b)
+    {
+        var folder = (dataFolder ?? BrowserDiscovery.DataFolder)(b);
+        var tabs = PreviousSession.Read(folder);
+        if (!tabs.Any(t => t.Title.Length == 0)) return tabs;
+        // Session files carry the address, not the title: History knows the title of every address it has seen.
+        var titles = HistoryLookupStore.TitlesForLinks(tabs.Where(t => t.Title.Length == 0).Select(t => t.Url), HistoryLookupStore.Databases(folder));
+        return tabs.Select(t => t.Title.Length == 0 && titles.TryGetValue(t.Url, out var title) ? t with { Title = title } : t).ToList();
+    }
 }

@@ -291,7 +291,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
                 using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                 var bytes = new byte[fs.Length]; fs.ReadExactly(bytes);
                 var parsed = PreviousSession.Parse(bytes);
-                output.WriteLine($"SESSION-FILE {b}: {Path.GetFileName(file)} {bytes.Length} bytes, header {Convert.ToHexString(bytes.AsSpan(0, Math.Min(16, bytes.Length)))}, parsed {parsed.Count} tabs");
+                output.WriteLine($"SESSION-FILE {b}: {Path.GetFileName(file)} {bytes.Length} bytes, header {Convert.ToHexString(bytes.AsSpan(0, Math.Min(16, bytes.Length)))}, parsed {parsed.Count} tabs, utf16 'Fixture' x{Count(bytes, System.Text.Encoding.Unicode.GetBytes("Fixture"))}, utf8 x{Count(bytes, "Fixture"u8)}");
             }
             catch (IOException e) { output.WriteLine($"SESSION-FILE {b}: {Path.GetFileName(file)} unreadable: {e.Message}"); }
         }
@@ -307,6 +307,13 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         Assert.Equal(0, result.UnresolvedTabs);
         Assert.Equal(0, history.Calls);
         Assert.Equal(urls, result.Snapshot!.Tabs.OrderBy(t => t.TabIndex).Select(t => t.Url).ToArray());
+    }
+
+    static int Count(byte[] haystack, ReadOnlySpan<byte> needle)
+    {
+        int n = 0;
+        for (var i = haystack.AsSpan(); (i.IndexOf(needle)) is var at and >= 0; i = i[(at + needle.Length)..]) n++;
+        return n;
     }
 
     sealed class CountingHistory : IHistorySource

@@ -76,6 +76,34 @@ public static class HistoryLookupStore
         return best.ToDictionary(kv => kv.Key, kv => kv.Value.Url, StringComparer.Ordinal);
     }
 
+    /// The title History holds for each link (exact spelling), first profile with a non-empty one winning. Session files
+    /// do not keep titles, so a previous session's tabs get theirs from here.
+    public static Dictionary<string, string> TitlesForLinks(IEnumerable<string> links, IReadOnlyList<string> databases)
+    {
+        var wanted = links.Distinct(StringComparer.Ordinal).ToList();
+        var titles = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var path in databases)
+        {
+            try
+            {
+                using var db = new SqliteDb(path);
+                using var q = db.Prepare("SELECT title FROM urls WHERE url = ?1");
+                foreach (var link in wanted.Where(l => !titles.ContainsKey(l)))
+                {
+                    try
+                    {
+                        q.Bind(1, link);
+                        if (q.Step() && q.Text(0) is { Length: > 0 } title) titles[link] = title;
+                    }
+                    catch (SqliteException) { }
+                    finally { q.Reset(); }
+                }
+            }
+            catch (SqliteException) { }
+        }
+        return titles;
+    }
+
     static HistoryResult? FirstOf(SqliteStatement page, IEnumerable<string> spellings)
     {
         foreach (var spelling in spellings)

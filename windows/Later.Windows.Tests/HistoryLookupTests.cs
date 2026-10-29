@@ -117,6 +117,18 @@ public class HistoryLookupTests
     }
 
     [Fact]
+    public void TitlesForLinksGivesTheStoredTitleOfAnExactAddress()
+    {
+        using var dir = new TempDir();
+        MakeHistory(dir.Path, new Dictionary<string, (int, double[], string)> { ["https://a.com/p"] = (1, [Jan1], "Page"), ["https://a.com/blank"] = (1, [Jan1], "") });
+        MakeHistory(dir.Path, new Dictionary<string, (int, double[], string)> { ["https://a.com/blank"] = (1, [Jan1], "Second profile") }, "Profile 1");
+        var titles = HistoryLookupStore.TitlesForLinks(["https://a.com/p", "https://a.com/blank", "https://a.com/none"], HistoryLookupStore.Databases(dir.Path));
+        Assert.Equal("Page", titles["https://a.com/p"]);
+        Assert.Equal("Second profile", titles["https://a.com/blank"]);
+        Assert.False(titles.ContainsKey("https://a.com/none"));
+    }
+
+    [Fact]
     public void VariantsToggleTheSlashAndWww()
     {
         Assert.Equal(["https://a.com/p", "https://a.com/p/", "https://www.a.com/p", "https://www.a.com/p/"], HistoryLookupStore.Variants("https://a.com/p"));
