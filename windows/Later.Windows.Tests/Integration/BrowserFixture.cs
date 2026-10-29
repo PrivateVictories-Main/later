@@ -10,7 +10,7 @@ internal sealed class BrowserFixture : IDisposable
     public string Profile { get; }
     BrowserFixture(Process process, string profile) { Process = process; Profile = profile; }
 
-    public static BrowserFixture Start(string exe, FixtureServer server, string[] urls, bool incognito = false, string? profile = null, bool restore = false)
+    public static BrowserFixture Start(string exe, FixtureServer server, string[] urls, bool incognito = false, string? profile = null, bool restore = false, params string[] extra)
     {
         profile ??= Path.Combine(Path.GetTempPath(), "LaterIT-" + Guid.NewGuid().ToString("N"));
         var args = new List<string>
@@ -20,6 +20,7 @@ internal sealed class BrowserFixture : IDisposable
         };
         if (incognito) args.Add("--incognito");
         if (restore) args.Add("--restore-last-session");
+        args.AddRange(extra);
         args.AddRange(urls);
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false };
         foreach (var a in args) psi.ArgumentList.Add(a);
