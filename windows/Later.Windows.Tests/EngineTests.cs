@@ -77,7 +77,7 @@ public class EngineTests
         r.IO.Installed.UnionWith([Browser.Helium, Browser.Chrome]);
         var engine = new LaterEngine(r.Library, new Judge(r.Library), r.IO, r.Host, (Action<LibraryData>?)null, new Settings(), () => r.Now, null);
         engine.Start();
-        Assert.Equal([Browser.Chrome, Browser.Helium], r.IO.Reads.Order().ToArray());
+        Assert.Equal([Browser.Helium, Browser.Chrome], r.IO.Reads.Order().ToArray());   // Helium comes first in the enum
         Assert.Equal(2, r.IO.Reads.Count);
     }
 
