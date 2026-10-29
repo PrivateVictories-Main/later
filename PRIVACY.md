@@ -1,6 +1,6 @@
 # Privacy
 
-Later works only on your Mac. This page says exactly what it reads, what it stores, and what it never does. It describes version 1.3.0, and everything here can be checked in the source.
+Later works only on your Mac. This page says exactly what it reads, what it stores, and what it never does. It describes version 1.4.0, and everything here can be checked in the source.
 
 ## No network
 
@@ -13,6 +13,7 @@ When you open a saved page, Later hands the link to your browser, and the browse
 - **Open tabs, from Helium and Chrome.** The address and title of each tab in normal windows, through the browser's AppleScript interface. macOS asks you to allow this once per browser, from the **Allow…** button in setup or in Settings → Browsers. Tabs in private (incognito) windows are never requested.
 - **A browser's `Sessions` folder, as a doorbell.** Later watches it for changes and lists file names so it knows *when* to read the tabs. It never opens or reads those files. Where macOS does not let Later watch a browser's folder (Chrome's is protected), Later reads that browser's tabs when you switch to it instead.
 - **Helium's `History` file, for saved pages only.** To show when a page was first opened and how many times you have visited it, Later asks Helium's history about the pages it has already saved. The file is opened read-only, in one short batch, and is never listed or copied. Chrome's history is not read.
+- **Helium's `History` file, once a day, for the days you visited each site.** To tell a site you visit all the time (a regular) from a new one, Later asks Helium's history on which days of the last 28 you visited each site. It is one read-only, immutable question, asked at launch and again on the first read after the date changes; the answer (site names and day numbers) is held in memory and never saved or listed. Chrome's history is not read.
 - **Helium's `Favicons` file, for saved sites only.** Later fetches the icon for each saved site from Helium's icon cache, read-only, and keeps a small PNG per site in its own cache folder. Chrome's icons are not read.
 
 Later has read-only access to exactly two folders for this: Helium's and Chrome's data folders under `~/Library/Application Support`. It can send Apple Events only to Helium and Chrome.
@@ -22,6 +23,8 @@ Later has read-only access to exactly two folders for this: Helium's and Chrome'
 Everything is in Later's own sandbox container, where other apps cannot read it:
 
 - **Your list** (`library.json`, and `library.json.bak`, the previous list, kept until the next save replaces it; the safety copies of older lists that an upgrade from 1.1 or 1.2 left are removed 30 days after they were made, once the list has loaded cleanly; a damaged list that was set aside, `library.corrupt-….json`, stays until you delete it): for each saved page its cleaned link, title, kind, browser, when it was saved and last seen, visit counts, and whether you marked it Done. Also your corrections (for example, moving a type of page to another kind).
+- **Days a site was open, as hashes.** For browsers whose history Later can't read (Chrome), Later notes on which of the last 28 days a site was open in a tab (`siteDays`): a SHA-256 hash of the site's name, with day numbers. Never the site's name. Older days are dropped.
+- **Whether a saved page is a regular.** A yes or no on a saved page, and your "this is a regular" or "keep in my list" choice for a type of page.
 - **Fingerprints, not links.** To avoid saving a page you deleted or rejected, Later keeps SHA-256 hashes of links, never the links themselves, along with a short list of on-screen times (numbers only).
 - **A lock file** (`engine.lock`, empty) that lets the window and the background helper take turns with the list.
 - **A status note** (`agent-status.json`), only while the background helper can't do its job (the list is damaged, the storage folder can't be opened or a save failed): a state word and a count, never a link or a title. It is shown in Later's window and removed.

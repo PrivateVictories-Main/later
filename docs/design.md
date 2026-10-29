@@ -55,6 +55,12 @@ launchd pins the agent to the code hash (cdhash) of the program it was registere
 
 `PageRules` judges by site rules first, then by the shape of the link: a page is kept unless it is a search, an inbox, a sign-in provider, a local address, a one-time link or an error page. Pages sort into Shopping, Posts, School, Reading, Videos, Tools or Other. When you correct a type of page, the correction applies to every page of that type, now and later.
 
+## Regulars
+
+`PageRules` marks a verdict `isPlace` for a site's home, dashboards, feeds and plain section pages (page types ending `/~`, and the `general` and `feeds` patterns); everything else is a thing. `Familiarity` (pure, in `LaterCore`) counts a site's distinct visit days in the last 28, today excluded; 4 or more is a regular. A place on a regular site that passes the attention rule is saved with `regular = true` and shows only under the Regulars section; a thing is always kept. A user correction (`Correction.isSpecific` from "Keep in My List", `Correction.regular` from "This Is a Regular") always wins.
+
+Days come from two sources, merged per site. Helium's History gives host to day set from one read-only, immutable query (`HistoryLookup.visitDays`), run at launch and on the first read after the local date changes: no timer. Later's own notes (`siteDays`, hashed like `seen`) cover browsers whose History it can't read. The first launch of 1.4 gives each saved place page with no flag one (`migrateRegulars`); nothing is deleted. `shared/vectors/familiarity.json` holds the day-counting and disposition tables for both platforms. The query and the sidebar are Mac-only for now.
+
 ## Privacy by construction
 
 The sandbox has no network entitlement, so the app cannot open a connection. The only temporary exceptions are the Apple Events targets (Helium and Chrome) and read-only access to the two browsers' data folders. See [PRIVACY.md](../PRIVACY.md). CI fails any build whose signed app carries a `com.apple.security.network.*` entitlement.

@@ -7,7 +7,8 @@ namespace Later.Core;
 internal static class Structure
 {
     /// Pages that are in the way: sign-in redirects, one-time links, confirmations and errors. A sign-in or sign-up page
-    /// itself is kept; these words only ever show up on the way through. Matched as whole path sections.
+    /// itself is kept; these words only ever show up on the way through. Matched as whole path sections, but only among a
+    /// path's first two: deeper down they are a page's own name (/documentation/swift/error).
     static readonly HashSet<string> OneTimeWords =
     [
         "oauth", "oauth2", "authorize", "callback", "logout", "signout", "log-out", "sign-out", "redirect", "unsubscribe",
@@ -32,15 +33,20 @@ internal static class Structure
     /// Sign-in providers: a page there is a step on the way to somewhere else.
     static readonly HashSet<string> IdentityHosts = ["accounts.google.com", "login.microsoftonline.com", "login.live.com", "appleid.apple.com"];
     static readonly string[] IdentitySuffixes = [".onelogin.com", ".okta.com", ".auth0.com"];
+    /// Hosts of those providers that are for reading, not signing in: developer.okta.com, support.okta.com.
+    static readonly HashSet<string> IdentityDocLabels = ["developer", "developers", "docs", "support", "help", "blog", "www"];
     /// A host that starts with one of these exists only for signing in.
     static readonly HashSet<string> AuthHostLabels = ["sso", "idp", "auth", "login", "signin", "accounts"];
     /// Mail and chat, where every page is an inbox.
     static readonly string[] InboxHosts =
     [
         "mail.google.com", "outlook.live.com", "outlook.office.com", "outlook.office365.com", "outlook.com", "mail.yahoo.com",
-        "mail.proton.me", "messenger.com", "web.whatsapp.com", "web.telegram.org", "app.slack.com", "discord.com",
-        "teams.microsoft.com",
+        "mail.proton.me", "messenger.com", "web.whatsapp.com", "web.telegram.org", "app.slack.com", "teams.microsoft.com",
     ];
+    /// Sites that are chat in one place and a website in the rest: only the chat paths are inboxes.
+    static readonly (string Host, HashSet<string> Paths)[] ChatAppPaths = [("discord.com", new HashSet<string> { "channels", "app" })];
+    /// A first path section after which the next one is an article's name (/wiki/Consent), not a step of a flow.
+    static readonly HashSet<string> ArticleSections = ["wiki"];
     /// A search engine's own front page.
     static readonly string[] SearchEngineHosts =
     [
@@ -53,7 +59,8 @@ internal static class Structure
         "pdf", "png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "json", "txt", "xml", "csv", "zip", "js", "css", "mp3", "mp4", "mov",
     ];
     /// Titles of pages that are in the way: challenges and errors. A title is one of these only when it is short (five
-    /// words or fewer) and starts with the phrase, so "The Forbidden City" and "How CAPTCHA works" are real pages.
+    /// words or fewer) and starts with the phrase, so "The Forbidden City" and "How CAPTCHA works" are real pages. A
+    /// one-word phrase must be the whole title: "Forbidden Planet - Wikipedia" is a real page.
     static readonly string[][] UselessTitles = new[]
     {
         "403 forbidden", "404 not found", "404 page not found", "page not found", "not found", "forbidden", "access denied",
@@ -70,18 +77,22 @@ internal static class Structure
 
     /// Pages never kept, whatever else the rules say: local hosts, sign-in providers, captive portals and shorteners,
     /// inboxes, search results and a search engine's front page, one-time links, files, and challenge or error titles.
-    internal static bool IsHardSkip(string site, int? port, IReadOnlyList<string> path, string title)
+    /// `route` is the path inside a hash route (#/oauth/callback), which has its own first two sections.
+    internal static bool IsHardSkip(string site, int? port, IReadOnlyList<string> path, string title, IReadOnlyList<string>? route = null)
     {
+        var all = route is null ? path : path.Concat(route).ToList();
         if (site.Length == 0 || port is not null || IsLocal(site)) return true;
         if (PassThroughHosts.Any(h => SiteRules.HostMatches(site, h))) return true;
-        if (IdentityHosts.Contains(site) || IdentitySuffixes.Any(s => site.EndsWith(s, StringComparison.Ordinal))) return true;
         var firstLabel = Text.SplitOmitEmpty(site, '.').FirstOrDefault() ?? "";
+        if (IdentityHosts.Contains(site)) return true;
+        if (IdentitySuffixes.Any(s => site.EndsWith(s, StringComparison.Ordinal)) && !IdentityDocLabels.Contains(firstLabel)) return true;
         if (AuthHostLabels.Contains(firstLabel)) return true;
         if (InboxHosts.Any(h => SiteRules.HostMatches(site, h))) return true;
-        if (path.Count == 0 && SearchEngineHosts.Any(h => SiteRules.HostMatches(site, h))) return true;
-        if (path.Count > 0 && InboxWords.Contains(path[0].ToLowerInvariant())) return true;
-        if (path.Any(p => OneTimeWords.Contains(p.ToLowerInvariant())) || HasSecretPath(path)) return true;
-        if (IsFile(path.Count > 0 ? path[^1] : null)) return true;
+        if (all.Count > 0 && ChatAppPaths.Any(c => site == c.Host && c.Paths.Contains(all[0].ToLowerInvariant()))) return true;
+        if (all.Count == 0 && SearchEngineHosts.Any(h => SiteRules.HostMatches(site, h))) return true;
+        if (all.Count > 0 && InboxWords.Contains(all[0].ToLowerInvariant())) return true;
+        if (HasOneTimeWord(path) || (route is not null && HasOneTimeWord(route)) || HasSecretPath(all)) return true;
+        if (IsFile(all.Count > 0 ? all[^1] : null)) return true;
         return IsUselessTitle(title);
     }
 
@@ -123,11 +134,21 @@ internal static class Structure
         return FileExtensions.Contains(section[(dot + 1)..].ToLowerInvariant()) && !IsSlug(section);
     }
 
+    /// A one-time word in the first two sections of a path, the second not counting after "wiki".
+    static bool HasOneTimeWord(IReadOnlyList<string> path)
+    {
+        if (path.Count == 0) return false;
+        int checkedSections = ArticleSections.Contains(path[0].ToLowerInvariant()) ? 1 : 2;
+        return path.Take(checkedSections).Any(p => OneTimeWords.Contains(p.ToLowerInvariant()));
+    }
+
     internal static bool IsUselessTitle(string title)
     {
         var words = Text.SplitWhere(title.ToLowerInvariant(), r => !Text.IsLetter(r) && !Text.IsNumber(r));
         if (words.Count > 5) return false;
-        return UselessTitles.Any(phrase => words.Count >= phrase.Length && words.Take(phrase.Length).SequenceEqual(phrase))
+        return UselessTitles.Any(phrase => phrase.Length == 1
+                ? words.Count == 1 && words[0] == phrase[0]
+                : words.Count >= phrase.Length && words.Take(phrase.Length).SequenceEqual(phrase))
             || BlankTitles.Any(phrase => words.SequenceEqual(phrase));
     }
 

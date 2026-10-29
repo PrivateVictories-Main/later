@@ -36,6 +36,7 @@ public static class PageRules
         var kind = SiteRules.KindFor(host);
         bool? decided = null;
         string? pageType = null;
+        var isPlace = false;   // a site's home, dashboard, feed or plain section page: somewhere you go, not a thing
         foreach (var rule in SiteRules.All)
         {
             if (!rule.AppliesTo(host)) continue;
@@ -43,6 +44,7 @@ public static class PageRules
             if (rule.General.FirstOrDefault(p => p.Matches(path, queryKeys)) is { } general)
             {
                 decided = false;
+                isPlace = true;
                 pageType = baseType + general.Text;
                 kind = rule.Kind;
                 break;
@@ -50,6 +52,7 @@ public static class PageRules
             if (rule.Feeds.FirstOrDefault(p => p.Matches(path, queryKeys)) is { } feed)
             {
                 decided = savesFeedHomes;
+                isPlace = true;
                 pageType = baseType + feed.Text;
                 kind = rule.Kind;
                 break;
@@ -91,15 +94,15 @@ public static class PageRules
                 // A site's home or a plain page like /careers or /login: one page type per host ("host/~"), so a single
                 // correction covers them all. A host nobody has a rule for is a tool or a site the user follows.
                 type = baseType + "/~";
+                isPlace = true;
                 if (kind == Kind.Other || kind == Kind.Tools) kind = Kind.Tools;
             }
         }
         // A PDF with a real name is something to read.
         if (isSpecific && path.Count > 0 && path[^1].EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && (kind == Kind.Other || kind == Kind.Tools))
             kind = Kind.Reading;
-        var hardSkipPath = path.SequenceEqual(urlPath) ? urlPath : urlPath.Concat(path).ToList();
-        if (Structure.IsHardSkip(site, url.Port, hardSkipPath, title)) isSpecific = false;
-        return Apply(corrections ?? NoCorrections, new Verdict(isSpecific, kind, type));
+        if (Structure.IsHardSkip(site, url.Port, urlPath, title, path.SequenceEqual(urlPath) ? null : path)) isSpecific = false;
+        return Apply(corrections ?? NoCorrections, new Verdict(isSpecific, kind, type, isPlace));
     }
 
     static string QueryKey(string encodedName) => (UrlText.PercentDecode(encodedName) ?? encodedName).ToLowerInvariant();

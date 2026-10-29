@@ -164,17 +164,18 @@ enum Structure {
     /// inboxes, search results and a search engine's front page, one-time links, files, and challenge or error titles.
     /// `route` is the path inside a hash route (#/oauth/callback), which has its own first two sections.
     static func isHardSkip(site: String, port: Int?, path: [String], route: [String] = [], title: String) -> Bool {
+        let all = path + route
         if site.isEmpty || port != nil || isLocal(site) { return true }
         if passThroughHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
         if identityHosts.contains(site) { return true }
         if identitySuffixes.contains(where: site.hasSuffix), !identityDocLabels.contains(site.split(separator: ".").first.map(String.init) ?? "") { return true }
         if authHostLabels.contains(site.split(separator: ".").first.map(String.init) ?? "") { return true }
         if inboxHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
-        if let first = path.first?.lowercased(), chatAppPaths.contains(where: { SiteRules.hostMatches(site, $0.key) && site == $0.key && $0.value.contains(first) }) { return true }
-        if path.isEmpty, searchEngineHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
-        if let first = path.first?.lowercased(), inboxWords.contains(first) { return true }
-        if hasOneTimeWord(path) || hasOneTimeWord(route) || hasSecretPath(path + route) { return true }
-        if isFile(path.last) { return true }
+        if let first = all.first?.lowercased(), chatAppPaths.contains(where: { site == $0.key && $0.value.contains(first) }) { return true }
+        if all.isEmpty, searchEngineHosts.contains(where: { SiteRules.hostMatches(site, $0) }) { return true }
+        if let first = all.first?.lowercased(), inboxWords.contains(first) { return true }
+        if hasOneTimeWord(path) || hasOneTimeWord(route) || hasSecretPath(all) { return true }
+        if isFile(all.last) { return true }
         return isUselessTitle(title)
     }
 

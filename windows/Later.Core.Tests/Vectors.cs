@@ -20,6 +20,13 @@ public static class Vectors
     public sealed record PageKeys(Dictionary<string, int> Counts, List<string[]> Same, List<string[]> Different, List<KeyCase> Keys);
     public sealed record CorrectionVector(bool? IsSpecific, string? Kind);
     public sealed record JudgeCase(string Url, string Title, bool? Specific, string? Kind, string? PageType, string? PageTypeSuffix,
-                                   string? NotPageTypeSuffix, bool? Feeds, Dictionary<string, CorrectionVector>? Corrections, string? Note);
+                                   string? NotPageTypeSuffix, bool? Feeds, Dictionary<string, CorrectionVector>? Corrections, string? Note, bool? Place = null);
     public sealed record JudgeFile(Dictionary<string, int> Counts, List<JudgeCase> Cases);
+
+    public sealed record CivilCase(int Year, int Month, int Day, int Number);
+    public sealed record DaysCase(int Today, List<int> Visited, int Count, string? Note);
+    public sealed record DispositionFix(bool? IsSpecific, bool? Regular, string? Kind);
+    public sealed record DispositionCase(bool Place, int Days, DispositionFix? Correction, string Disposition, string? Note);
+    public sealed record FamiliarityFile(Dictionary<string, int> Counts, Dictionary<string, int> Constants, List<CivilCase> Civil,
+                                         List<DaysCase> Days, List<DispositionCase> Disposition);
 }

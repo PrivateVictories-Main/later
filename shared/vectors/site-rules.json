@@ -1,5 +1,5 @@
 {
-  "counts": {"cases": 299},
+  "counts": {"cases": 301},
   "cases": [
     {"url": "https://brightlane.example.com/", "title": "", "specific": true, "kind": "tools"},
     {"url": "https://brightlane.example.com/", "title": "A page title", "specific": true, "kind": "tools"},
@@ -299,6 +299,8 @@
     {"url": "https://support.okta.com/help/s/article/how-to-reset-a-password", "title": "How to reset a password", "specific": true},
     {"url": "https://developer.auth0.com/resources/labs/authorization/", "title": "Authorization labs | Auth0", "specific": true},
     {"url": "https://acme.okta.com/app/UserHome", "title": "My Apps", "specific": false},
-    {"url": "https://acme.auth0.com/u/login", "title": "Log in", "specific": false}
+    {"url": "https://acme.auth0.com/u/login", "title": "Log in", "specific": false},
+    {"url": "https://app.example.com/#/inbox", "title": "Inbox", "specific": false},
+    {"url": "https://app.example.com/#/files/report.json", "title": "report.json", "specific": false}
   ]
 }
