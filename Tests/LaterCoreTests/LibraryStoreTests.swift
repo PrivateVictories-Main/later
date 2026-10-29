@@ -47,39 +47,44 @@ import Testing
         }
     }
 
-    @Test func firstSaveKeepsTheOldListOnceAndNeverReplacesIt() throws {
+    /// A leftover of 1.1 or 1.2, last touched `days` ago.
+    func leaveCopy(_ name: String, in dir: URL, daysOld days: Double) throws -> URL {
+        let url = dir.appendingPathComponent(name)
+        try Data("{}".utf8).write(to: url)
+        let then = Date.now.addingTimeInterval(-days * 86400)
+        try FileManager.default.setAttributes([.creationDate: then, .modificationDate: then], ofItemAtPath: url.path)
+        return url
+    }
+
+    @Test func savingNeverMakesASafetyCopy() throws {
         try withStore { store, dir in
-            let old = Data(#"{"version":1,"items":[],"corrections":{},"seen":{},"dwellSamples":[]}"#.utf8)
-            try old.write(to: store.fileURL)
-            let copy = dir.appendingPathComponent("library-before-1.1.json")
             try store.save(sample("A"))
-            #expect(try Data(contentsOf: copy) == old)
             try store.save(sample("B"))
-            #expect(try Data(contentsOf: copy) == old)
-            // A later run (a new store) with the copy present leaves it alone too.
-            try LibraryStore(fileURL: store.fileURL).save(sample("C"))
-            #expect(try Data(contentsOf: copy) == old)
+            try LibraryStore(fileURL: store.fileURL).save(sample("C"))   // a later run
+            let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            #expect(!names.contains { $0.hasPrefix("library-before") })
         }
     }
 
-    @Test func v12KeepsItsOwnCopyOfTheV11ListBesideTheEarlierOne() throws {
+    @Test func oldSafetyCopiesGoOnceTheCurrentListHasLoadedCleanly() throws {
         try withStore { store, dir in
-            let v10 = Data(#"{"version":1,"items":[],"corrections":{},"seen":{},"dwellSamples":[]}"#.utf8)
-            let v11 = Data(#"{"version":1,"items":[],"corrections":{},"seen":{},"dwellSamples":[10]}"#.utf8)
-            try v11.write(to: store.fileURL)
-            try v10.write(to: dir.appendingPathComponent("library-before-1.1.json"))   // left by v1.1
             try store.save(sample("A"))
-            #expect(try Data(contentsOf: dir.appendingPathComponent("library-before-1.1.json")) == v10)
-            #expect(try Data(contentsOf: dir.appendingPathComponent("library-before-1.2.json")) == v11)
-            try store.save(sample("B"))
-            #expect(try Data(contentsOf: dir.appendingPathComponent("library-before-1.2.json")) == v11)
+            let old = try leaveCopy("library-before-1.1.json", in: dir, daysOld: 31)
+            let recent = try leaveCopy("library-before-1.2.json", in: dir, daysOld: 29)
+            _ = store.peek(notice: "")   // a read-only look changes nothing
+            #expect(FileManager.default.fileExists(atPath: old.path))
+            #expect(store.load().notice == nil)
+            #expect(!FileManager.default.fileExists(atPath: old.path))
+            #expect(FileManager.default.fileExists(atPath: recent.path))
         }
     }
 
-    @Test func noOldListMeansNoCopy() throws {
+    @Test func safetyCopiesStayWhileTheListIsDamaged() throws {
         try withStore { store, dir in
-            try store.save(sample("A"))
-            #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("library-before-1.1.json").path))
+            let old = try leaveCopy("library-before-1.1.json", in: dir, daysOld: 90)
+            try Data("{ not json".utf8).write(to: store.fileURL)
+            _ = store.load()   // set aside, nothing to restore: a new list, not a clean load
+            #expect(FileManager.default.fileExists(atPath: old.path))
         }
     }
 
