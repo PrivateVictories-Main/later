@@ -287,7 +287,7 @@ final class Engine {
         let secrets = dropsSecretLinks ? library.dropSecretLinks() : 0
         let r = library.refreshKinds()
         let places = library.refreshPlaces()
-        Perf.log.info("refreshPlaces backToList=\(places, privacy: .public)")
+        Perf.log.info("refreshPlaces backToList=\(places, privacy: .public) regulars=\(library.data.items.filter(\.isActiveRegular).count, privacy: .public) done=\(library.data.items.filter { $0.status == .done }.count, privacy: .public) items=\(library.data.items.count, privacy: .public)")
         Perf.log.info("dropSecretLinks removed=\(secrets, privacy: .public)")
         Perf.log.info("mergeDuplicates removed=\(merged, privacy: .public) refreshKinds items=\(r.items, privacy: .public) changed=\(r.changed, privacy: .public) toTools=\(r.toTools, privacy: .public)")
         return secrets
