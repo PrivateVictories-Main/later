@@ -78,9 +78,15 @@ struct ItemRow: View, @MainActor Equatable {
                         HStack(spacing: 6) {
                             Button(action: open) { Image(systemName: "arrow.up.forward") }
                                 .help("Open in your browser")
-                            Button(action: toggleDone) { Image(systemName: done ? "arrow.uturn.backward" : "checkmark") }
-                                .help(done ? "Move back to Later" : "Mark Done")
-                                .disabled(!model.engine.canEdit)
+                            if item.regular == true {
+                                Button { ItemActions(model: model).keepInList([item]) } label: { Image(systemName: "tray.and.arrow.down") }
+                                    .help("Keep in my list")
+                                    .disabled(!model.engine.canEdit)
+                            } else {
+                                Button(action: toggleDone) { Image(systemName: done ? "arrow.uturn.backward" : "checkmark") }
+                                    .help(done ? "Move back to Later" : "Mark Done")
+                                    .disabled(!model.engine.canEdit)
+                            }
                         }
                         .buttonStyle(.glass)
                         .buttonBorderShape(.circle)
@@ -200,7 +206,12 @@ struct RowActions: View {
         Button("Open") { actions.open(picked) }
         Button("Copy Link") { actions.copyLinks(picked) }
         if model.engine.canEdit {
-            Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
+            if picked.allSatisfy({ $0.regular == true }) {
+                Button("Keep in My List") { actions.keepInList(picked) }
+            } else {
+                Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
+            }
+            if picked.allSatisfy({ $0.regular == false }) { Button("This Is a Regular") { actions.markRegular(picked) } }
             ForEach(Kind.allCases.filter { kind in !picked.allSatisfy { $0.kind == kind } }) { kind in
                 Button("Move to \(kind.title)") { actions.move(picked, to: kind) }
             }
@@ -234,7 +245,12 @@ struct RowMenu: View {
                 }
             }
             Button("Not an Idea") { actions.notAnIdea(picked) }
-            Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
+            if picked.allSatisfy({ $0.regular == true }) {
+                Button("Keep in My List") { actions.keepInList(picked) }
+            } else {
+                Button(allDone ? "Move Back to Later" : "Mark Done") { actions.setDone(picked, !allDone) }
+            }
+            if picked.allSatisfy({ $0.regular == false }) { Button("This Is a Regular") { actions.markRegular(picked) } }
             Divider()
             Button("Delete", role: .destructive) { actions.delete(picked) }
         }

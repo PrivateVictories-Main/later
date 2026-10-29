@@ -31,16 +31,19 @@ public enum PageRules {
         var kind = SiteRules.kind(for: host)
         var decided: Bool?
         var pageType: String?
+        var isPlace = false   // a site's home, dashboard, feed or plain section page: somewhere you go, not a thing
         for rule in SiteRules.all where rule.applies(to: host) {
             if !rule.hosts.isEmpty { kind = rule.kind }
             if let p = rule.general.first(where: { $0.matches(path, queryKeys: queryKeys) }) {
                 decided = false
+                isPlace = true
                 pageType = base + p.text
                 kind = rule.kind
                 break
             }
             if let p = rule.feeds.first(where: { $0.matches(path, queryKeys: queryKeys) }) {
                 decided = savesFeedHomes
+                isPlace = true
                 pageType = base + p.text
                 kind = rule.kind
                 break
@@ -73,6 +76,7 @@ public enum PageRules {
                 // A site's home or a plain page like /careers or /login: one page type per host ("host/~"), so a single
                 // correction covers them all. A host nobody has a rule for is a tool or a site the user follows.
                 type = base + "/~"
+                isPlace = true
                 if kind == .other || kind == .tools { kind = .tools }
             }
         }
@@ -81,7 +85,7 @@ public enum PageRules {
         if Structure.isHardSkip(site: site, port: url.port, path: urlPath + (path == urlPath ? [] : path), title: title) {
             isSpecific = false
         }
-        return apply(corrections, to: Verdict(isSpecific: isSpecific, kind: kind, pageType: type))
+        return apply(corrections, to: Verdict(isSpecific: isSpecific, kind: kind, pageType: type, isPlace: isPlace))
     }
 
     /// The verdict with the user's correction for its page type, if they made one.

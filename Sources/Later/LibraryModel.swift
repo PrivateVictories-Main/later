@@ -257,6 +257,8 @@ struct ItemActions {
     func move(_ items: [Item], to kind: Kind) {
         change(items) { items.forEach { engine.library.move($0.id, to: kind, undo: model.undo) } }
     }
+    func keepInList(_ items: [Item]) { change(items) { items.forEach { engine.library.keepInList($0.id, undo: model.undo) } } }
+    func markRegular(_ items: [Item]) { change(items) { items.forEach { engine.library.markRegular($0.id, undo: model.undo) } } }
     func notAnIdea(_ items: [Item]) { change(items) { items.forEach { engine.library.notAnIdea($0.id, undo: model.undo) } } }
     func delete(_ items: [Item]) { change(items) { items.forEach { engine.library.delete($0.id, now: .now, undo: model.undo) } } }
     /// Everything in Done, as one Undo.

@@ -70,6 +70,7 @@ struct JudgeCase: Decodable, Sendable, CustomTestStringConvertible {
     let pageTypeSuffix: String?
     let notPageTypeSuffix: String?
     let feeds: Bool?
+    let place: Bool?
     let corrections: [String: CorrectionVector]?
     var testDescription: String { url + (title.isEmpty ? "" : "  [\(title)]") }
 
@@ -82,6 +83,7 @@ struct JudgeCase: Decodable, Sendable, CustomTestStringConvertible {
         let verdict = PageRules.judge(link, title: title, corrections: fixes, savesFeedHomes: feeds ?? false)
         if let specific { #expect(verdict.isSpecific == specific, "specific: \(testDescription)") }
         if let kind { #expect(verdict.kind.rawValue == kind, "kind: \(testDescription)") }
+        if let place { #expect(verdict.isPlace == place, "place: \(testDescription)") }
         if let pageType { #expect(verdict.pageType == pageType, "pageType: \(testDescription)") }
         if let pageTypeSuffix { #expect(verdict.pageType.hasSuffix(pageTypeSuffix), "pageType suffix: \(testDescription)") }
         if let notPageTypeSuffix { #expect(!verdict.pageType.hasSuffix(notPageTypeSuffix), "pageType suffix: \(testDescription)") }
