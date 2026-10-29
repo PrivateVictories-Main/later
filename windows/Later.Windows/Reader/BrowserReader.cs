@@ -2,6 +2,7 @@ using Later.Core;
 
 namespace Later.Windows.Reader;
 
+/// `IsPrivate`: not a window that is positively a normal one (private, guest, or unrecognized); it was not read.
 public sealed record RawWindow(nint Hwnd, bool IsPrivate, IReadOnlyList<RawTab> Tabs, string? ActiveUrl);
 public interface IUiaSource { RawWindow? ReadWindow(BrowserWindow window); }            // null: the window could not be read
 public interface IHistorySource { Dictionary<string, string> LinksForTitles(Browser b, IReadOnlyCollection<string> titles, DateTime since); }
@@ -87,9 +88,9 @@ public sealed class BrowserReader : IDisposable
     public void Dispose() => (uia as IDisposable)?.Dispose();
 }
 
-sealed class UiaSource : IUiaSource, IDisposable
+sealed class UiaSource(Func<Browser, string>? dataFolder = null) : IUiaSource, IDisposable
 {
-    readonly UiaReader reader = new();
+    readonly UiaReader reader = new(dataFolder);
     public RawWindow? ReadWindow(BrowserWindow w) => reader.TryRead(w);      // UiaReader applies PrivateWindowDetector
     public void Dispose() => reader.Dispose();
 }

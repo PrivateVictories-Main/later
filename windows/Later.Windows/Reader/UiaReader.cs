@@ -1,84 +1,141 @@
+using Later.Core;
 using Later.Windows.Native;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.Accessibility;
 
 namespace Later.Windows.Reader;
 
-/// One UI Automation pass over a browser window. Reads only (properties cached in one call); never registers an event
+/// One bounded UI Automation pass over a browser window. Reads only (properties cached per call); never registers an event
 /// handler, never invokes a pattern, never touches the window. MTA thread.
+///
+/// The order is the privacy rule: the window is classified first from its root view's name alone, and nothing inside the
+/// window is read unless it is positively a normal one. Then the browser's own UI is walked breadth-limited (the tab
+/// strip), without ever entering page content; the only page element asked for is the first Document, for its address.
 internal sealed unsafe class UiaReader : IDisposable
 {
     readonly UiaSession session = new();
+    readonly Func<Browser, string> dataFolder;
+    readonly Dictionary<string, ProfileNames> profileNames = [];
     IUIAutomationCacheRequest* cache;
-    IUIAutomationCondition* tabsAndDocuments;
+    IUIAutomationCondition* rootViewIs, documentIs, everything;
 
-    const string TabClass = "Tab", RootViewClass = "BrowserRootView", ProfileButtonClass = "AvatarToolbarButton";
-
-    public UiaReader()
+    const string TabClass = "Tab", RootViewClass = "BrowserRootView";
+    const int MaxDepth = 10, MaxQueries = 60, ClassifyAttempts = 3;
+    // Page content and the parts of the browser's chrome that never hold tabs: not entered.
+    static readonly HashSet<string> NotEntered = new(StringComparer.Ordinal)
     {
+        "MultiContentsView", "WebView", "Chrome_WidgetWin_1", "Chrome_RenderWidgetHostHWND", "InfoBarContainerView", "BrowserCaptionButtonContainer", "ChromeBorder", "FrameGrabHandle",
+    };
+    // Control types of the browser's own containers (pane, custom, group, tab list); everything else is a leaf for this purpose.
+    static readonly HashSet<int> Containers = [UiaIds.Pane, UiaIds.Custom, UiaIds.Group, UiaIds.Tab];
+
+    public UiaReader(Func<Browser, string>? dataFolder = null)
+    {
+        this.dataFolder = dataFolder ?? BrowserDiscovery.DataFolder;
         var uia = session.Automation;
         cache = uia->CreateCacheRequest();
         foreach (var id in new[] { UiaIds.Name, UiaIds.ControlType, UiaIds.ClassName, UiaIds.RuntimeId, UiaIds.IsSelected, UiaIds.Value })
-            cache->AddProperty((UIA_PROPERTY_ID)id);
-        cache->AutomationElementMode = (AutomationElementMode)0;   // None: cached values only
-        var tab = session.ControlTypeIs(UiaIds.TabItem); var doc = session.ControlTypeIs(UiaIds.Document);
-        var root = session.StringIs(UiaIds.ClassName, RootViewClass); var profile = session.StringIs(UiaIds.ClassName, ProfileButtonClass);
-        var a = session.Or(tab, doc); var b = session.Or(root, profile);
-        tabsAndDocuments = session.Or(a, b);
-        foreach (var c in new[] { tab, doc, root, profile, a, b }) c->Release();
+            cache->AddProperty((UIA_PROPERTY_ID)id);   // elements stay live (the default mode): the walk asks each container for its children
+        rootViewIs = session.StringIs(UiaIds.ClassName, RootViewClass);
+        documentIs = session.ControlTypeIs(UiaIds.Document);
+        everything = session.True();
     }
 
-    /// The window's tabs in strip order and the active tab's URL; null when the window could not be read (the caller treats that as transient).
-    /// The window's chrome is read first and a private window gives back no tabs at all; a window whose root view is not
-    /// there (a tree still being built) cannot be classified and also gives null.
+    /// The window's tabs in strip order and the active tab's URL; null when the window could not be read (the caller treats
+    /// that as transient). A window that is not positively a normal one (private, guest, or anything unrecognized) gives
+    /// back no tabs and was not read beyond its root view's name.
     public RawWindow? TryRead(BrowserWindow w)
     {
-        IUIAutomationElement* root = null;
-        IUIAutomationElementArray* found = null;
+        IUIAutomationElement* root = null, rootView = null;
         try
         {
             root = session.Automation->ElementFromHandle(new HWND(w.Hwnd));
             if (root is null) return null;
-            found = root->FindAllBuildCache((TreeScope)UiaIds.ScopeDescendants, tabsAndDocuments, cache);
-            if (found is null) return null;
-            int count = found->Length;
-            string? rootViewName = null, profileButtonName = null, activeUrl = null;
-            var tabs = new List<RawTab>();
-            for (int i = 0; i < count; i++)
+            bool normal = false, settled = false;
+            for (int attempt = 0; attempt < ClassifyAttempts && !settled; attempt++)
             {
-                IUIAutomationElement* e = found->GetElement(i);
-                if (e is null) return null;
-                try
-                {
-                    int type = UiaSession.Cached(e, UiaIds.ControlType) is int t ? t : 0;
-                    string cls = UiaSession.Cached(e, UiaIds.ClassName) as string ?? "";
-                    if (cls == RootViewClass) rootViewName ??= UiaSession.Cached(e, UiaIds.Name) as string ?? "";
-                    else if (cls == ProfileButtonClass) profileButtonName ??= UiaSession.Cached(e, UiaIds.Name) as string ?? "";
-                    else if (type == UiaIds.Document) { if (activeUrl is null) activeUrl = UiaSession.Cached(e, UiaIds.Value) as string ?? ""; }   // the page's own document comes first
-                    else if (type == UiaIds.TabItem && cls == TabClass)   // the tab strip's tabs, not tab-like controls inside a page
-                    {
-                        var title = TabNames.Clean(UiaSession.Cached(e, UiaIds.Name) as string ?? "");
-                        tabs.Add(new RawTab(UiaSession.RuntimeIdText(UiaSession.Cached(e, UiaIds.RuntimeId)), title, UiaSession.Cached(e, UiaIds.IsSelected) is true, tabs.Count));
-                    }
-                }
-                finally { e->Release(); }
+                if (rootView is not null) { rootView->Release(); rootView = null; }
+                var before = User32.Title(w.Hwnd);
+                rootView = root->FindFirstBuildCache((TreeScope)UiaIds.ScopeChildren, rootViewIs, cache);
+                if (rootView is null) return null;   // a tree still being built cannot be classified: never "normal"
+                var name = UiaSession.Cached(rootView, UiaIds.Name) as string ?? "";
+                settled = User32.Title(w.Hwnd) == before;   // the title moved while we looked: compare again
+                normal = settled && PrivateWindowDetector.IsNormal(before, name, () => NamesIn(dataFolder(w.Browser)).Current());
             }
-            if (rootViewName is null) return null;   // cannot tell private from normal: never "normal"
-            if (PrivateWindowDetector.IsPrivate(new RawWindowInfo(w.Browser, rootViewName, profileButtonName))) return new RawWindow(w.Hwnd, true, [], null);
-            return new RawWindow(w.Hwnd, false, tabs, string.IsNullOrWhiteSpace(activeUrl) ? null : activeUrl);
+            if (!settled) return null;
+            if (!normal) return new RawWindow(w.Hwnd, true, [], null);
+
+            var state = new Walk();
+            Descend(rootView, 0, state);
+            if (state.Failed) return null;
+            return new RawWindow(w.Hwnd, false, state.Tabs, string.IsNullOrWhiteSpace(state.ActiveUrl) ? null : state.ActiveUrl);
         }
         catch (System.Runtime.InteropServices.COMException) { return null; }
         finally
         {
-            if (found is not null) found->Release();
+            if (rootView is not null) rootView->Release();
             if (root is not null) root->Release();
         }
     }
 
+    ProfileNames NamesIn(string folder) => profileNames.TryGetValue(folder, out var n) ? n : profileNames[folder] = new ProfileNames(folder);
+
+    sealed class Walk
+    {
+        public readonly List<RawTab> Tabs = [];
+        public string? ActiveUrl;
+        public int Queries;
+        public bool Failed;
+    }
+
+    /// Depth-first in tree order over the browser's own UI. Tabs are collected; page content is never entered.
+    void Descend(IUIAutomationElement* parent, int depth, Walk s)
+    {
+        if (s.Failed) return;
+        if (depth >= MaxDepth || ++s.Queries > MaxQueries) { s.Failed = true; return; }   // not the layout we know: give up rather than guess
+        IUIAutomationElementArray* kids = parent->FindAllBuildCache((TreeScope)UiaIds.ScopeChildren, everything, cache);
+        if (kids is null) { s.Failed = true; return; }
+        try
+        {
+            int count = kids->Length;
+            for (int i = 0; i < count && !s.Failed; i++)
+            {
+                IUIAutomationElement* e = kids->GetElement(i);
+                if (e is null) { s.Failed = true; return; }
+                try
+                {
+                    int type = UiaSession.Cached(e, UiaIds.ControlType) is int t ? t : 0;
+                    string cls = UiaSession.Cached(e, UiaIds.ClassName) as string ?? "";
+                    if (type == UiaIds.TabItem)
+                    {
+                        if (cls != TabClass) continue;   // tab-like controls that are not the strip's tabs
+                        var title = TabNames.Clean(UiaSession.Cached(e, UiaIds.Name) as string ?? "");
+                        s.Tabs.Add(new RawTab(UiaSession.RuntimeIdText(UiaSession.Cached(e, UiaIds.RuntimeId)), title, UiaSession.Cached(e, UiaIds.IsSelected) is true, s.Tabs.Count));
+                    }
+                    else if (type == UiaIds.Document) s.ActiveUrl ??= UiaSession.Cached(e, UiaIds.Value) as string ?? "";
+                    else if (cls == "MultiContentsView" || cls == "WebView") s.ActiveUrl ??= FirstDocumentUrl(e);
+                    else if (Containers.Contains(type) && !NotEntered.Contains(cls)) Descend(e, depth + 1, s);
+                }
+                finally { e->Release(); }
+            }
+        }
+        finally { kids->Release(); }
+    }
+
+    /// The first Document under the page host, in tree order: the page's own root, reached before any of its content.
+    string? FirstDocumentUrl(IUIAutomationElement* host)
+    {
+        IUIAutomationElement* doc = host->FindFirstBuildCache((TreeScope)UiaIds.ScopeDescendants, documentIs, cache);
+        if (doc is null) return null;
+        try { return UiaSession.Cached(doc, UiaIds.Value) as string; }
+        finally { doc->Release(); }
+    }
+
     public void Dispose()
     {
+        foreach (var c in new[] { rootViewIs, documentIs, everything }) if (c is not null) c->Release();
+        rootViewIs = documentIs = everything = null;
         if (cache is not null) { cache->Release(); cache = null; }
-        if (tabsAndDocuments is not null) { tabsAndDocuments->Release(); tabsAndDocuments = null; }
         session.Dispose();
     }
 }

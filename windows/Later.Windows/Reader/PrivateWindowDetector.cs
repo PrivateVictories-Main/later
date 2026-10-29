@@ -1,17 +1,25 @@
-using Later.Core;
+using System.Globalization;
 
 namespace Later.Windows.Reader;
 
-/// What the reader sees of a browser window's chrome (never its tabs): the accessible title of the window's root view and
-/// the name of the toolbar's profile button. A normal window reads "<page> - Chrome" and "You"; a private one reads
-/// "<page> - Chrome (Incognito)" and "Incognito" (verified on Chrome and Helium, x64 and Arm64). The window text and the
-/// top-level UIA name carry no marker, so they are not used.
-public sealed record RawWindowInfo(Browser Browser, string RootViewName, string? ProfileButtonName);
-
+/// Decides from the window's chrome alone (never its tabs or page) whether a browser window may be read.
+///
+/// The rule is positive evidence, with no language in it: a browser names a window's accessible title (the root view's name)
+/// like the window text, plus a suffix only in the windows that are not plain ones. A private window adds "(Incognito)" in
+/// the interface language ("(anonym)", "（シークレット モード）", "(Navigation privée)", ...), a guest window adds its own, a
+/// second profile's window adds " - <profile name>". So a window is normal when the two are equal, or when the difference
+/// is " - " and a profile name read from the browser's own `Local State`. Anything else (private, guest, an unknown
+/// language's suffix, a title still changing) is not normal and is never read.
 public static class PrivateWindowDetector
 {
-    /// English interface text; other languages are not verified (see the design notes).
-    public static bool IsPrivate(RawWindowInfo w) =>
-        w.RootViewName.Contains("Incognito", StringComparison.OrdinalIgnoreCase) ||
-        w.ProfileButtonName?.Contains("Incognito", StringComparison.OrdinalIgnoreCase) == true;
+    public static bool IsNormal(string windowText, string rootViewName, Func<IReadOnlyCollection<string>> profileNames)
+    {
+        var text = Plain(windowText); var name = Plain(rootViewName);
+        if (text.Length == 0 || name.Length == 0) return false;
+        if (name == text) return true;
+        return name.StartsWith(text + " - ", StringComparison.Ordinal) && profileNames().Any(p => Plain(p).Length > 0 && name == text + " - " + Plain(p));
+    }
+
+    /// Without invisible direction marks (right-to-left interfaces add them to one of the two) and edge spaces.
+    static string Plain(string s) => new string([.. s.Where(c => char.GetUnicodeCategory(c) != UnicodeCategory.Format)]).Trim();
 }

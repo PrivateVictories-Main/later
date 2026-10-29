@@ -17,7 +17,7 @@ internal static partial class Com
 internal static class UiaIds
 {
     public const int RuntimeId = 30000, ControlType = 30003, Name = 30005, AutomationId = 30011, ClassName = 30012, Value = 30045, IsSelected = 30079;
-    public const int TabItem = 50019, Document = 50030;
+    public const int Tab = 50018, TabItem = 50019, Document = 50030, Group = 50026, Custom = 50025, Pane = 50033;
     public const int ScopeChildren = 2, ScopeDescendants = 4;
 }
 

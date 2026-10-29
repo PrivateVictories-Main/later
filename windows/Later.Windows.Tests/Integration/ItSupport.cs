@@ -46,7 +46,7 @@ internal static class ItSupport
 
     /// A reader on the real window enumeration and UI Automation, looking in `profile` (the fixture's) for History and sessions.
     public static BrowserReader ReaderFor(string profile) =>
-        new(new UiaSource(), new HistorySource(_ => profile), new SessionSource(_ => profile), BrowserDiscovery.Enumerate, () => DateTime.UtcNow);
+        new(new UiaSource(_ => profile), new HistorySource(_ => profile), new SessionSource(_ => profile), BrowserDiscovery.Enumerate, () => DateTime.UtcNow);
 
     /// A reader with no fallbacks at all: only what the window itself gave.
     public static BrowserReader MemoryOnlyReader() =>

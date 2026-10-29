@@ -15,6 +15,7 @@ internal static unsafe partial class User32
     [LibraryImport("user32.dll")] internal static partial int EnumWindows(EnumWindowsProc callback, nint lParam);
     [LibraryImport("user32.dll", EntryPoint = "GetClassNameW")] internal static partial int GetClassName(nint hwnd, char* buffer, int max);
     [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW")] internal static partial int GetWindowText(nint hwnd, char* buffer, int max);
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowTextLengthW")] internal static partial int GetWindowTextLength(nint hwnd);
     [LibraryImport("user32.dll")] internal static partial uint GetWindowThreadProcessId(nint hwnd, out uint pid);
     [LibraryImport("user32.dll")] internal static partial nint GetForegroundWindow();
     [LibraryImport("user32.dll")] internal static partial int IsWindowVisible(nint hwnd);
@@ -37,11 +38,19 @@ internal static unsafe partial class User32
         return n > 0 ? new string(buffer, 0, n) : "";
     }
 
+    /// The whole window text (not cut at a fixed size: the private-window rule compares it with the accessible title).
     internal static string Title(nint hwnd)
     {
-        char* buffer = stackalloc char[512];
-        int n = GetWindowText(hwnd, buffer, 512);
-        return n > 0 ? new string(buffer, 0, n) : "";
+        int max = GetWindowTextLength(hwnd) + 1;
+        if (max <= 1) return "";
+        char[] heap = max > 512 ? new char[max] : [];
+        char* stack = stackalloc char[max > 512 ? 0 : 512];
+        fixed (char* big = heap)
+        {
+            char* buffer = max > 512 ? big : stack;
+            int n = GetWindowText(hwnd, buffer, max > 512 ? max : 512);
+            return n > 0 ? new string(buffer, 0, n) : "";
+        }
     }
 
     /// The path of a process's executable, or null when it can't be read (gone, or not ours to open).

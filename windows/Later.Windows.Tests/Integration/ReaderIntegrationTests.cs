@@ -147,7 +147,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Any() && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
-        var hwnd = WindowsOf(b)[0].Hwnd;
+        var hwnd = WindowsOf(b)[0].Hwnd; var pid = WindowsOf(b)[0].Pid;
         Thread.Sleep(3000);
 
         var events = new List<(WatchEventKind Kind, nint Hwnd, long At)>();
@@ -162,6 +162,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
                 _ = NativeTest.PeekMessage(out _, 0, 0, 0, 0);   // creates this thread's message queue
                 pumpThread = NativeTest.GetCurrentThreadId();
                 watcher.Start();
+                watcher.Retarget([pid]);
                 started.Set();
                 NativeTest.Pump();
                 watcher.Dispose();
