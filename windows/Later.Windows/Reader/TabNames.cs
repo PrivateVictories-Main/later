@@ -4,7 +4,7 @@ namespace Later.Windows.Reader;
 
 public static partial class TabNames
 {
-    [GeneratedRegex(@"(?<=.) [-–] [^-–]+ [-–] \d[\d.,]*\s?\p{L}{1,3}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<=.)\s[-‐-―−]\s[^-‐-―−]+\s[-‐-―−]\s\d[\d.,]*\s?\p{L}{1,3}$", RegexOptions.CultureInvariant)]
     private static partial Regex MemoryUsage();
 
     /// A tab's UIA name without the browser's " - Memory usage - N MB" tooltip suffix, in any language

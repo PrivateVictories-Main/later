@@ -39,7 +39,7 @@ public class PrivacyAndCostIntegrationTests(ITestOutputHelper output) : IClassFi
         Assert.Equal(1, result.WindowsRead);
         var read = Assert.Single(tabs);   // the normal window is read, in this language too
         Assert.Equal(FixtureServer.Url(1), read.Url);
-        Assert.Equal("Fixture 1", read.Title);   // no localized "memory usage" suffix left on the tab name
+        Assert.True(read.Title == "Fixture 1", Esc(read.Title));   // no localized "memory usage" suffix left on the tab name
     }
 
     [Theory, MemberData(nameof(Browsers))]
