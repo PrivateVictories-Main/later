@@ -85,14 +85,21 @@ internal static class Structure
         return IsUselessTitle(title);
     }
 
-    /// A flow word followed (at any depth) by a long, random-looking section: a one-time link, never saved or kept.
+    /// Nouns that may end a flow section after its flow word: reset-password, confirm-email, magic-link, redeem-code.
+    static readonly HashSet<string> SecretFlowTails = ["password", "link", "email", "account", "code"];
+
+    /// A flow section (reset-password, accept-invite; not magic-string or token-service) followed straight away by a long,
+    /// random-looking section: a one-time link, never saved or kept. A section that is only the flow word (/invite/acme/<code>)
+    /// may have one section between it and the token.
     internal static bool HasSecretPath(IReadOnlyList<string> path)
     {
         for (int i = 0; i < path.Count; i++)
         {
-            if (!Text.SplitWhere(path[i].ToLowerInvariant(), r => r.Value == '-' || r.Value == '_').Any(SecretFlowWords.Contains)) continue;
-            for (int j = i + 1; j < path.Count; j++) if (IsSecretToken(path[j])) return true;
-            return false;
+            var pieces = Text.SplitWhere(path[i].ToLowerInvariant(), r => r.Value == '-' || r.Value == '_');
+            if (pieces.Count == 0 || !pieces.Any(SecretFlowWords.Contains)) continue;
+            if (!SecretFlowWords.Contains(pieces[^1]) && !SecretFlowTails.Contains(pieces[^1])) continue;
+            int reach = pieces.Count == 1 ? 2 : 1;
+            for (int j = i + 1; j < path.Count && j <= i + reach; j++) if (IsSecretToken(path[j])) return true;
         }
         return false;
     }

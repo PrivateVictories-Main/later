@@ -19,7 +19,7 @@ final class AgentDelegate {
 
     /// What it works on, for tests to replace. It reports trouble in `status` because it has no window to show it in.
     init(lock: EngineLock? = Handoff.lock(), store: LibraryStore? = try? LibraryStore.appDefault(),
-         status: AgentStatusFile? = Handoff.statusFile(), makeEngine: @escaping () -> Engine = { Engine() }) {
+         status: AgentStatusFile? = Handoff.statusFile(), makeEngine: @escaping () -> Engine = { Engine(dropsSecretLinks: false) }) {
         self.lock = lock
         self.store = store
         self.status = status

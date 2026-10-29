@@ -23,10 +23,12 @@ import Testing
         lib.save(url: "https://a.com/reset-password/Xk9fA2bQ7zLm", title: "Reset", verdict: verdict, browser: .helium, now: t0)
         lib.save(url: "https://a.com/invite/0b9f6c1e-52a7-4c1b-9d3e-7a4c2f1e8b60", title: "Invite", verdict: verdict, browser: .helium, now: t0)
         lib.save(url: "https://a.com/#/accept/Xk9fA2bQ7zLm", title: "Accept", verdict: verdict, browser: .helium, now: t0)
+        lib.save(url: "https://a.com/#!/accept-invite/Xk9fA2bQ7zLm", title: "Accept again", verdict: verdict, browser: .helium, now: t0)
         lib.save(url: link, title: "Desk", verdict: verdict, browser: .helium, now: t0)
         lib.save(url: "https://a.com/account/settings/billing", title: "Billing", verdict: verdict, browser: .helium, now: t0)
-        #expect(lib.dropSecretLinks() == 3)
-        #expect(lib.data.items.map(\.title) == ["Desk", "Billing"])
+        lib.save(url: "https://github.com/x/magic-string/commit/3f9a2c7e1b4d5a6e8f0123456789abcdef012345", title: "Fix", verdict: verdict, browser: .helium, now: t0)
+        #expect(lib.dropSecretLinks() == 4)
+        #expect(lib.data.items.map(\.title) == ["Desk", "Billing", "Fix"])
         #expect(!lib.contains(url: "https://a.com/reset-password/Xk9fA2bQ7zLm"))   // the index follows
         #expect(lib.dropSecretLinks() == 0)
     }

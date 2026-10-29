@@ -164,10 +164,19 @@ enum Structure {
         return isUselessTitle(title)
     }
 
-    /// A flow word followed (at any depth) by a long, random-looking section: a one-time link, never saved or kept.
+    /// Nouns that may end a flow section after its flow word: reset-password, confirm-email, magic-link, redeem-code.
+    static let secretFlowTails: Set<String> = ["password", "link", "email", "account", "code"]
+
+    /// A flow section (reset-password, accept-invite; not magic-string or token-service) followed straight away by a long,
+    /// random-looking section: a one-time link, never saved or kept. A section that is only the flow word (/invite/acme/<code>)
+    /// may have one section between it and the token.
     static func hasSecretPath(_ path: [String]) -> Bool {
-        let flow = path.firstIndex { $0.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).contains { secretFlowWords.contains(String($0)) } }
-        return flow.map { path[($0 + 1)...].contains(where: isSecretToken) } ?? false
+        path.indices.contains { i in
+            let pieces = path[i].lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).map(String.init)
+            guard let last = pieces.last, pieces.contains(where: secretFlowWords.contains),
+                  secretFlowWords.contains(last) || secretFlowTails.contains(last) else { return false }
+            return path[(i + 1)...].prefix(pieces.count == 1 ? 2 : 1).contains(where: isSecretToken)
+        }
     }
 
     /// shortcut: ASCII letters, digits, "-" and "_" only, and no all-digit codes; add dots (JWTs) or digit-only tokens if a site needs it.

@@ -100,7 +100,9 @@ final class Engine {
 
     /// `readOnly`: another process holds the engine lock, so this one shows the list as it is on disk and never recovers,
     /// watches or saves.
-    init(readOnly: Bool = false) {
+    /// `dropsSecretLinks`: whether this process removes saved pages whose link carries a secret. The background helper
+    /// leaves them for the window app, which can tell the user how many went.
+    init(readOnly: Bool = false, dropsSecretLinks: Bool = true) {
         canEdit = !readOnly
         io = BrowserIO()
         let feeds = !Sample.enabled && UserDefaults.standard.bool(forKey: Self.savesFeedHomesKey)
@@ -118,12 +120,13 @@ final class Engine {
         self.store = loaded.writable ? store : nil
         candidate = store
         library = Library(data: loaded.data)
-        if sample == nil { secretsDropped = Self.tidy(library) }
+        if sample == nil { secretsDropped = Self.tidy(library, dropsSecretLinks: dropsSecretLinks) }
         // A sample list's icons stay in memory, like the list itself.
         icons = SiteIcons(library: library, folder: sample == nil ? SiteIcons.folder : nil)
         judge = Judge(library: library, watched: [], savesFeedHomes: feeds)   // replaced in start(), once the watched browsers are known
         loadNotice = store == nil && sample == nil ? "Later can't open its storage folder, so saves won't be kept." : loaded.notice
         paused = !Sample.enabled && UserDefaults.standard.bool(forKey: "paused")
+        if !readOnly { addSecretsNotice() }
         for browser in Browser.allCases {
             // Known before setup too. One that has never been opened has no data folder yet; it's watched once it has
             // (see ring). Until it's read, it counts as not open.
@@ -240,9 +243,9 @@ final class Engine {
 
     /// Old pages take the current rules (saved by the next change): merged copies, no links with a secret, kinds as the rules
     /// say now. Returns how many pages with a secret went away. Logs counts only.
-    private static func tidy(_ library: Library) -> Int {
+    private static func tidy(_ library: Library, dropsSecretLinks: Bool = true) -> Int {
         let merged = library.mergeDuplicates()
-        let secrets = library.dropSecretLinks()
+        let secrets = dropsSecretLinks ? library.dropSecretLinks() : 0
         let r = library.refreshKinds()
         Perf.log.info("dropSecretLinks removed=\(secrets, privacy: .public)")
         Perf.log.info("mergeDuplicates removed=\(merged, privacy: .public) refreshKinds items=\(r.items, privacy: .public) changed=\(r.changed, privacy: .public) toTools=\(r.toTools, privacy: .public)")
@@ -258,8 +261,18 @@ final class Engine {
         loadNotice = loaded.notice
         library.replace(with: loaded.data)
         secretsDropped = Self.tidy(library)
+        addSecretsNotice()
         canEdit = true
         noticeGeneration += 1
+    }
+
+    static func secretsNotice(removed count: Int) -> String? {
+        count > 0 ? "Later removed \(count) saved \(count == 1 ? "page" : "pages") whose address carried a one-time secret." : nil
+    }
+
+    private func addSecretsNotice() {
+        guard let text = Self.secretsNotice(removed: secretsDropped) else { return }
+        loadNotice = [loadNotice, text].compactMap { $0 }.joined(separator: " ")
     }
 
     /// Shows what the background helper reported while the window was closed, over the startup notice.
