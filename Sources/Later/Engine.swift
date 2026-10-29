@@ -81,6 +81,8 @@ final class Engine {
     @ObservationIgnored private var stopped = false
     @ObservationIgnored private var observers: [(center: NotificationCenter, token: NSObjectProtocol)] = []
     @ObservationIgnored private var historyLookups = 0
+    /// Saved pages removed at load because their link carried a secret; start() saves the list without them.
+    @ObservationIgnored private var secretsDropped = 0
 
     /// `readOnly`: another process holds the engine lock, so this one shows the list as it is on disk and never recovers,
     /// watches or saves.
@@ -103,7 +105,9 @@ final class Engine {
         library = Library(data: loaded.data)
         if sample == nil {   // old pages take the current rules; saved by the next change
             let merged = library.mergeDuplicates()
+            secretsDropped = library.dropSecretLinks()
             let r = library.refreshKinds()
+            Perf.log.info("dropSecretLinks removed=\(self.secretsDropped, privacy: .public)")
             Perf.log.info("mergeDuplicates removed=\(merged, privacy: .public) refreshKinds items=\(r.items, privacy: .public) changed=\(r.changed, privacy: .public) toTools=\(r.toTools, privacy: .public)")
         }
         // A sample list's icons stay in memory, like the list itself.
@@ -155,6 +159,7 @@ final class Engine {
         // Watching is the whole job: macOS must not quietly quit Later once its last window closes.
         ProcessInfo.processInfo.disableAutomaticTermination("Later watches your open tabs")
         library.prune(now: .now)
+        if secretsDropped > 0 { libraryChanged() }
         let center = NSWorkspace.shared.notificationCenter
         func observe(_ center: NotificationCenter, _ name: Notification.Name, _ handler: @escaping @Sendable (Notification) -> Void) {
             observers.append((center, center.addObserver(forName: name, object: nil, queue: .main, using: handler)))

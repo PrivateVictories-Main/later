@@ -18,6 +18,21 @@ public class LibraryTests
     }
 
     [Fact]
+    public void LoadingDropsSavedPagesWhoseLinkCarriesASecretInThePath()
+    {
+        var lib = new Library();
+        lib.Save("https://a.com/reset-password/Xk9fA2bQ7zLm", "Reset", Product, Browser.Helium, T0);
+        lib.Save("https://a.com/invite/0b9f6c1e-52a7-4c1b-9d3e-7a4c2f1e8b60", "Invite", Product, Browser.Helium, T0);
+        lib.Save("https://a.com/#/accept/Xk9fA2bQ7zLm", "Accept", Product, Browser.Helium, T0);
+        lib.Save(Link, "Desk", Product, Browser.Helium, T0);
+        lib.Save("https://a.com/account/settings/billing", "Billing", Product, Browser.Helium, T0);
+        Assert.Equal(3, lib.DropSecretLinks());
+        Assert.Equal(new[] { "Desk", "Billing" }, lib.Data.Items.Select(i => i.Title));
+        Assert.False(lib.Contains("https://a.com/reset-password/Xk9fA2bQ7zLm"));
+        Assert.Equal(0, lib.DropSecretLinks());
+    }
+
+    [Fact]
     public void SavesOnceAndIgnoresDuplicates()
     {
         var lib = new Library();

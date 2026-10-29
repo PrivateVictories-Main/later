@@ -1,5 +1,5 @@
 {
-  "counts": {"cases": 141},
+  "counts": {"cases": 153},
   "cases": [
     {"url": "https://www.amazon.com/", "title": "Amazon.com. Spend less. Smile more.", "specific": false, "kind": "shopping"},
     {"url": "https://www.amazon.com/s?k=standing+desk", "title": "Amazon.com : standing desk", "specific": false, "kind": "shopping"},
@@ -141,6 +141,18 @@
     {"url": "https://app.example.com/#%21/items/ABCDEFG1?returnTo=%2Fsearch%3Fq%3Ddesk", "title": "Walnut desk organizer", "specific": false, "corrections": {"app.example.com/#/items/*": {"isSpecific": false}}},
     {"url": "https://app.example.com/#%21/dashboard?returnTo=%2Fsearch%3Fq%3Ddesk", "title": "Dashboard", "specific": true, "corrections": {"app.example.com/#/items/*": {"isSpecific": false}}},
     {"url": "https://gist.github.com/alice1234", "title": "alice1234’s gists", "specific": true},
-    {"url": "https://gist.github.com/alice1234/0123456789abcdef0123456789abcdef", "title": "notes.md", "specific": true}
+    {"url": "https://gist.github.com/alice1234/0123456789abcdef0123456789abcdef", "title": "notes.md", "specific": true},
+    {"url": "https://example.com/reset-password/Xk9fA2bQ7zLm", "title": "Reset password", "specific": false},
+    {"url": "https://example.com/invite/3f9a2c7e1b4d", "title": "Join the team", "specific": false},
+    {"url": "https://example.com/invite/0b9f6c1e-52a7-4c1b-9d3e-7a4c2f1e8b60", "title": "Join the team", "specific": false},
+    {"url": "https://example.com/auth/magic/Xk9fA2bQ7zLm", "title": "Signing you in", "specific": false},
+    {"url": "https://example.com/account/confirm-email/AbC123xYz789Qw", "title": "Confirm your email", "specific": false},
+    {"url": "https://example.com/team/invite/acme/Xk9fA2bQ7zLm", "title": "Join Acme", "specific": false},
+    {"url": "https://example.com/#/accept-invite/Xk9fA2bQ7zLm", "title": "Join Acme", "specific": false},
+    {"url": "https://example.com/account/settings/billing", "title": "Billing", "specific": true},
+    {"url": "https://example.com/account/reset-password", "title": "Reset password", "specific": true},
+    {"url": "https://example.com/invite/team-handbook-2024", "title": "Team handbook", "specific": true},
+    {"url": "https://example.com/claim/Xk9fA2", "title": "Claim", "specific": true},
+    {"url": "https://example.com/join/engineering", "title": "Join engineering", "specific": true}
   ]
 }
