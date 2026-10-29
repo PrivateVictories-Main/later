@@ -4,14 +4,17 @@ public sealed record RawTab(string RuntimeId, string Title, bool IsSelected, int
 
 public sealed class TabLinkResolver
 {
-    readonly Dictionary<string, (string Url, string Title)> remembered = new(StringComparer.Ordinal);
+    readonly Dictionary<string, (string Url, string Title, bool Exact)> remembered = new(StringComparer.Ordinal);
 
-    /// The selected tab's URL is exact. Remember it, keyed by the tab's RuntimeId, with the title it had.
-    public void Remember(RawTab tab, string url) => remembered[tab.RuntimeId] = (url, tab.Title);
+    /// Remember a tab's link, keyed by the tab's RuntimeId, with the title it had. The selected tab's URL is exact, and an exact
+    /// sighting replaces a guess; a link taken from the session or History (`exact: false`) is a guess that is checked again
+    /// whenever its title becomes ambiguous.
+    public void Remember(RawTab tab, string url, bool exact = true) => remembered[tab.RuntimeId] = (url, tab.Title, exact);
 
-    /// A background tab's link seen earlier, valid only while its title is unchanged.
-    public string? Recall(RawTab tab) =>
-        remembered.TryGetValue(tab.RuntimeId, out var r) && string.Equals(r.Title, tab.Title, StringComparison.Ordinal) ? r.Url : null;
+    /// A background tab's link seen earlier, valid only while its title is unchanged, and, for a guess, unshared.
+    public string? Recall(RawTab tab, HashSet<string>? ambiguous = null) =>
+        remembered.TryGetValue(tab.RuntimeId, out var r) && string.Equals(r.Title, tab.Title, StringComparison.Ordinal)
+            && (r.Exact || ambiguous is null || !ambiguous.Contains(tab.Title)) ? r.Url : null;
 
     /// Titles that more than one open tab carries: their links stay unresolved unless exact.
     public static HashSet<string> AmbiguousTitles(IEnumerable<RawTab> openTabs) =>

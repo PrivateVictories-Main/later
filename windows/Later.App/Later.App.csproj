@@ -37,5 +37,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <ProjectReference Include="..\Later.Core\Later.Core.csproj" />
+    <ProjectReference Include="..\Later.Windows\Later.Windows.csproj" />
   </ItemGroup>
 </Project>

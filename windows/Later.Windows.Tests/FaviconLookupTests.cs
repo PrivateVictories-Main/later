@@ -139,7 +139,7 @@ public class FaviconLookupTests
         MakeCache(dir.Path, new() { ["x"] = Sizes((32, "system32")) }, new() { ["https://c.com/"] = "x" }, "System Profile");
         Directory.CreateDirectory(dir.At("Profile 1"));   // no icon cache yet
         Assert.Equal(["Default", "Profile 2", "Profile 10"],
-            FaviconStore.Databases(dir.Path).Select(p => Path.GetFileName(Path.GetDirectoryName(p))).ToArray());
+            FaviconStore.Databases(dir.Path).Select(p => Path.GetFileName(Path.GetDirectoryName(p))!).ToArray());
         AssertFound("two32", LookUp("c.com", ["https://c.com/"], dir.Path));
     }
 

@@ -194,4 +194,78 @@ public class BrowserReaderTests
         r.Reader.Read(Browser.Chrome);
         Assert.Equal(2, r.Session.Calls);
     }
+
+    [Fact]
+    public void AnUnrecognizedWindowIsCountedApartFromPrivateOnes()
+    {
+        var r = new Rig();
+        r.Windows = [Rig.Win(1, 0), Rig.Win(2, 1), Rig.Win(3, 2)];
+        r.Uia.Windows[1] = new RawWindow(1, false, [], null, IsUnrecognized: true);
+        r.Uia.Windows[2] = new RawWindow(2, true, [], null);
+        r.Uia.Windows[3] = Rig.Raw(3, "https://a.example/1", Rig.Tab("a", "A", true));
+        var result = r.Reader.Read(Browser.Chrome);
+        Assert.Equal(ReadStatus.Ok, result.Status);
+        Assert.Equal((1, 1, 1), (result.UnrecognizedWindows, result.PrivateWindowsSkipped, result.WindowsRead));
+    }
+
+    [Fact]
+    public void OnlyWindowsWithoutATabStripMakeAnEmptyReadThatIsNotTrusted()
+    {
+        var r = new Rig();
+        r.Windows = [Rig.Win(1, 0)];
+        r.Uia.Windows[1] = Rig.Raw(1, null);   // a normal window whose strip is not exposed (yet)
+        var result = r.Reader.Read(Browser.Chrome);
+        Assert.Equal(ReadStatus.Ok, result.Status);
+        Assert.Empty(result.Snapshot!.Tabs);
+        Assert.Equal(1, result.UnrecognizedWindows);
+        // Beside a window that has tabs it is an app window, and the read is complete.
+        r.Windows = [Rig.Win(1, 0), Rig.Win(2, 1)];
+        r.Uia.Windows[2] = Rig.Raw(2, "https://a.example/1", Rig.Tab("a", "A", true));
+        Assert.Equal(0, r.Reader.Read(Browser.Chrome).UnrecognizedWindows);
+    }
+
+    [Fact]
+    public void OnlyPrivateWindowsAreAnEmptyReadThatIsTrusted()
+    {
+        var r = new Rig();
+        r.Windows = [Rig.Win(1, 0)];
+        r.Uia.Windows[1] = new RawWindow(1, true, [], null);
+        Assert.Equal(0, r.Reader.Read(Browser.Chrome).UnrecognizedWindows);
+    }
+
+    [Fact]
+    public void AClosedWindowsNumberIsForgottenSoAReusedHandleGetsANewOne()
+    {
+        var r = new Rig();
+        r.Windows = [Rig.Win(100, 0)];
+        r.Uia.Windows[100] = Rig.Raw(100, "https://a.example/1", Rig.Tab("a", "A", true));
+        Assert.Equal(1, r.Reader.Read(Browser.Chrome).Snapshot!.Tabs.Single().WindowId);
+        r.Windows = [Rig.Win(200, 0)];
+        r.Uia.Windows[200] = Rig.Raw(200, "https://a.example/2", Rig.Tab("b", "B", true));
+        Assert.Equal(2, r.Reader.Read(Browser.Chrome).Snapshot!.Tabs.Single().WindowId);
+        r.Windows = [Rig.Win(100, 0)];   // the handle comes back for another window
+        Assert.Equal(3, r.Reader.Read(Browser.Chrome).Snapshot!.Tabs.Single().WindowId);
+    }
+
+    [Fact]
+    public void AGuessedLinkIsCheckedAgainWhenAnotherTabTakesTheTitleAndAnExactOneIsNot()
+    {
+        var r = new Rig();
+        r.Windows = [Rig.Win(1, 0)];
+        r.Uia.Windows[1] = Rig.Raw(1, "https://a.example/1", Rig.Tab("a", "A", true, 0), Rig.Tab("b", "B", false, 1));
+        r.History.Links["B"] = "https://a.example/2";
+        Assert.Equal(2, r.Reader.Read(Browser.Chrome).Snapshot!.Tabs.Count);   // B's link is a History guess, remembered
+        // A second tab titled "B" opens: B is ambiguous now, and the guess no longer holds for either.
+        r.Uia.Windows[1] = Rig.Raw(1, "https://a.example/1", Rig.Tab("a", "A", true, 0), Rig.Tab("b", "B", false, 1), Rig.Tab("c", "B", false, 2));
+        var result = r.Reader.Read(Browser.Chrome);
+        Assert.Equal(2, result.UnresolvedTabs);
+        Assert.Equal(["A"], result.Snapshot!.Tabs.Select(t => t.Title).ToArray());
+        // The selected tab's address is exact and stays, ambiguous title or not.
+        r.Uia.Windows[1] = Rig.Raw(1, "https://a.example/b", Rig.Tab("a", "A", false, 0), Rig.Tab("b", "B", true, 1), Rig.Tab("c", "B", false, 2));
+        Assert.Equal(1, r.Reader.Read(Browser.Chrome).UnresolvedTabs);
+        r.Uia.Windows[1] = Rig.Raw(1, "https://a.example/a", Rig.Tab("a", "A", true, 0), Rig.Tab("b", "B", false, 1), Rig.Tab("c", "B", false, 2));
+        var again = r.Reader.Read(Browser.Chrome);
+        Assert.Equal(1, again.UnresolvedTabs);
+        Assert.Contains(again.Snapshot!.Tabs, t => t.Url == "https://a.example/b");
+    }
 }

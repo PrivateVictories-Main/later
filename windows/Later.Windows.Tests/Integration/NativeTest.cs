@@ -38,7 +38,7 @@ internal sealed unsafe class UiaTest : IDisposable
 {
     readonly UiaSession session = new();
 
-    public record TabInfo(int Index, string Name, bool Selected, string ClassName = "", string AutomationId = "");
+    public sealed record TabInfo(int Index, string Name, bool Selected, string ClassName = "", string AutomationId = "");
 
     /// Live tab items of a window in tree order.
     public List<TabInfo> Tabs(nint hwnd)
@@ -73,7 +73,7 @@ internal sealed unsafe class UiaTest : IDisposable
             {
                 IUnknown* unknown = tab->GetCurrentPattern((UIA_PATTERN_ID)10010 /*SelectionItem*/);
                 var iid = new Guid("a8efa66a-0fda-421a-9194-38021f3578ea");   // IUIAutomationSelectionItemPattern
-                Marshal.ThrowExceptionForHR(Marshal.QueryInterface((nint)unknown, ref iid, out var pattern));
+                Marshal.ThrowExceptionForHR(Marshal.QueryInterface((nint)unknown, in iid, out var pattern));
                 int hr = ((delegate* unmanaged[Stdcall]<nint, int>)(*(void***)pattern)[3])(pattern);   // vtable slot 3 = Select()
                 _ = Marshal.Release(pattern); _ = unknown->Release();
                 Marshal.ThrowExceptionForHR(hr);

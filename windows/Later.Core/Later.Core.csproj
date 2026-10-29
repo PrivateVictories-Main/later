@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Later.Core.Tests" />
+    <InternalsVisibleTo Include="Later.Windows" />
   </ItemGroup>
 </Project>

@@ -72,7 +72,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
         using var reader = MemoryOnlyReader();   // no History, no session: only what each tab showed while it was active
-        Assert.True(WaitUntil(() => WindowsOf(b).Any() && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
+        Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
         var hwnd = WindowsOf(b)[0].Hwnd;
         foreach (var index in new[] { 0, 1, 2 })   // every tab active once, last one stays active
         {
@@ -146,7 +146,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         using var server = new FixtureServer();
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
-        Assert.True(WaitUntil(() => WindowsOf(b).Any() && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
+        Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
         var hwnd = WindowsOf(b)[0].Hwnd; var pid = WindowsOf(b)[0].Pid;
         Thread.Sleep(3000);
 
@@ -187,7 +187,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
             Thread.Sleep(5000);
             List<(WatchEventKind Kind, nint Hwnd, long At)> idle; lock (events) idle = events.Skip(quietFrom).ToList();
             output.WriteLine($"HOOK {b}: events in 5 s idle = {idle.Count} ({string.Join(", ", idle.Select(e => e.Kind))})");
-            Assert.Empty(idle.Where(e => e.Kind != WatchEventKind.Foreground));   // foreground changes belong to other programs
+            Assert.DoesNotContain(idle, e => e.Kind != WatchEventKind.Foreground);   // foreground changes belong to other programs
 
             // A new window shows; closing it is reported for a known hwnd.
             var knownBefore = WindowsOf(b).Select(w => w.Hwnd).ToHashSet();
@@ -236,7 +236,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         using var server = new FixtureServer();
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
-        Assert.True(WaitUntil(() => WindowsOf(b).Any() && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
+        Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
         uia.SelectTab(WindowsOf(b)[0].Hwnd, 2);
         string[] titles = [TitleOf(1), TitleOf(2), TitleOf(3)];
         var stamp = Stopwatch.StartNew();
@@ -256,7 +256,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         using var server = new FixtureServer();
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(1, "?x=2")]);
         using var uia = new UiaTest();
-        Assert.True(WaitUntil(() => WindowsOf(b).Any() && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 2, Slow), "two tabs did not appear");
+        Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 2, Slow), "two tabs did not appear");
         Assert.True(WaitUntil(() => HistoryLookupStore.LinksForTitles([TitleOf(1)], HistoryLookupStore.Databases(f.Profile), DateTime.UtcNow.AddDays(-1)).Count == 1, TimeSpan.FromSeconds(60)),
             "History never held the title");
         using var fresh = ReaderFor(f.Profile);
@@ -275,7 +275,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         string[] urls = [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3), FixtureServer.Url(4)];
         using var first = BrowserFixture.Start(ExeOf(b), server, urls);
         using var uia = new UiaTest();
-        Assert.True(WaitUntil(() => WindowsOf(b).Any() && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 4, Slow), "four tabs did not appear");
+        Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 4, Slow), "four tabs did not appear");
         Assert.True(WaitUntil(() => HistoryLookupStore.LinksForTitles([TitleOf(1), TitleOf(2), TitleOf(3), TitleOf(4)], HistoryLookupStore.Databases(first.Profile), DateTime.UtcNow.AddDays(-1)).Count == 4, TimeSpan.FromSeconds(60)),
             "History never held the four titles");
         Thread.Sleep(3000);
@@ -283,7 +283,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         Assert.True(WaitUntil(() => WindowsOf(b).Count == 0, TimeSpan.FromSeconds(20)), "the first run's window did not close");
 
         using var second = BrowserFixture.Start(ExeOf(b), server, [], profile: first.Profile, restore: true);
-        Assert.True(WaitUntil(() => WindowsOf(b).Any() && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 4, Slow), "the restored window did not get four tabs");
+        Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 4, Slow), "the restored window did not get four tabs");
         var sessionsDir = Path.Combine(first.Profile, "Default", "Sessions");
         foreach (string file in (Directory.Exists(sessionsDir) ? Directory.GetFiles(sessionsDir) : []).OrderBy(x => x, StringComparer.Ordinal))
         {
@@ -329,7 +329,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
     {
         using var server = new FixtureServer();
         using var first = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3), FixtureServer.Url(4), FixtureServer.Url(5)]);
-        Assert.True(WaitUntil(() => WindowsOf(b).Any(), Slow));
+        Assert.True(WaitUntil(() => WindowsOf(b).Count > 0, Slow));
         using var second = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(6), FixtureServer.Url(7), FixtureServer.Url(8), FixtureServer.Url(9), FixtureServer.Url(10)], profile: first.Profile);
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Count >= 2 && WindowsOf(b).Sum(w => uia.Tabs(w.Hwnd).Count) >= 10, Slow), "ten tabs in two windows did not appear");

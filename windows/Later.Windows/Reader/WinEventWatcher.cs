@@ -41,7 +41,11 @@ public sealed class WinEventWatcher : IDisposable
     public void Retarget(IReadOnlyCollection<uint> pids)
     {
         foreach (var gone in perBrowser.Keys.Where(p => !pids.Contains(p)).ToList()) Unhook(gone);
-        foreach (var pid in pids) Watch(pid);
+        foreach (var pid in pids)
+        {
+            try { Watch(pid); }
+            catch (Win32Exception) { }   // one process that can't be hooked (gone, or not ours) must not leave the others unwatched; tried again at the next Retarget
+        }
     }
 
     /// DESTROY arrives when the window's class can no longer be read, so only windows seen earlier pass.

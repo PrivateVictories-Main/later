@@ -10,14 +10,15 @@ internal sealed class BrowserFixture : IDisposable
     public string Profile { get; }
     BrowserFixture(Process process, string profile) { Process = process; Profile = profile; }
 
-    public static BrowserFixture Start(string exe, FixtureServer server, string[] urls, bool incognito = false, string? profile = null, bool restore = false, params string[] extra)
+    public static BrowserFixture Start(string exe, FixtureServer server, string[] urls, bool incognito = false, string? profile = null, bool restore = false, bool newWindow = true, params string[] extra)
     {
         profile ??= Path.Combine(Path.GetTempPath(), "LaterIT-" + Guid.NewGuid().ToString("N"));
         var args = new List<string>
         {
             $"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check", "--disable-sync",
-            "--disable-features=Translate,HttpsUpgrades,HttpsFirstBalancedModeAutoEnable,HttpsFirstModeIncognito,HttpsFirstModeV2ForEngagedSites", $"--host-resolver-rules=MAP fixture.example.com 127.0.0.1:{server.Port}", "--new-window",
+            "--disable-features=Translate,HttpsUpgrades,HttpsFirstBalancedModeAutoEnable,HttpsFirstModeIncognito,HttpsFirstModeV2ForEngagedSites", $"--host-resolver-rules=MAP fixture.example.com 127.0.0.1:{server.Port}",
         };
+        if (newWindow) args.Add("--new-window");   // without it, a launch into a running profile adds tabs to its window
         if (incognito) args.Add("--incognito");
         if (restore) args.Add("--restore-last-session");
         args.AddRange(extra);

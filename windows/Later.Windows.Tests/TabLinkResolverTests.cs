@@ -73,4 +73,18 @@ public class TabLinkResolverTests
         r.Forget();
         Assert.Null(r.Recall(Tab("2", "B")));
     }
+
+    [Fact]
+    public void AGuessIsGivenUpWhenItsTitleBecomesAmbiguousAndAnExactLinkIsKept()
+    {
+        var r = new TabLinkResolver();
+        r.Remember(Tab("1", "Page"), "https://a.example/guess", exact: false);
+        r.Remember(Tab("2", "Page"), "https://a.example/exact");   // the selected tab's address
+        var shared = new HashSet<string> { "Page" };
+        Assert.Equal("https://a.example/guess", r.Recall(Tab("1", "Page"), []));
+        Assert.Null(r.Recall(Tab("1", "Page"), shared));
+        Assert.Equal("https://a.example/exact", r.Recall(Tab("2", "Page"), shared));
+        r.Remember(Tab("1", "Page"), "https://a.example/seen", exact: true);   // an exact sighting overrides the guess
+        Assert.Equal("https://a.example/seen", r.Recall(Tab("1", "Page"), shared));
+    }
 }

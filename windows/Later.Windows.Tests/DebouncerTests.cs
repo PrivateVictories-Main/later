@@ -27,4 +27,38 @@ public class DebouncerTests
         Thread.Sleep(300);
         Assert.Equal(0, fires);
     }
+
+    [Fact]
+    public void FireNeverOverlapsItselfAndAPokeDuringItFiresOnceMoreAfterwards()
+    {
+        int running = 0, overlaps = 0, fires = 0;
+        using var started = new ManualResetEventSlim();
+        using var d = new Debouncer(TimeSpan.FromMilliseconds(30), () =>
+        {
+            if (Interlocked.Increment(ref running) > 1) Interlocked.Increment(ref overlaps);
+            started.Set();
+            Thread.Sleep(300);
+            Interlocked.Increment(ref fires);
+            Interlocked.Decrement(ref running);
+        });
+        d.Poke();
+        Assert.True(started.Wait(5000));
+        for (int i = 0; i < 10; i++) { d.Poke(); Thread.Sleep(20); }   // pokes while it runs
+        for (int i = 0; i < 100 && Volatile.Read(ref fires) < 2; i++) Thread.Sleep(50);
+        Thread.Sleep(500);
+        Assert.Equal(2, Volatile.Read(ref fires));
+        Assert.Equal(0, Volatile.Read(ref overlaps));
+    }
+
+    [Fact]
+    public void PokingAfterDisposeDoesNothing()
+    {
+        int fires = 0;
+        var d = new Debouncer(TimeSpan.FromMilliseconds(20), () => Interlocked.Increment(ref fires));
+        d.Dispose();
+        d.Poke();
+        d.Dispose();
+        Thread.Sleep(200);
+        Assert.Equal(0, fires);
+    }
 }

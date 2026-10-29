@@ -51,7 +51,7 @@ internal sealed unsafe class UiaReader : IDisposable
         {
             root = session.Automation->ElementFromHandle(new HWND(w.Hwnd));
             if (root is null) return null;
-            bool normal = false, settled = false;
+            var kind = WindowKind.Unrecognized; bool settled = false;
             for (int attempt = 0; attempt < ClassifyAttempts && !settled; attempt++)
             {
                 if (rootView is not null) { rootView->Release(); rootView = null; }
@@ -60,10 +60,11 @@ internal sealed unsafe class UiaReader : IDisposable
                 if (rootView is null) return null;   // a tree still being built cannot be classified: never "normal"
                 var name = UiaSession.Cached(rootView, UiaIds.Name) as string ?? "";
                 settled = User32.Title(w.Hwnd) == before;   // the title moved while we looked: compare again
-                normal = settled && PrivateWindowDetector.IsNormal(before, name, () => NamesIn(dataFolder(w.Browser)).Current());
+                kind = settled ? PrivateWindowDetector.Classify(before, name, () => NamesIn(dataFolder(w.Browser)).Current()) : WindowKind.Unrecognized;
             }
             if (!settled) return null;
-            if (!normal) return new RawWindow(w.Hwnd, true, [], null);
+            if (kind == WindowKind.Private) return new RawWindow(w.Hwnd, true, [], null);
+            if (kind == WindowKind.Unrecognized) return new RawWindow(w.Hwnd, false, [], null, IsUnrecognized: true);
 
             var state = new Walk();
             Descend(rootView, 0, state);

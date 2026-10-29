@@ -16,7 +16,8 @@ public class PrivacyAndCostIntegrationTests(ITestOutputHelper output) : IClassFi
     static readonly TimeSpan Slow = TimeSpan.FromSeconds(45);
 
     public static IEnumerable<object[]> Browsers() => ItSupport.Browsers();
-    public static IEnumerable<object[]> BrowsersAndLanguages() => ItSupport.Browsers().SelectMany(b => new[] { "de", "ja", "fr" }.Select(lang => new[] { b[0], lang }));
+    static readonly string[] Languages = ["de", "ja", "fr"];
+    public static IEnumerable<object[]> BrowsersAndLanguages() => ItSupport.Browsers().SelectMany(b => Languages.Select(lang => new[] { b[0], lang }));
 
     static string Esc(string s) => string.Concat(s.Select(c => c < 128 ? c.ToString() : $"\\u{(int)c:x4}"));
 
@@ -85,7 +86,7 @@ public class PrivacyAndCostIntegrationTests(ITestOutputHelper output) : IClassFi
     {
         using var server = new FixtureServer();
         using var first = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.HeavyUrl(1), FixtureServer.HeavyUrl(2), FixtureServer.HeavyUrl(3), FixtureServer.HeavyUrl(4)]);
-        Assert.True(WaitUntil(() => WindowsOf(b).Any(), Slow));
+        Assert.True(WaitUntil(() => WindowsOf(b).Count > 0, Slow));
         using var second = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.HeavyUrl(5), FixtureServer.HeavyUrl(6)], profile: first.Profile);
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Count >= 2 && WindowsOf(b).Sum(w => uia.Tabs(w.Hwnd).Count) >= 6, Slow), "six tabs in two windows did not appear");

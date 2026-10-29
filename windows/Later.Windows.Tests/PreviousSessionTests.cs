@@ -8,6 +8,7 @@ namespace Later.Windows.Tests;
 public class PreviousSessionTests
 {
     /// Builds a Chromium session file the way the browser writes one.
+#pragma warning disable CA1001 // a MemoryStream holds no resource that needs releasing
     sealed class Snss
     {
         readonly MemoryStream bytes = new();
@@ -41,6 +42,7 @@ public class PreviousSessionTests
         }
         public byte[] ToArray() => bytes.ToArray();
     }
+#pragma warning restore CA1001
 
     static Snss TwoTabsAndAClosedOne() => new Snss()
         .TabWindow(1, 10).TabIndex(10, 0).Navigation(10, 0, "https://a.example/old", "Old").Navigation(10, 1, "https://a.example/one", "Page one").Selected(10, 1)

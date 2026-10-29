@@ -42,6 +42,30 @@ public class PrivateWindowDetectorTests
     [Fact]
     public void AnEmptyWindowTextIsNeverNormal() => Assert.False(Normal("", ""));
 
+    static WindowKind Classified(string windowText, string rootView, params string[] profiles) =>
+        PrivateWindowDetector.Classify(windowText, rootView, () => profiles);
+
+    [Theory]
+    [InlineData("Fixture 9 - Google Chrome (Incognito)")]
+    [InlineData("Fixture 9 - Google Chrome (anonym)")]
+    [InlineData("Fixture 9 - Google Chrome（シークレット モード）")]
+    [InlineData("Fixture 9 - Google Chrome (Guest)")]
+    public void ASuffixThatIsNotAProfileNameIsPrivate(string rootView) => Assert.Equal(WindowKind.Private, Classified("Fixture 9 - Google Chrome", rootView, Profiles));
+
+    [Theory]
+    [InlineData("Fixture 9 - Google Chrome - Person 3")]     // a profile name Local State does not hold (yet)
+    [InlineData("Fixture 8 - Google Chrome")]                // the window moved while it was read
+    [InlineData("")]                                         // the chrome is still being built
+    public void AWindowThatMightBeNormalButIsNotUnderstoodIsUnrecognized(string rootView) => Assert.Equal(WindowKind.Unrecognized, Classified("Fixture 9 - Google Chrome", rootView, Profiles));
+
+    [Fact]
+    public void ClassifyAgreesWithIsNormalOnWhatIsNormal()
+    {
+        Assert.Equal(WindowKind.Normal, Classified("Fixture 2 - Google Chrome", "Fixture 2 - Google Chrome"));
+        Assert.Equal(WindowKind.Normal, Classified("Fixture 2 - Google Chrome", "Fixture 2 - Google Chrome - Person 1", Profiles));
+        Assert.Equal(WindowKind.Unrecognized, Classified("", ""));
+    }
+
     [Fact]
     public void ProfileNamesComeFromLocalState()
     {
