@@ -15,8 +15,8 @@ public class FamiliarityTests
         Assert.Equal(f.Counts["civil"], f.Civil.Count);
         Assert.Equal(f.Counts["days"], f.Days.Count);
         Assert.Equal(f.Counts["disposition"], f.Disposition.Count);
-        Assert.Equal(f.Constants["regularDays"], Familiarity.RegularDays);
-        Assert.Equal(f.Constants["window"], Familiarity.Window);
+        Assert.Equal(Familiarity.RegularDays, f.Constants["regularDays"]);
+        Assert.Equal(Familiarity.Window, f.Constants["window"]);
     }
 
     [Fact]
