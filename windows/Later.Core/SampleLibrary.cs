@@ -66,7 +66,10 @@ public static class SampleLibrary
         return Places.ToDictionary(p => Library.HostOf(p.Url), p => Enumerable.Range(1, p.Days).Select(i => today - i).ToHashSet());
     }
 
-    public static LibraryData Data(DateTime now)
+    public static LibraryData Data(DateTime now) => Build(now).Data;
+
+    /// The sample's library itself, which also knows the days its history says each site was visited (`Data` alone does not).
+    public static Library Build(DateTime now)
     {
         var library = new Library();
         foreach (var page in Pages)
@@ -105,7 +108,7 @@ public static class SampleLibrary
         }
         library.ApplyHistory(history);
         library.SetPlaces(placed);
-        return library.Data;
+        return library;
     }
 
     /// The tabs open for each page, by page key: one for every page placed in a window, two for one of them.

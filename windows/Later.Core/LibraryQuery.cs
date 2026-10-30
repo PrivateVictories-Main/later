@@ -180,7 +180,7 @@ public static partial class LibraryQuery
     }
 
     /// The start of the local day `daysAgo` days before `utc`'s.
-    static DateTime StartOfDay(DateTime utc, int daysAgo, TimeZoneInfo tz) => ToUtc(Local(utc, tz).Date.AddDays(-daysAgo), tz);
+    internal static DateTime StartOfDay(DateTime utc, int daysAgo, TimeZoneInfo tz) => ToUtc(Local(utc, tz).Date.AddDays(-daysAgo), tz);
 
     // MARK: Groups
 

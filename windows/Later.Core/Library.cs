@@ -80,7 +80,11 @@ public sealed class Library
     {
         if (days.Count == 0 && historyDays.Count > 0) return;
         historyDays = days;
+        HistoryVersion++;
     }
+
+    /// Grows when the history's days were replaced, so a view built from them can tell it is out of date.
+    public int HistoryVersion { get; private set; }
 
     /// Whether there is enough to tell a regular site from a new one: at least as many different past days of the window,
     /// over all sites, as it takes to be a regular. Before that, no page can be told apart, and a flag set now would be
