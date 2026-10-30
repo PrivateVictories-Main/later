@@ -163,6 +163,15 @@ public class AppUiTests
     static void WaitForCounts(RunningApp app, params (LibrarySection Section, int Count)[] counts) =>
         Wait(() => { var names = app.Names(); return counts.All(c => names.Contains($"{c.Section.Title}, {c.Count}")); }, Slow, "the sidebar to say " + string.Join(", ", counts.Select(c => $"{c.Section.Title} {c.Count}")));
 
+    /// Waits until every one of these names is in the window (a window names its parts as it lays them out), and says which are missing if not.
+    static List<string> WaitForAll(RunningApp app, string what, params string[] wanted)
+    {
+        var names = new List<string>();
+        try { Wait(() => { names = app.Names(); return wanted.All(names.Contains); }, Slow, what); }
+        catch (Xunit.Sdk.XunitException) { throw new Xunit.Sdk.XunitException($"timed out waiting for {what}: missing {string.Join("; ", wanted.Except(names))} | the window names: {string.Join("; ", names.Take(80))}"); }
+        return names;
+    }
+
     /// Tries until the element is there and takes the action: the window may still be laying out.
     static void Do(Func<bool> action, string what, RunningApp? app = null)
     {
@@ -473,15 +482,11 @@ public class AppUiTests
     {
         using var dir = new TempDir();
         using var app = RunningApp.Start(dir.Path, "--sample-settings", "--sample-now", "2026-10-15T12:00:00");
-        var names = app.WaitForName(n => n == "Quit Later", "the Settings window");
+        WaitForAll(app, "the Settings window",
+            "Quit Later", "Start at sign-in", "Pause watching", "Also save feed home pages", "Block Later from the internet (Windows Firewall)", "Default order",
+            "Watching Helium and Chrome", "General", "Browsers", "Privacy", "About", "Open-source components", "Helium", "Chrome", "Later 1.4.0");
         Assert.Equal("Later Settings", app.Title);
-        foreach (var name in new[]
-        {
-            "Start at sign-in", "Pause watching", "Also save feed home pages", "Block Later from the internet (Windows Firewall)", "Default order",
-            "Watching Helium and Chrome", "General", "Browsers", "Privacy", "About", "Open-source components", "Helium", "Chrome",
-        }) Assert.Contains(name, names);
-        Assert.Equal(2, names.Count(n => n == "Watching"));   // the sample: both browsers
-        Assert.Contains("Later 1.4.0", names);
+        Wait(() => app.Names().Count(n => n == "Watching") == 2, Slow, "both browsers to say Watching");   // the sample: both browsers
         Assert.Equal(1, app.ToggleState("Start at sign-in"));    // the sample: starting at sign-in is on
         Assert.Equal(0, app.ToggleState("Pause watching"));
         Assert.Equal(0, app.ToggleState("Also save feed home pages"));
@@ -536,13 +541,10 @@ public class AppUiTests
     {
         using var dir = new TempDir();
         using var app = RunningApp.Start(dir.Path, "--sample-onboarding", "--sample-now", "2026-10-15T12:00:00");
-        var names = app.WaitForName(n => n == "Start Using Later", "the welcome");
+        WaitForAll(app, "the welcome",
+            "Start Using Later", "Welcome to Later", "Close tabs freely. Later keeps the ones worth coming back to.", "Saves what you linger on", "Never touches your tabs", "Stays on this PC",
+            "Browsers Later can read", "Starts with Windows", "Helium", "Open", "Chrome", "Not open", "You can change this anytime in Settings.");
         Assert.Equal("Welcome to Later", app.Title);
-        foreach (var name in new[]
-        {
-            "Welcome to Later", "Close tabs freely. Later keeps the ones worth coming back to.", "Saves what you linger on", "Never touches your tabs", "Stays on this PC",
-            "Browsers Later can read", "Starts with Windows", "Helium", "Open", "Chrome", "Not open", "You can change this anytime in Settings.",
-        }) Assert.Contains(name, names);
         Assert.Empty(Directory.GetFileSystemEntries(dir.Path));
         app.Focus();
         Wait(() => app.FocusedElement().Contains("Start Using Later", StringComparison.Ordinal), Slow, $"the keyboard to start on the button (it is on: {app.FocusedElement()})");
@@ -556,8 +558,7 @@ public class AppUiTests
     {
         using var dir = new TempDir();
         using var app = RunningApp.Start(dir.Path, "--sample-onboarding", "--sample-no-browsers");
-        var names = app.WaitForName(n => n == "Start Using Later", "the welcome");
-        Assert.Contains("Later works with Helium and Chrome. Install one, then open Later again.", names);
+        var names = WaitForAll(app, "the welcome", "Start Using Later", "Later works with Helium and Chrome. Install one, then open Later again.");
         Assert.DoesNotContain("Not open", names);
     }
 

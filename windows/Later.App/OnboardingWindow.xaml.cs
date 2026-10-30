@@ -20,6 +20,7 @@ public sealed partial class OnboardingWindow : Window
     readonly Action finished;
     readonly Dictionary<Browser, ImageSource> icons = [];
     int resizes;
+    string? shownRows;   // what the browser rows say now, so they are only rebuilt when it changes
 
     /// `finished` runs when setup is done: the app shows the library, then this window closes.
     internal OnboardingWindow(OnboardingModel model, Action finished)
@@ -49,6 +50,9 @@ public sealed partial class OnboardingWindow : Window
     {
         BrowserList.Visibility = model.Browsers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         NoBrowser.Visibility = model.Browsers.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+        var rows = string.Join("|", model.Browsers.Select(b => $"{b.Name}/{b.Status}/{icons.ContainsKey(b.Browser)}"));
+        if (rows == shownRows) return;
+        shownRows = rows;
         BrowserList.ItemsSource = model.Browsers
             .Select(b => new BrowserRowView(new BrowserLine(b.Browser, b.Name, b.Status, b.IsOpen ? Tone.Good : Tone.Quiet, b.ExePath), icons.GetValueOrDefault(b.Browser)))
             .ToList();

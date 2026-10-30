@@ -36,6 +36,7 @@ public sealed partial class SettingsWindow : Window
     readonly Dictionary<Browser, ImageSource> icons = [];
     bool syncing;
     int resizes;
+    string? shownRows;   // what the browser rows say now, so they are only rebuilt when it changes
 
     internal SettingsWindow(SettingsModel model, Action quit)
     {
@@ -93,7 +94,13 @@ public sealed partial class SettingsWindow : Window
             bool onboarded = model.Onboarded;
             BrowsersLater.Visibility = onboarded ? Visibility.Collapsed : Visibility.Visible;
             BrowserList.Visibility = onboarded ? Visibility.Visible : Visibility.Collapsed;
-            BrowserList.ItemsSource = model.Browsers.Select(b => new BrowserRowView(b, icons.GetValueOrDefault(b.Browser))).ToList();
+            var lines = model.Browsers;
+            var rows = string.Join("|", lines.Select(b => $"{b.Name}/{b.Status}/{b.Tone}/{icons.ContainsKey(b.Browser)}"));
+            if (rows != shownRows)
+            {
+                shownRows = rows;
+                BrowserList.ItemsSource = lines.Select(b => new BrowserRowView(b, icons.GetValueOrDefault(b.Browser))).ToList();
+            }
 
             FirewallSwitch.IsOn = model.FirewallBlocked;
             FirewallSwitch.IsEnabled = model.FirewallAvailable && !model.FirewallBusy;
