@@ -130,11 +130,12 @@ public sealed class LibraryViewModelTests
 
     // MARK: Selection, folding and the user's changes
 
-    static LibraryViewModel Shown()
+    /// `data`: the list to show (every `Sample()` is a new list, with ids of its own).
+    static LibraryViewModel Shown(LibraryData? data = null)
     {
         var model = new LibraryViewModel(Noon);
         model.Wake(Noon);
-        model.SetSnapshot(Sample(), NoCopies);
+        model.SetSnapshot(data ?? Sample(), NoCopies);
         return model;
     }
 
@@ -193,12 +194,13 @@ public sealed class LibraryViewModelTests
     [Fact]
     public void DeletingTheSelectedPageSelectsTheNextOnceTheChangeArrives()
     {
-        var model = Shown();
+        var original = Sample();
+        var model = Shown(original);
         var rows = model.Current.RowIds;
         var gone = rows[2];
         model.SetSelection([gone]);
         int token = model.BeginChange([gone]);
-        var data = Sample();
+        var data = original.Copy();
         data.Items.RemoveAll(i => i.Id == gone);
         model.SetSnapshot(data, NoCopies);
         Assert.Empty(model.SelectedItems);   // the page is no longer listed; where to go on from is told by the change
@@ -236,10 +238,11 @@ public sealed class LibraryViewModelTests
     [Fact]
     public void ThePagesShownAreTheOnlyOnesSelectedAfterTheListChanges()
     {
-        var model = Shown();
+        var original = Sample();
+        var model = Shown(original);
         var rows = model.Current.RowIds;
         model.SetSelection([rows[0], rows[1]]);
-        var data = Sample();
+        var data = original.Copy();
         data.Items.RemoveAll(i => i.Id == rows[1]);
         model.SetSnapshot(data, NoCopies);
         Assert.Equal([rows[0]], model.Selected.ToArray());
