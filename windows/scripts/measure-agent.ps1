@@ -7,16 +7,16 @@
 #   own timers   deadline, retry, loadretry, save      the agent started these itself: any one fails the gate
 #   derived      debounce, post, history, visitdays    work that follows something else: fails the gate when nothing external arrived
 #   external     winevent, session                     the system's events (foreground changes, lock, power): reported, never a failure
-# CPU over $MaxCpuMs fails only in a window with no external event. With external events the CPU is divided by their count
-# and over $MaxCpuMsPerEvent each fails: an event costs the agent a lookup of one window's process (well under a millisecond
-# once warm), and the first one also pays for compiling that path, so 10 ms each is generous for the real cost and still catches
-# an agent that does real work per event.
+# CPU over $MaxCpuMs fails a window with no external event. With external events the allowance is the larger of $MaxCpuMs and one
+# scheduler tick ($TickMs ms) per event: Windows charges CPU time in whole ticks, so one event reads as 0 or 15.6 ms whatever it
+# really cost, and a per-event bound under a tick could not be met. An event costs the agent a lookup of one window's process
+# (well under a millisecond once warm); work of tens of milliseconds per event is several times this budget and still fails.
 param(
     [Parameter(Mandatory)] [string]$Exe,
     [int]$Seconds = 30,
     [double]$MaxPrivateMB = 15.0,
     [double]$MaxCpuMs = 50,
-    [double]$MaxCpuMsPerEvent = 10,
+    [double]$TickMs = 15.625,   # CPU time is charged in whole scheduler ticks: every cold reading is a multiple of this
     [int]$SettleSeconds = 5,
     [double]$WarmAlertMB = 25.0,
     [string]$ReadyToRunExe = '',
@@ -119,12 +119,13 @@ try {
     }
     Write-Host ('AGENT cold window threads with cpu: {0}{1}' -f $(if ($moved.Count) { $moved -join ', ' } else { 'none' }), $(if ($cpu - $sum -gt 1) { ' (' + [math]::Round($cpu - $sum) + ' ms on threads that ended)' } else { '' }))
     if ($others.Count -gt 0) { Write-Host ('AGENT cold window other events: ' + (($others.Keys | Sort-Object | ForEach-Object { '{0}={1}' -f $_, $others[$_] }) -join ' ')) }
-    if ($external -gt 0) { Write-Host ('AGENT cold window had {0} external events (winevent={1} session={2}); the CPU bound is {3} ms each' -f $external, [int]$wakes['winevent'], [int]$wakes['session'], $MaxCpuMsPerEvent) }
+    if ($external -gt 0) { Write-Host ('AGENT cold window had {0} external events (winevent={1} session={2}); the CPU allowance is {3} ms' -f $external, [int]$wakes['winevent'], [int]$wakes['session'], [math]::Max($MaxCpuMs, $external * $TickMs)) }
     $failed = @()
     if ($own -gt 0) { $failed += "the agent woke itself $own times ($counts)" }
     if ($external -eq 0 -and $derived -gt 0) { $failed += "work with no event behind it: $derived wake-ups ($counts)" }
     if ($external -eq 0 -and $cpu -gt $MaxCpuMs) { $failed += "CPU $([math]::Round($cpu)) ms in $Seconds s is over $MaxCpuMs ms with no external event" }
-    if ($external -gt 0 -and $perEvent -gt $MaxCpuMsPerEvent) { $failed += "CPU $([math]::Round($perEvent, 1)) ms per external event is over $MaxCpuMsPerEvent ms" }
+    $allowedMs = [math]::Max($MaxCpuMs, $external * $TickMs)   # the quiet budget, or one tick per external event if that is more
+    if ($external -gt 0 -and $cpu -gt $allowedMs + 0.5) { $failed += "CPU $([math]::Round($cpu, 1)) ms is over $([math]::Round($allowedMs, 1)) ms for $external external events" }
     # What the agent printed as it started: where the memory goes.
     $all | Where-Object { $_ -like 'TRACE *' } | ForEach-Object { Write-Host $_ }
     if ($failed.Count -gt 0) { $coldFailure = $(if ($coldFailure) { "$coldFailure; " } else { '' }) + 'gate G2 failed: ' + ($failed -join '; ') }

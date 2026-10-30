@@ -105,7 +105,8 @@ public sealed partial class ShellWindow : Window
         Panes.Visibility = loaded ? Visibility.Visible : Visibility.Collapsed;
         if (!loaded) return;
         Loading.Visibility = Visibility.Collapsed;
-        if (SearchBox.FocusState == FocusState.Unfocused) List.FocusList();
+        // Only if the keyboard is not already somewhere in the toolbar (the user may have tabbed there during the load).
+        if (new Control[] { SearchBox, GroupButton, SortButton }.All(c => c.FocusState == FocusState.Unfocused)) List.FocusList();
     }
 
     /// Shown means visible and not minimized (`VisibilityChanged` is not raised for a minimize). Only a change is acted on.

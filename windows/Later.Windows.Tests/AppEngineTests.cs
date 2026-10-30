@@ -177,6 +177,34 @@ public sealed class AppEngineTests : IDisposable
     }
 
     [Fact]
+    public void ABackgroundWriteStalledMidWayDoesNotDelayTheExitPastTheFlushBound()
+    {
+        SetUp();
+        var hang = new ManualResetEventSlim();   // not disposed: the stalled write thread may still be leaving its wait when the test ends
+        using var saving = new ManualResetEventSlim(); using var started = new ManualResetEventSlim();
+        using var watcher = EngineLock.Open(paths.InstanceSuffix);
+        var library = new Library();
+        var app = NewApp((_, h, _) =>
+        {
+            var engine = Quiet(h, library, save: _ => { saving.Set(); hang.Wait(60_000); });
+            started.Set();
+            return engine;
+        }, flushSeconds: 0.4);
+        app.Start();
+        Assert.True(started.Wait(10_000));
+        app.Post(() => library.Save("https://a.example.com/articles/one", "One", Reading, Browser.Helium, DateTime.UtcNow));
+        Assert.True(saving.Wait(10_000), "the background write never started, so this proved nothing");   // one second after the change
+        var timer = Stopwatch.StartNew();
+        app.Shutdown();
+        Assert.True(app.WaitForExit(TimeSpan.FromSeconds(10)), "the exit waits on the stalled write for ever");
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(5), $"took {timer.ElapsedMilliseconds} ms: the bound does not cover the write already running");
+        Assert.True(watcher.TryAcquire(TimeSpan.FromSeconds(5), out var abandoned), "the lock is still held");
+        Assert.False(abandoned);
+        watcher.Release();
+        hang.Set();
+    }
+
+    [Fact]
     public void AChangeMadeInTheWindowIsOnDiskOnceItIsClosedAndAnOrdinaryExitIsNotForced()
     {
         SetUp();

@@ -59,7 +59,7 @@ internal sealed class AppEngine : IDisposable
     /// How long the final save may take before the lock is let go without it, and how long a closed window may take to end the process.
     internal TimeSpan FlushTimeout { get; init; } = TimeSpan.FromSeconds(5);
     internal TimeSpan ExitLimit { get; init; } = TimeSpan.FromSeconds(10);
-    internal Action ForceExit { get; init; } = () => Environment.Exit(0);
+    internal Action ForceExit { get; init; } = () => Process.GetCurrentProcess().Kill();   // not Exit: that runs handlers that may be the thing that hangs
 
     /// `ui` runs an action on the window's thread (false when that thread is gone). `startEngine`: tests stand in for the hooks.
     public AppEngine(AppPaths paths, LibraryViewModel model, Func<Action, bool> ui, Action exitApp, StartEngine? startEngine = null)

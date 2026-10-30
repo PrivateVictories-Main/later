@@ -180,9 +180,14 @@ public class AppUiTests
         {
             using var dir = new TempDir();
             File.WriteAllText(dir.At("settings.json"), "{\"onboarded\":true}");
+            using var gate = EngineLock.Open(new AppPaths(dir.Path).InstanceSuffix);
             using var app = RunningApp.Start(dir.Path);
             Assert.True(app.Process.CloseMainWindow());
-            Assert.True(app.Process.WaitForExit(20_000), $"the process outlived its window (run {i + 1})");
+            // Under the 10 s watchdog, which would end a lost quit as a kill and so hide it; and a kill leaves the lock abandoned.
+            Assert.True(app.Process.WaitForExit(8_000), $"the process outlived its window (run {i + 1})");
+            Assert.True(gate.TryAcquire(TimeSpan.FromSeconds(5), out var abandoned), "the lock is not free after the exit");
+            Assert.False(abandoned, $"the exit was forced, not a clean quit (run {i + 1})");
+            gate.Release();
         }
     }
 

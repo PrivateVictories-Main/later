@@ -138,8 +138,17 @@ public sealed class Engine
             try { Flush(); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }   // reported by SaveFailedChanged
         }
         // Whatever the flush did, a write that was queued earlier must not land after this: the lock is let go next, and the
-        // process that takes it writes the list from then on.
-        lock (diskGate) written = long.MaxValue;
+        // process that takes it writes the list from then on. Not under `diskGate`: a write already inside `save` may be stalled
+        // (a disk stall), and the exit must not wait for it before its own bound starts. Such a write checks `written` before it
+        // starts, so only the one already running can still land.
+        RaiseWritten(long.MaxValue);
+    }
+
+    /// `written` only ever goes up, and is read and raised from several threads (the stop does not hold `diskGate`).
+    void RaiseWritten(long value)
+    {
+        long seen;
+        while ((seen = Interlocked.Read(ref written)) < value && Interlocked.CompareExchange(ref written, value, seen) != seen) { }
     }
 
     /// Writes the list now, waiting for it to finish. Throws if the write failed. Without a store it does nothing: the notice
@@ -150,7 +159,7 @@ public sealed class Engine
         var data = library.CopyData();
         long mine;
         lock (writeGate) { pending = null; mine = ++sequence; }
-        try { lock (diskGate) { save(data); written = Math.Max(written, mine); } }
+        try { lock (diskGate) { save(data); RaiseWritten(mine); } }
         catch (IOException) { PerfLog.Log.SaveFailed(); SaveFinished(false); throw; }
         catch (UnauthorizedAccessException) { PerfLog.Log.SaveFailed(); SaveFinished(false); throw; }
         SaveFinished(true);
@@ -506,9 +515,9 @@ public sealed class Engine
             bool? ok = null;   // nothing to report when a newer write (or the stop) made this one unnecessary
             lock (diskGate)
             {
-                if (mine > written)
+                if (mine > Interlocked.Read(ref written))
                 {
-                    try { save!(data); written = mine; ok = true; }
+                    try { save!(data); RaiseWritten(mine); ok = true; }
                     catch (Exception e) when (e is IOException or UnauthorizedAccessException) { ok = false; PerfLog.Log.SaveFailed(); }
                 }
             }
