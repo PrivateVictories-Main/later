@@ -28,9 +28,11 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
     sealed class AgentProcess : IDisposable
     {
         public Process Process { get; }
-        AgentProcess(Process process) => Process = process;
+        readonly string tracePath;
+        readonly ITestOutputHelper? output;
+        AgentProcess(Process process, string tracePath, ITestOutputHelper? output) { Process = process; this.tracePath = tracePath; this.output = output; }
 
-        public static AgentProcess Start(string dataDir, string profile, bool onboarded = true, string flag = "--agent")
+        public static AgentProcess Start(string dataDir, string profile, bool onboarded = true, string flag = "--agent", ITestOutputHelper? output = null)
         {
             File.WriteAllText(Path.Combine(dataDir, "settings.json"), onboarded ? "{\"onboarded\":true}" : "{\"onboarded\":false}");
             var psi = new ProcessStartInfo(Exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(Exe)! };
@@ -38,8 +40,10 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
             psi.Environment["LATER_DATA_DIR"] = dataDir;
             psi.Environment["LATER_TEST_LEFT_OPEN_SECONDS"] = "5";
             psi.Environment["LATER_TEST_PROFILE"] = profile;
+            var tracePath = dataDir + "-" + flag.TrimStart('-') + ".trace";   // next to the data folder, so the folder holds only what the agent made
+            psi.Environment["LATER_TEST_TRACE"] = tracePath;
             psi.Environment["LATER_TEST_LOAD_RETRY_SECONDS"] = "2";   // a list that is only locked is asked for again after two seconds
-            return new AgentProcess(Process.Start(psi)!);
+            return new AgentProcess(Process.Start(psi)!, tracePath, output);
         }
 
         public void Dispose()
@@ -47,6 +51,17 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
             try { if (!Process.HasExited) { Process.Kill(true); Process.WaitForExit(10_000); } }
             catch (InvalidOperationException) { }
             Process.Dispose();
+            try
+            {
+                if (File.Exists(tracePath))
+                {
+                    var lines = File.ReadAllLines(tracePath);
+                    output?.WriteLine($"AGENT trace ({lines.Length} events, the last 40): counts and timings only");
+                    foreach (var line in lines.TakeLast(40)) output?.WriteLine("  " + line);
+                    File.Delete(tracePath);
+                }
+            }
+            catch (IOException) { }
         }
     }
 
@@ -179,7 +194,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
         bool inFront = BringToFront(b, WindowsOf(b)[0].Hwnd);
         output.WriteLine($"AGENT {b}: browser in front before the start = {inFront}");
-        using var agent = AgentProcess.Start(dir.Path, f.Profile);
+        using var agent = AgentProcess.Start(dir.Path, f.Profile, output: output);
 
         Assert.True(WaitUntil(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90)),
             "pages 1 and 2 were not saved by the armed read alone");
@@ -204,7 +219,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
-        using var agent = AgentProcess.Start(dir.Path, f.Profile);
+        using var agent = AgentProcess.Start(dir.Path, f.Profile, output: output);
         Func<nint> window = () => WindowsOf(b)[0].Hwnd;
         Assert.True(WaitUntil(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90)), "pages 1 and 2 were not saved");
 
@@ -233,12 +248,12 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
-        using var agent = AgentProcess.Start(dir.Path, f.Profile);
+        using var agent = AgentProcess.Start(dir.Path, f.Profile, output: output);
         Func<nint> window = () => WindowsOf(b)[0].Hwnd;
         Assert.True(WaitUntil(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90)), "pages 1 and 2 were not saved");
 
         int page = expectCrash ? 5 : 6;
-        using var holder = AgentProcess.Start(dir.Path, f.Profile, flag: flag);   // takes the engine, then ends (badly, or after three seconds)
+        using var holder = AgentProcess.Start(dir.Path, f.Profile, flag: flag, output: output);   // takes the engine, then ends (badly, or after three seconds)
         Assert.True(holder.Process.WaitForExit(40_000), "the lock holder did not end");
         Assert.True(File.Exists(Path.Combine(dir.Path, "held.txt")), "the lock holder never held the lock");
         if (expectCrash) Assert.NotEqual(0, holder.Process.ExitCode); else Assert.Equal(0, holder.Process.ExitCode);
@@ -270,10 +285,10 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
     public void ASecondAgentLeavesAtOnceAndTouchesNothingWhileTheFirstKeepsTheEngine()
     {
         using var dir = new TempDir();
-        using var first = AgentProcess.Start(dir.Path, dir.At("no-profile"));
+        using var first = AgentProcess.Start(dir.Path, dir.At("no-profile"), output: output);
         Assert.True(WaitUntil(() => Watching(first), Slow), "the first agent never started its engine");
         var before = Directory.GetFileSystemEntries(dir.Path).Select(p => Path.GetFileName(p)!).Order().ToArray();
-        using var second = AgentProcess.Start(dir.Path, dir.At("no-profile"));
+        using var second = AgentProcess.Start(dir.Path, dir.At("no-profile"), output: output);
         Assert.True(second.Process.WaitForExit(3000), "a second agent kept running");
         Assert.Equal(0, second.Process.ExitCode);
         Assert.Equal(before, Directory.GetFileSystemEntries(dir.Path).Select(p => Path.GetFileName(p)!).Order().ToArray());
@@ -290,7 +305,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         using var dir = new TempDir();
         var damaged = "{garbage"u8.ToArray();
         File.WriteAllBytes(Path.Combine(dir.Path, "library.json"), damaged);
-        using var agent = AgentProcess.Start(dir.Path, dir.At("no-profile"));
+        using var agent = AgentProcess.Start(dir.Path, dir.At("no-profile"), output: output);
         var statusFile = new AgentStatusFile(Path.Combine(dir.Path, "agent-status.json"));
         Assert.True(WaitUntil(() => statusFile.Read() is not null, Slow), "no status was written");
         Assert.Equal(AgentState.NeedsRecovery, statusFile.Read()!.State);
@@ -313,7 +328,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
         try
         {
-            using var agent = AgentProcess.Start(dir.Path, dir.At("no-profile"));
+            using var agent = AgentProcess.Start(dir.Path, dir.At("no-profile"), output: output);
             Thread.Sleep(5000);   // several tries of two seconds
             Assert.False(agent.Process.HasExited);
             Assert.False(Watching(agent), "the agent watched with a list it could not read");
@@ -328,7 +343,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
     public void NoWindowIsCreated()
     {
         using var dir = new TempDir();
-        using var agent = AgentProcess.Start(dir.Path, dir.At("no-profile"));
+        using var agent = AgentProcess.Start(dir.Path, dir.At("no-profile"), output: output);
         List<(string Class, bool Visible)> Windows() => WindowsOfProcess(agent.Process);
         Assert.True(WaitUntil(() => Windows().Any(w => w.Class == "Later.Hidden"), Slow), "the session window never appeared");
         Thread.Sleep(2000);

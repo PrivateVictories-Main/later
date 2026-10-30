@@ -24,8 +24,10 @@ public sealed unsafe class SessionNotifier : IDisposable
     static bool classRegistered;
 
     public event Action? Locked, Unlocked, Suspending, Resumed, SessionEnding;
-    /// The display went off (false) or is on or dimmed (true).
+    /// The display went off (false) or came back on or dimmed (true). Windows reports the current state when the registration is
+    /// made; only a change from the state before is raised, and the display is taken to be on until told otherwise.
     public event Action<bool>? DisplayChanged;
+    bool displayOn = true;
 
     /// The hidden window; the tests send it the messages the system would.
     public nint Hwnd { get; }
@@ -80,7 +82,11 @@ public sealed unsafe class SessionNotifier : IDisposable
 
     void OnPowerSetting(PowerBroadcastSetting* setting)
     {
-        if (setting is not null && setting->PowerSetting == ConsoleDisplayState && setting->DataLength >= 4) DisplayChanged?.Invoke(setting->Data != 0);
+        if (setting is null || setting->PowerSetting != ConsoleDisplayState || setting->DataLength < 4) return;
+        bool on = setting->Data != 0;   // dimmed (2) is still on
+        if (on == displayOn) return;
+        displayOn = on;
+        DisplayChanged?.Invoke(on);
     }
 
     public void Dispose()

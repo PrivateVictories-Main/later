@@ -58,6 +58,9 @@ public sealed class EngineHost : IDisposable
         if (double.TryParse(Environment.GetEnvironmentVariable("LATER_TEST_LEFT_OPEN_SECONDS"), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) && seconds > 0)
             Judge.LeftOpenAfter = TimeSpan.FromSeconds(seconds);
 #endif
+#if DEBUG
+        if (Environment.GetEnvironmentVariable("LATER_TEST_TRACE") is { Length: > 0 } trace) TraceListener.Start(trace);
+#endif
         var io = new RealBrowserIO(folder);
         var judge = new Judge(opened.Library, new HashSet<Browser>(), opened.Settings.SavesFeedHomes);   // replaced in Engine.Start, once the installed browsers are known
         var engine = new Engine(opened.Library, judge, io, threadHost, opened.Store, opened.Settings, loadNotice: opened.Notice);
@@ -125,6 +128,29 @@ public sealed class EngineHost : IDisposable
         if (stopped) return;
         watcher.Retarget(BrowserDiscovery.Enumerate().Select(w => w.Pid).Distinct().ToList());
     }
+
+#if DEBUG
+    /// Tests only: the engine's own counts-and-timings events (never a link or a title), one line each, in a file the test reads.
+    sealed class TraceListener : System.Diagnostics.Tracing.EventListener
+    {
+        readonly string path;
+        readonly object gate = new();
+        TraceListener(string path) => this.path = path;
+        static TraceListener? instance;
+        public static void Start(string path) => instance ??= new TraceListener(path);
+
+        protected override void OnEventSourceCreated(System.Diagnostics.Tracing.EventSource source)
+        {
+            if (source.Name == "Later-Engine") EnableEvents(source, System.Diagnostics.Tracing.EventLevel.Verbose);
+        }
+
+        protected override void OnEventWritten(System.Diagnostics.Tracing.EventWrittenEventArgs e)
+        {
+            var line = DateTime.UtcNow.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + e.EventName + " " + (e.Payload is { } payload ? string.Join(" ", payload) : "");
+            lock (gate) { try { File.AppendAllText(path, line + Environment.NewLine); } catch (IOException) { } }
+        }
+    }
+#endif
 
     /// Stops watching and reading; with `flush` the list is written first. Engine thread.
     public void Stop(bool flush)

@@ -305,7 +305,9 @@ public sealed class Engine
     {
         CancelDeadline(b);
         if (judge.NextDeadline(b, now) is not { } at) return;
-        deadlineTimers[b] = host.After(at - now + DeadlineSlack, () => { deadlineTimers.Remove(b); Ring(b); });
+        var delay = at - now + DeadlineSlack;
+        PerfLog.Log.Armed(b.Wire(), delay.TotalSeconds);
+        deadlineTimers[b] = host.After(delay, () => { deadlineTimers.Remove(b); Ring(b); });
     }
 
     void CancelDeadline(Browser b)

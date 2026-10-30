@@ -50,6 +50,12 @@ public sealed class PerfLog : EventSource
         if (IsEnabled()) WriteEvent(7, migrated, of);
     }
 
+    [Event(9, Level = EventLevel.Informational)]
+    public void Armed(string browser, double seconds)
+    {
+        if (IsEnabled()) WriteEvent(9, browser, seconds);
+    }
+
     [Event(8, Level = EventLevel.Informational)]
     public void PlacesRefreshed(int backToList, int regulars, int done, int items)
     {

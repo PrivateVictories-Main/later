@@ -71,8 +71,17 @@ public sealed class SessionNotifierTests : IDisposable
     {
         SendPowerSetting(ConsoleDisplayState, 4, 0);
         SendPowerSetting(ConsoleDisplayState, 4, 1);
-        SendPowerSetting(ConsoleDisplayState, 4, 2);
-        Assert.Equal(["display off", "display on", "display on"], Seen());
+        SendPowerSetting(ConsoleDisplayState, 4, 2);   // dimmed after on: still on, nothing new
+        SendPowerSetting(ConsoleDisplayState, 4, 0);
+        SendPowerSetting(ConsoleDisplayState, 4, 2);   // dimmed is on
+        Assert.Equal(["display off", "display on", "display off", "display on"], Seen());
+    }
+
+    [Fact]
+    public void TheStateWindowsReportsAtRegistrationIsNotAChange()
+    {
+        SendPowerSetting(ConsoleDisplayState, 4, 1);   // already on
+        Assert.Empty(Seen());
     }
 
     [Fact]
