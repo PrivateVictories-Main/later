@@ -63,6 +63,19 @@ public sealed class PerfLog : EventSource
         if (IsEnabled()) WriteEvent(10, kind);
     }
 
+    [Event(11, Level = EventLevel.Informational)]
+    public void SecretLinksDropped(int removed)
+    {
+        if (IsEnabled()) WriteEvent(11, removed);
+    }
+
+    /// The window app asked the agent for the engine: how long it took, and whether it got it. A timeout is the read-only list.
+    [Event(12, Level = EventLevel.Informational)]
+    public void Handoff(double ms, bool took)
+    {
+        if (IsEnabled()) WriteEvent(12, ms, took);
+    }
+
     [Event(8, Level = EventLevel.Informational)]
     public void PlacesRefreshed(int backToList, int regulars, int done, int items)
     {

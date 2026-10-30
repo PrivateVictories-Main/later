@@ -368,6 +368,14 @@ public sealed class Engine
         StateChanged?.Invoke();
     }
 
+    /// How the window groups and orders the list, kept for the next start.
+    public void SetView(LibraryGrouping grouping, LibrarySort sort, bool reversed)
+    {
+        if (settings.Grouping == grouping && settings.Sort == sort && settings.SortReversed == reversed) return;
+        settings = settings with { Grouping = grouping, Sort = sort, SortReversed = reversed };
+        SettingsChanged?.Invoke(settings);
+    }
+
     public void SetSavesFeedHomes(bool value)
     {
         if (value == settings.SavesFeedHomes) return;

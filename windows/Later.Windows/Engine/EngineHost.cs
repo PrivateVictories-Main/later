@@ -23,7 +23,9 @@ public sealed class EngineHost : IDisposable
     /// never written over, for the whole session, and the notice says why.
     internal sealed record Opened(Library Library, LibraryStore? Store, string? Notice, Settings Settings);
 
-    internal static Opened Open(AppPaths paths)
+    /// `dropsSecretLinks`: saved pages whose link carries a one-time secret go away, and the notice says so. Only the window app
+    /// does it (as on the Mac): the background agent has no window to tell the user in.
+    internal static Opened Open(AppPaths paths, bool dropsSecretLinks = true)
     {
         var settings = SettingsStore.Load(paths.Settings);
         LibraryStore store; LibraryStore.Loaded loaded;
@@ -40,17 +42,22 @@ public sealed class EngineHost : IDisposable
         var library = new Library(loaded.Data);
         // Old pages take the current rules; saved by the next change.
         var merged = library.MergeDuplicates();
+        int secrets = dropsSecretLinks ? library.DropSecretLinks() : 0;
+        PerfLog.Log.SecretLinksDropped(secrets);
         var refreshed = library.RefreshKinds();
         PerfLog.Log.Opened(merged, refreshed.Items, refreshed.Changed, refreshed.ToTools);
         int backToList = library.RefreshPlaces();
         PerfLog.Log.PlacesRefreshed(backToList, library.Data.Items.Count(i => i.IsActiveRegular), library.Data.Items.Count(i => i.Status == ItemStatus.Done), library.Data.Items.Count);
-        return new Opened(library, loaded.Writable ? store : null, loaded.Notice, settings);
+        return new Opened(library, loaded.Writable ? store : null, SecretsNotice(secrets) is { } text ? string.Join(" ", new[] { loaded.Notice, text }.Where(n => n is not null)) : loaded.Notice, settings);
     }
 
+    internal static string? SecretsNotice(int removed) => removed > 0
+        ? $"Later removed {removed} saved {(removed == 1 ? "page" : "pages")} whose address carried a one-time secret." : null;
+
     /// `sessionEnded` runs after the engine was stopped and flushed because Windows is ending the session.
-    public static EngineHost Start(AppPaths paths, IEngineHost threadHost, Action? sessionEnded = null)
+    public static EngineHost Start(AppPaths paths, IEngineHost threadHost, Action? sessionEnded = null, bool dropsSecretLinks = true)
     {
-        var opened = Open(paths);
+        var opened = Open(paths, dropsSecretLinks);
         Func<Browser, string>? folder = null;
 #if DEBUG
         // Tests point the reader at a throwaway browser profile and shorten the minute a page must stay open.

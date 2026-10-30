@@ -684,6 +684,17 @@ public class EngineTests
     }
 
     [Fact]
+    public void TheWindowsGroupingAndOrderAreReportedOnceAndKeptWithTheOtherSettings()
+    {
+        var r = new Rig(new Settings(Onboarded: true, Paused: true));
+        var seen = new List<Settings>();
+        r.Engine.SettingsChanged += seen.Add;
+        r.Engine.SetView(LibraryGrouping.Site, LibrarySort.Title, reversed: true);
+        r.Engine.SetView(LibraryGrouping.Site, LibrarySort.Title, reversed: true);
+        Assert.Equal(new Settings(Onboarded: true, Paused: true, Sort: LibrarySort.Title, SortReversed: true, Grouping: LibraryGrouping.Site), Assert.Single(seen));
+    }
+
+    [Fact]
     public void OpenCopiesFollowTheJudge()
     {
         var r = new Rig();

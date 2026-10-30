@@ -55,7 +55,7 @@ public static class Agent
                 case LibraryStore.Health.NeedsRecovery: Report(AgentState.NeedsRecovery); return;   // the app recovers it and tells the user
                 case LibraryStore.Health.Unreadable: TryAgainLater(); return;
             }
-            var started = EngineHost.Start(paths, threadHost, thread.Quit);
+            var started = EngineHost.Start(paths, threadHost, thread.Quit, dropsSecretLinks: false);   // the window app tells the user about it
             if (!started.Engine.CanSave)   // locked between the check and the load: it must not stay unwritable
             {
                 started.Stop(flush: false);
