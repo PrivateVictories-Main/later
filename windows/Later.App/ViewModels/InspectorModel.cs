@@ -83,7 +83,7 @@ public sealed class InspectorModel
                 return new InspectorModel(InspectorMode.Page)
                 {
                     CanEdit = canEdit, Item = item, Items = selected, Title = LibraryListing.DisplayTitle(item), Link = LibraryListing.Readable(item.Url),
-                    Why = why(item), Copies = copies, Facts = Facts(item, copies, now, tz, culture), AllDone = item.Status == ItemStatus.Done,
+                    Why = why(item), Copies = copies, Facts = BuildFacts(item, copies, now, tz, culture), AllDone = item.Status == ItemStatus.Done,
                     ShowsDone = !item.IsActiveRegular,
                     CorrectionLabel = item.Regular switch { true => "Keep Pages Like This", false => "This Is a Regular", null => null },
                     OpenLabel = openIn is null ? "Open" : "Open in " + openIn,
@@ -117,7 +117,7 @@ public sealed class InspectorModel
     }
 
     /// The Mac's details card: when it was opened (or first seen), saved if that differs, last seen, done, visits, open now, where from.
-    static List<Fact> Facts(Item item, int copies, DateTime now, TimeZoneInfo? tz, CultureInfo? culture)
+    static List<Fact> BuildFacts(Item item, int copies, DateTime now, TimeZoneInfo? tz, CultureInfo? culture)
     {
         string Stamp(DateTime d) => LibraryListing.Stamp(d, now, tz, culture);
         var facts = new List<Fact> { new("Kind", item.Kind.Title()), new("Site", item.Host) };

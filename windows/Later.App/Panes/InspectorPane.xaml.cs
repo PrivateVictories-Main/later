@@ -19,7 +19,7 @@ public sealed partial class InspectorPane : UserControl
 
     public InspectorPane() => InitializeComponent();
 
-    public void Bind(LibraryViewModel viewModel, ItemActions itemActions)
+    internal void Bind(LibraryViewModel viewModel, ItemActions itemActions)
     {
         model = viewModel;
         actions = itemActions;

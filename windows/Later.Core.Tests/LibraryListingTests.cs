@@ -175,7 +175,8 @@ public class LibraryListingTests
     [Fact]
     public void TopSitesAreTheSixWithTheMostPagesThenByName()
     {
-        var items = new[] { "b.com", "a.com", "b.com", "c.com", "d.com", "e.com", "f.com", "g.com", "c.com", "c.com" }.Select((h, i) => MakeItem($"https://{h}/{i}", "t", h)).ToList();
+        var hosts = new List<string> { "b.com", "a.com", "b.com", "c.com", "d.com", "e.com", "f.com", "g.com", "c.com", "c.com" };
+        var items = hosts.Select((h, i) => MakeItem($"https://{h}/{i}", "t", h)).ToList();
         Assert.Equal(new List<(string, int)> { ("c.com", 3), ("b.com", 2), ("a.com", 1), ("d.com", 1), ("e.com", 1), ("f.com", 1) }, LibraryListing.TopSites(items));
     }
 
