@@ -22,20 +22,14 @@
               <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
-              <ColumnDefinition Width="Auto" />
-              <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <controls:KindChip Kind="{x:Bind Kind}" Visibility="{x:Bind ShowsKind}" />
-            <TextBlock Grid.Column="1" Text="{x:Bind SiteLine}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}"
+            <TextBlock Grid.Column="1" Text="{x:Bind Meta}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}"
                        TextTrimming="CharacterEllipsis" MaxLines="1" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
-            <TextBlock Grid.Column="2" Text="{x:Bind OpenedText}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}"
-                       MaxLines="1" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
-            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Visibility="{x:Bind IsOpen}" AutomationProperties.AccessibilityView="Raw">
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Visibility="{x:Bind IsOpen}" AutomationProperties.AccessibilityView="Raw">
               <Ellipse Width="6" Height="6" Fill="{ThemeResource BrandBrush}" />
               <TextBlock Text="{x:Bind OpenLabel}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" />
             </StackPanel>
-            <TextBlock Grid.Column="4" Text="{x:Bind Visits}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}"
-                       MaxLines="1" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
           </Grid>
         </StackPanel>
         <Grid Grid.Column="2" VerticalAlignment="Center" MinWidth="64">

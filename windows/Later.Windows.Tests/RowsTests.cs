@@ -137,6 +137,9 @@ public sealed class RowsTests
         Assert.Equal("rei.com · Opened Thu 3:04 PM", ListRows.Row(item, 0, "Opened Thu 3:04 PM", LibrarySort.LastSeen, Now, true, true, Utc, EnUs).SiteLine);
         Assert.Equal("Opened Thu 3:04 PM", ListRows.Row(item, 0, "Opened Thu 3:04 PM", LibrarySort.LastSeen, Now, true, false, Utc, EnUs).SiteLine);
         Assert.Equal("rei.com", ListRows.Row(item, 0, null, LibrarySort.LastSeen, Now, true, true, Utc, EnUs).SiteLine);
+        var row = ListRows.Row(item, 0, null, LibrarySort.LastSeen, Now, true, true, Utc, EnUs);
+        Assert.Equal(string.Join(" · ", new[] { row.SiteLine, row.OpenedText, row.Visits }.Where(t => t.Length > 0)), row.Meta);
+        Assert.StartsWith("rei.com", row.Meta, StringComparison.Ordinal);
     }
 
     [Fact]

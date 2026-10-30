@@ -89,6 +89,7 @@ public sealed partial class InspectorPane : UserControl
         CopyText.Text = copiedFor == item.Id ? "Copied" : "Copy Link";
         CopyGlyph.Glyph = copiedFor == item.Id ? "" : "";
         DoneButton.Visibility = view.ShowsDone ? Visibility.Visible : Visibility.Collapsed;
+        Grid.SetColumnSpan(CopyButton, view.ShowsDone ? 1 : 2);   // Copy Link takes the whole row when Done is not offered
         SetDone(DoneButton, DoneText, DoneGlyph, view);
         CorrectionButton.Visibility = view.CorrectionLabel is null ? Visibility.Collapsed : Visibility.Visible;
         if (view.CorrectionLabel is { } label)

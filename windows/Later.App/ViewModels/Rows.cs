@@ -17,6 +17,9 @@ public sealed record RowModel(Guid Id, string Title, string Site, Kind Kind, str
     /// The line after the site: what sets the page apart from another with the same title, and when it was opened.
     public string SiteLine => string.Join(" · ", new[] { ShowsHost ? Site : "", Hint }.Where(s => s.Length > 0));
 
+    /// Site, when it was opened and the visits as one line, so a narrow list shortens it with an ellipsis instead of cutting a word off.
+    public string Meta => string.Join(" · ", new[] { SiteLine, OpenedText, Visits }.Where(s => s.Length > 0));
+
     /// What assistive technology reads for the row.
     public override string ToString() => Name;
 }
