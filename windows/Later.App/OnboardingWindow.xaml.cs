@@ -41,7 +41,7 @@ public sealed partial class OnboardingWindow : Window
         PageStack.SizeChanged += (_, _) => SizeToContent();
         _ = LoadIconsAsync();
 #if DEBUG
-        SampleShot.Attach(this, Root);
+        SampleShot.Attach(this, Root, () => { if (Sample.Scroll is { } to) Scroller.ChangeView(null, Scroller.ScrollableHeight * to, null, disableAnimation: true); });
 #endif
     }
 

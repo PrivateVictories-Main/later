@@ -17,7 +17,7 @@
       </StackPanel>
     </Grid>
 
-    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <ScrollViewer x:Name="Scroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <StackPanel x:Name="PageStack" Padding="24,8,24,24" Spacing="2">
 
         <!-- Later's name, and what it is doing right now. -->

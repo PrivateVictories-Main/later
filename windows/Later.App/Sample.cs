@@ -10,7 +10,7 @@ using Later.Core;
 ///   --sample-section <name>   --sample-group date|site|kind   --sample-sort <rawValue>   --sample-reversed
 ///   --sample-search <text>    --sample-select <n> (the first n rows)       --sample-dark   --sample-onboarding   --sample-settings
 ///   --sample-status paused|problem|idle|missing   how the browsers are doing    --sample-startup off|disabled|failed   start at sign-in
-///   --sample-no-browsers   neither browser is installed
+///   --sample-no-browsers   neither browser is installed        --sample-scroll end|<0..1>   scrolls Settings or the welcome before its picture
 ///   --shot <png>  --shot-screen <png>  --shot-size WxH  --shot-delay <ms>   save the window (PrintWindow, a screen copy) and quit
 internal static class Sample
 {
@@ -25,6 +25,17 @@ internal static class Sample
     public static string? Search => Value("--sample-search");
     public static string? Status => Value("--sample-status");
     public static string? Startup => Value("--sample-startup");
+
+    /// How far a scrolling window (Settings, the welcome) is scrolled before its picture is taken: 0 is the top, 1 or `end` the bottom.
+    public static double? Scroll
+    {
+        get
+        {
+            var v = Value("--sample-scroll");
+            if (v == "end") return 1;
+            return double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var fraction) ? fraction : null;
+        }
+    }
 
     /// The sample's clock, so every machine, hour and time zone draws the same counts: today at 12:00 local, or `--sample-now <ISO>`
     /// (a time without a zone is local). Not the real clock outside a sample run.

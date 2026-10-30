@@ -43,7 +43,11 @@ $scenes = [ordered]@{
     'settings-nobrowser-dark' = @('--sample', '--sample-settings', '--sample-dark', '--sample-no-browsers')
     'settings-startup-off-light' = @('--sample', '--sample-settings', '--sample-startup', 'disabled')
     'settings-startup-failed-dark' = @('--sample', '--sample-settings', '--sample-dark', '--sample-startup', 'failed')
+    'settings-light-bottom' = @('--sample', '--sample-settings', '--sample-scroll', 'end')
+    'settings-dark-bottom'  = @('--sample', '--sample-settings', '--sample-dark', '--sample-scroll', 'end')
     'onboarding-light'      = @('--sample-onboarding')
+    'onboarding-light-bottom' = @('--sample-onboarding', '--sample-scroll', 'end')
+    'onboarding-dark-bottom' = @('--sample-onboarding', '--sample-dark', '--sample-scroll', 'end')
     'onboarding-dark'       = @('--sample-onboarding', '--sample-dark')
     'onboarding-nobrowser-light' = @('--sample-onboarding', '--sample-no-browsers')
 }

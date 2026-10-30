@@ -12,11 +12,10 @@ public partial class App : Application
 {
     ShellWindow? window;
     OnboardingWindow? welcome;
-    SettingsWindow? sampleSettings;
 
     // Until the sign-in and firewall work lands these keep their state in memory only: the settings show and change them, Windows is not asked.
-    readonly IStartAtSignIn start = new InMemoryStartAtSignIn();
-    readonly IFirewallBlock firewall = new InMemoryFirewallBlock();
+    readonly InMemoryStartAtSignIn start = new();
+    readonly InMemoryFirewallBlock firewall = new();
 
     public App() => InitializeComponent();
 
@@ -76,8 +75,7 @@ public partial class App : Application
                 sampleStart.FailWith = new UnauthorizedAccessException("Access to the registry key is denied.");
                 settings.SetStart(false);
             }
-            sampleSettings = new SettingsWindow(settings, Exit);
-            sampleSettings.Activate();
+            new SettingsWindow(settings, Exit).Activate();
         }
         else
         {

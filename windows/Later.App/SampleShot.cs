@@ -9,12 +9,18 @@ namespace Later.App;
 internal sealed class SampleShot
 {
     readonly Window window;
+    readonly Action? prepare;
     bool activatedOnce, loadedOnce, started;
-    Microsoft.UI.Dispatching.DispatcherQueueTimer? timer;
+    Microsoft.UI.Dispatching.DispatcherQueueTimer? timer, prepareTimer;
 
-    SampleShot(Window window) => this.window = window;
+    SampleShot(Window window, Action? prepare)
+    {
+        this.window = window;
+        this.prepare = prepare;
+    }
 
-    public static void Attach(Window window, FrameworkElement root)
+    /// `prepare`: runs halfway through the wait for the picture (a window that scrolls is scrolled by then).
+    public static void Attach(Window window, FrameworkElement root, Action? prepare = null)
     {
         if (!Sample.Enabled) return;
         if (Sample.Dark)
@@ -24,7 +30,7 @@ internal sealed class SampleShot
             window.AppWindow.TitleBar.ButtonInactiveForegroundColor = Colors.Gray;
         }
         if (Sample.ShotPath is null && Sample.ShotScreenPath is null) return;
-        var shot = new SampleShot(window);
+        var shot = new SampleShot(window, prepare);
         window.Activated += (_, _) => { Mark("activated"); shot.activatedOnce = true; shot.Start(); };
         root.Loaded += (_, _) => { Mark("loaded"); shot.loadedOnce = true; shot.Start(); };
         Mark("wired");
@@ -55,6 +61,12 @@ internal sealed class SampleShot
             finally { Application.Current.Exit(); }
         };
         t.Start();
+        if (prepare is null) return;
+        var half = prepareTimer = window.DispatcherQueue.CreateTimer();
+        half.Interval = TimeSpan.FromMilliseconds(Sample.ShotDelayMs / 2.0);
+        half.IsRepeating = false;
+        half.Tick += (_, _) => prepare();
+        half.Start();
     }
 }
 #endif

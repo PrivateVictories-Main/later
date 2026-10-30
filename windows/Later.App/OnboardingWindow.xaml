@@ -22,7 +22,7 @@
 
     <Grid x:Name="TitleBar" Grid.Row="0" />
 
-    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <ScrollViewer x:Name="Scroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <StackPanel x:Name="PageStack" Padding="40,8,40,24" Spacing="0">
 
         <StackPanel HorizontalAlignment="Center" Spacing="10">
@@ -119,7 +119,7 @@
     </ScrollViewer>
 
     <!-- The one way on. It stays in view however tall the text is; Enter presses it. -->
-    <StackPanel Grid.Row="2" Padding="40,12,40,22" Spacing="10">
+    <StackPanel Grid.Row="2" Padding="40,12,40,22" Spacing="10" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
       <TextBlock x:Name="FailureText" Foreground="{ThemeResource StatusWarningBrush}" TextWrapping="WrapWholeWords" Visibility="Collapsed" AutomationProperties.LiveSetting="Assertive" />
       <Button x:Name="StartButton" Content="Start Using Later" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
               MinHeight="44" FontWeight="SemiBold" Click="OnStart">
