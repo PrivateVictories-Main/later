@@ -108,7 +108,7 @@ public sealed class EngineHost : IDisposable
         notifier.Unlocked += () => Back("lock");
         notifier.Suspending += () => GoAway("sleep");
         notifier.Resumed += () => Back("sleep");
-        // MUTANT: display not wired
+        notifier.DisplayChanged += on => { if (on) Back("screen"); else GoAway("screen"); };
         notifier.SessionEnding += sessionEnding;
     }
 

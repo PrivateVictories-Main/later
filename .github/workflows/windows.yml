@@ -215,7 +215,7 @@ jobs:
         shell: pwsh
         run: |
           $r2r = 'windows/out-r2r/${{ matrix.rid }}/Later.exe'
-          $extra = if (Test-Path $r2r) { @('-ReadyToRunExe', $r2r) } else { @() }
+          $extra = if (Test-Path $r2r) { @{ ReadyToRunExe = $r2r } } else { @{} }
           ./windows/scripts/measure-agent.ps1 -Exe "windows/out/${{ matrix.rid }}/Later.exe" -Seconds 30 -Experiment @extra
       - name: Nothing left behind
         if: always()

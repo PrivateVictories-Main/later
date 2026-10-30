@@ -18,7 +18,7 @@ public sealed unsafe class SessionNotifier : IDisposable
     /// interactive user-mode session should use this setting"; GUID_CONSOLE_DISPLAY_STATE is for kernel-mode registrants and
     /// describes the console, not the user's own display (a Remote Desktop session, a fast user switch). Modern Standby starts
     /// when the display goes off, so this arrives where a suspend message may not.
-    internal static readonly Guid SessionDisplayStatus = new("6fe69556-704a-47a0-8f24-c28d936fda47")   /* MUTANT: console GUID */;
+    internal static readonly Guid SessionDisplayStatus = new("2b84c20e-ad23-4ddf-93db-05ffbd7efca5");
 
     static readonly NativeApi.WindowProc Proc = OnMessage;   // a static field: the class keeps the delegate alive for the process
     static readonly ConcurrentDictionary<nint, SessionNotifier> Instances = new();

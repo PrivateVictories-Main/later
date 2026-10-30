@@ -122,9 +122,8 @@ public static class Agent
     internal static void LetGo(Action? stopAndSave, Action release, Action? takeApart, Action<Action> onPool)
     {
         stopAndSave?.Invoke();
-        takeApart?.Invoke();   // MUTANT: taken apart before the release
         release();
-        _ = onPool;
+        if (takeApart is not null) onPool(takeApart);
     }
 
     /// A named object that lives as long as the process: a second agent finds it there and leaves. Without it, two agents would

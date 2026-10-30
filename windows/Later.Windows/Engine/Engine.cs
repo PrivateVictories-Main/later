@@ -277,7 +277,7 @@ public sealed class Engine
             case ReadStatus.Transient:
                 // The next wake-up catches up. A page that time alone could save must not wait on one that may never come (a
                 // minimized browser sends none): try again, with the same bound as for unresolved tabs, then wait for a real event.
-                // MUTANT: no retry
+                if (judge.WaitsOnTheClock(b)) ScheduleRetry(b);
                 break;
             default:
                 CancelDeadline(b);
@@ -402,7 +402,7 @@ public sealed class Engine
         host.RunBackground(() =>
         {
             PerfLog.Log.Wake("visitdays");
-            var days = new VisitDaysCache().Days(since, io.VisitDays);   // MUTANT: no shared cache
+            var days = DaysCache.Days(since, io.VisitDays);
             host.Post(() =>
             {
                 if (stopped) return;
