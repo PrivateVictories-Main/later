@@ -9,6 +9,8 @@ using Later.Core;
 /// Release builds, where `Enabled` is a constant false (so the Release binary carries none of this, like the Mac's).
 ///   --sample-section <name>   --sample-group date|site|kind   --sample-sort <rawValue>   --sample-reversed
 ///   --sample-search <text>    --sample-select <n> (the first n rows)       --sample-dark   --sample-onboarding   --sample-settings
+///   --sample-status paused|problem|idle|missing   how the browsers are doing    --sample-startup off|disabled|failed   start at sign-in
+///   --sample-no-browsers   neither browser is installed
 ///   --shot <png>  --shot-screen <png>  --shot-size WxH  --shot-delay <ms>   save the window (PrintWindow, a screen copy) and quit
 internal static class Sample
 {
@@ -19,7 +21,10 @@ internal static class Sample
     public static bool Reversed => Has("--sample-reversed");
     public static bool Onboarding => Has("--sample-onboarding");
     public static bool Settings => Has("--sample-settings");
+    public static bool NoBrowsers => Has("--sample-no-browsers");
     public static string? Search => Value("--sample-search");
+    public static string? Status => Value("--sample-status");
+    public static string? Startup => Value("--sample-startup");
 
     /// The sample's clock, so every machine, hour and time zone draws the same counts: today at 12:00 local, or `--sample-now <ISO>`
     /// (a time without a zone is local). Not the real clock outside a sample run.
@@ -56,9 +61,6 @@ internal static class Sample
     }
 
     public static int ShotDelayMs => int.TryParse(Value("--shot-delay"), out var ms) ? ms : 1500;
-
-    /// A scene whose window does not exist yet: the app exits with 3 ("not built") before anything opens (Task 9 builds them).
-    public static bool NotBuilt => Enabled && (Onboarding || Settings);
 
     static bool Has(string flag) => Args.Contains(flag, StringComparer.Ordinal);
 

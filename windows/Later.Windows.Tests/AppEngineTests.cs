@@ -112,6 +112,59 @@ public sealed class AppEngineTests : IDisposable
         public void Dispose() { letGo.Set(); thread.Join(10_000); held.Dispose(); letGo.Dispose(); }
     }
 
+    // MARK: Settings
+
+    /// Waits for the engine thread to have run everything posted before this.
+    static void Drain(AppEngine app)
+    {
+        using var done = new ManualResetEventSlim();
+        app.Post(done.Set);
+        Assert.True(done.Wait(10_000));
+    }
+
+    [Fact]
+    public void SettingsChangedWhileTheAppHoldsTheEngineGoToTheEngineAloneWhichKeepsThem()
+    {
+        SetUp();
+        LaterEngine? engine = null;
+        var app = NewApp((_, h, _) => { var started = Quiet(h, new Library()); engine = started.Engine; return started; });
+        app.Start();
+        Assert.True(WaitFor(() => engine is not null));
+        app.SetPaused(true);
+        app.SetSavesFeedHomes(true);
+        app.SetView(LibraryGrouping.Site, LibrarySort.Title, true);
+        Drain(app);
+        Assert.Equal(new Settings(Paused: true, SavesFeedHomes: true, Sort: LibrarySort.Title, SortReversed: true, Grouping: LibraryGrouping.Site), engine!.Settings);
+        // The engine is the one writer while it runs (its host saves what it keeps): the app does not write the file beside it.
+        Assert.Equal("{\"onboarded\":true}", File.ReadAllText(dir.At("settings.json")));
+    }
+
+    [Fact]
+    public void SettingsChangedWithNoEngineAreWrittenWholeToTheFileForTheNextEngineWithTheRestKept()
+    {
+        SetUp();
+        using var agent = new FakeAgent(paths.InstanceSuffix);   // the agent holds the engine, so the app has none
+        var app = NewApp((_, h, _) => Quiet(h, new Library()), handoffSeconds: 0.5);
+        app.Start();   // what is posted after this runs after the start has found the engine taken
+        app.SetPaused(true);
+        app.SetSavesFeedHomes(true);
+        app.SetView(LibraryGrouping.Kind, LibrarySort.Site, false);
+        Drain(app);
+        Assert.Equal(new Settings(Onboarded: true, Paused: true, SavesFeedHomes: true, Sort: LibrarySort.Site, Grouping: LibraryGrouping.Kind), SettingsStore.Load(dir.At("settings.json")));
+        Assert.Empty(Directory.GetFiles(dir.Path, "*.tmp"));   // written whole or not at all: no scratch file is left
+    }
+
+    [Fact]
+    public void BeforeSetupNothingIsKept()
+    {
+        var app = NewApp((_, h, _) => Quiet(h, new Library()));
+        app.Start();
+        app.SetPaused(true);
+        app.SetView(LibraryGrouping.Site, LibrarySort.Title, false);
+        Drain(app);
+        Assert.False(File.Exists(dir.At("settings.json")));
+    }
+
     // MARK: Closing
 
     [Fact]

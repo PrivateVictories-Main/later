@@ -26,6 +26,9 @@ public class AppUiTests
         public Process Process { get; }
         public nint Window { get; private set; }
 
+        /// Looks at another window of the same app (Settings opened from the library, say) from now on.
+        public void Use(nint window) => Window = window;
+
         RunningApp(Process process) => Process = process;
 
         public static RunningApp Start(string dataDir, params string[] args) => StartWith(dataDir, null, args);
@@ -58,6 +61,10 @@ public class AppUiTests
         public bool Invoke(string name, int controlType = UiaTest.ButtonType) => uia.Invoke(Window, name, controlType);
 
         public bool Choose(string name) => uia.ChooseInProcess(Process.Id, name);
+
+        public bool Toggle(string name) => uia.Toggle(Window, name);
+
+        public int? ToggleState(string name) => uia.ToggleState(Window, name);
 
         public bool SelectRow(Func<string, bool> which, bool add = false) => uia.SelectRow(Window, which, add);
 
@@ -447,15 +454,125 @@ public class AppUiTests
     }
 
     [Fact]
-    public void ARealRunBeforeSetupWatchesNothingAndTouchesNothing()
+    public void ARealRunBeforeSetupShowsOnlyTheWelcomeWatchesNothingAndTouchesNothing()
     {
         using var dir = new TempDir();
         using var app = RunningApp.Start(dir.Path);
-        app.WaitForName(n => n == "Starts watching after setup", "the status line");
+        app.WaitForName(n => n == "Start Using Later", "the welcome");
+        Assert.Equal("Welcome to Later", app.Title);
         using var gate = EngineLock.Open(new AppPaths(dir.Path).InstanceSuffix);
         Assert.True(gate.TryAcquire(TimeSpan.Zero), "the app took the engine lock before setup");   // nothing watches, so nobody holds it
         gate.Release();
+        Assert.Empty(Directory.GetFileSystemEntries(dir.Path));   // not even a settings file, until the button is pressed
+    }
+
+    // MARK: Settings and the first-run welcome
+
+    [Fact]
+    public void TheSampleSettingsWindowNamesItsControlsItsBrowsersAndQuit()
+    {
+        using var dir = new TempDir();
+        using var app = RunningApp.Start(dir.Path, "--sample-settings", "--sample-now", "2026-10-15T12:00:00");
+        var names = app.WaitForName(n => n == "Quit Later", "the Settings window");
+        Assert.Equal("Later Settings", app.Title);
+        foreach (var name in new[]
+        {
+            "Start at sign-in", "Pause watching", "Also save feed home pages", "Block Later from the internet (Windows Firewall)", "Default order",
+            "Watching Helium and Chrome", "General", "Browsers", "Privacy", "About", "Open-source components", "Helium", "Chrome",
+        }) Assert.Contains(name, names);
+        Assert.Equal(2, names.Count(n => n == "Watching"));   // the sample: both browsers
+        Assert.Contains("Later 1.4.0", names);
+        Assert.Equal(1, app.ToggleState("Start at sign-in"));    // the sample: starting at sign-in is on
+        Assert.Equal(0, app.ToggleState("Pause watching"));
+        Assert.Equal(0, app.ToggleState("Also save feed home pages"));
+        Assert.Equal(0, app.ToggleState("Block Later from the internet (Windows Firewall)"));
+        Assert.Empty(Directory.GetFileSystemEntries(dir.Path));   // a sample run touches no data at all
+    }
+
+    [Fact]
+    public void PausingInTheSampleSettingsChangesWhatTheHeaderSaysAndWritesNothing()
+    {
+        using var dir = new TempDir();
+        using var app = RunningApp.Start(dir.Path, "--sample-settings", "--sample-now", "2026-10-15T12:00:00");
+        app.WaitForName(n => n == "Watching Helium and Chrome", "the summary");
+        Do(() => app.Toggle("Pause watching"), "the Pause watching switch", app);
+        app.WaitForName(n => n == "Paused", "the summary to say Paused");
+        Wait(() => app.ToggleState("Pause watching") == 1, Slow, "the switch to read on");
+        Do(() => app.Toggle("Pause watching"), "the Pause watching switch", app);
+        app.WaitForName(n => n == "Watching Helium and Chrome", "the summary to say it watches again");
         Assert.Empty(Directory.GetFileSystemEntries(dir.Path));
+    }
+
+    [Fact]
+    public void SettingsOpenedWithCtrlCommaChangesTheRealSettingsFileAndQuitLaterEndsTheAppAndHandsTheEngineBack()
+    {
+        using var dir = new TempDir();
+        var file = dir.At("settings.json");
+        File.WriteAllText(file, "{\"onboarded\":true}");
+        using var gate = EngineLock.Open(new AppPaths(dir.Path).InstanceSuffix);
+        using var app = RunningApp.Start(dir.Path);
+        app.WaitForName(n => n == "Search saved pages", "the library window");
+        Wait(() => !gate.TryAcquireAndRelease(), Slow, "the app to hold the engine lock");   // the engine is the app's, so it keeps the settings
+        app.Focus();
+        Thread.Sleep(200);
+        NativeTest.Press(0xBC /*VK_OEM_COMMA*/, control: true);
+        Wait(() => NativeTest.FindWindow(null, "Later Settings") != 0, Slow, "Settings to open");
+        app.Use(NativeTest.FindWindow(null, "Later Settings"));
+        app.WaitForName(n => n == "Quit Later", "the Settings window");
+        Do(() => app.Toggle("Pause watching"), "the Pause watching switch", app);
+        Wait(() => SettingsStore.Load(file).Paused, Slow, "paused to be saved");
+        Assert.True(SettingsStore.Load(file).Onboarded);
+        Do(() => app.Toggle("Pause watching"), "the Pause watching switch", app);
+        Wait(() => !SettingsStore.Load(file).Paused, Slow, "paused to be saved off again");
+        Do(() => app.Invoke("Quit Later"), "the Quit Later button", app);
+        Assert.True(app.Process.WaitForExit(15_000), "Quit Later did not end the app");
+        Assert.True(gate.TryAcquire(TimeSpan.FromSeconds(5), out var abandoned), "the lock is not free after Quit Later");
+        Assert.False(abandoned, "the app ended holding the lock instead of releasing it");
+        gate.Release();
+    }
+
+    [Fact]
+    public void TheSampleWelcomeNamesItsPointsItsBrowsersAndEnterPressesTheDefaultButton()
+    {
+        using var dir = new TempDir();
+        using var app = RunningApp.Start(dir.Path, "--sample-onboarding", "--sample-now", "2026-10-15T12:00:00");
+        var names = app.WaitForName(n => n == "Start Using Later", "the welcome");
+        Assert.Equal("Welcome to Later", app.Title);
+        foreach (var name in new[]
+        {
+            "Welcome to Later", "Close tabs freely. Later keeps the ones worth coming back to.", "Saves what you linger on", "Never touches your tabs", "Stays on this PC",
+            "Browsers Later can read", "Starts with Windows", "Helium", "Open", "Chrome", "Not open", "You can change this anytime in Settings.",
+        }) Assert.Contains(name, names);
+        Assert.Empty(Directory.GetFileSystemEntries(dir.Path));
+        app.Focus();
+        Wait(() => app.FocusedElement().Contains("Start Using Later", StringComparison.Ordinal), Slow, $"the keyboard to start on the button (it is on: {app.FocusedElement()})");
+        NativeTest.Press(0x0D /*VK_RETURN*/);
+        Assert.True(app.Process.WaitForExit(15_000), "Enter did not press the default button");
+        Assert.Empty(Directory.GetFileSystemEntries(dir.Path));   // a sample welcome writes no setting
+    }
+
+    [Fact]
+    public void WithNoBrowserTheWelcomeSaysWhichOnesLaterWorksWith()
+    {
+        using var dir = new TempDir();
+        using var app = RunningApp.Start(dir.Path, "--sample-onboarding", "--sample-no-browsers");
+        var names = app.WaitForName(n => n == "Start Using Later", "the welcome");
+        Assert.Contains("Later works with Helium and Chrome. Install one, then open Later again.", names);
+        Assert.DoesNotContain("Not open", names);
+    }
+
+    [Fact]
+    public void StartUsingLaterSavesSetupInTheDataFolderAndOpensTheLibrary()
+    {
+        using var dir = new TempDir();
+        var file = dir.At("settings.json");
+        using var app = RunningApp.Start(dir.Path);   // a real run with no settings: the welcome only
+        app.WaitForName(n => n == "Start Using Later", "the welcome");
+        Do(() => app.Invoke("Start Using Later"), "the Start Using Later button", app);
+        Wait(() => SettingsStore.Load(file).Onboarded, Slow, "setup to be saved");
+        Wait(() => NativeTest.FindWindow(null, "Later") != 0, Slow, "the library window");
+        app.Use(NativeTest.FindWindow(null, "Later"));
+        app.WaitForName(n => n == "Search saved pages", "the library");
     }
 
     /// A list with one saved page and one whose address carries a one-time secret (which the app drops when it opens the list).

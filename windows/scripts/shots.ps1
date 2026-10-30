@@ -1,6 +1,6 @@
 # Renders the sample window in each scene of the list below and saves one PNG per scene (and, on x64, a second one from a plain
 # screen copy, named <scene>-screen.png, which shows the Mica backdrop). Debug builds only: the flags live in Sample.cs.
-# A scene whose window a later task builds (settings, onboarding) makes the app exit with 3; it is skipped, not failed.
+# A scene whose window is not built yet would make the app exit with 3; it is skipped, not failed.
 param(
     [Parameter(Mandatory)][string]$Exe,
     [Parameter(Mandatory)][string]$Out,
@@ -35,7 +35,21 @@ $scenes = [ordered]@{
     'site-selected-dark'    = @('--sample', '--sample-dark', '--sample-group', 'site', '--sample-select', '1')
     'narrow-selected-light' = @('--sample', '--sample-select', '1', '--shot-size', '900x600')
     'settings-light'        = @('--sample', '--sample-settings')
+    'settings-dark'         = @('--sample', '--sample-settings', '--sample-dark')
+    'settings-paused-light' = @('--sample', '--sample-settings', '--sample-status', 'paused')
+    'settings-problem-dark' = @('--sample', '--sample-settings', '--sample-dark', '--sample-status', 'problem')
+    'settings-missing-light' = @('--sample', '--sample-settings', '--sample-status', 'missing')
+    'settings-startup-off-light' = @('--sample', '--sample-settings', '--sample-startup', 'disabled')
+    'settings-startup-failed-dark' = @('--sample', '--sample-settings', '--sample-dark', '--sample-startup', 'failed')
     'onboarding-light'      = @('--sample-onboarding')
+    'onboarding-dark'       = @('--sample-onboarding', '--sample-dark')
+    'onboarding-nobrowser-light' = @('--sample-onboarding', '--sample-no-browsers')
+}
+# Text at 200%: Windows reads the setting when a program starts, so these run while it is set; it is put back after.
+$scaled = [ordered]@{
+    'settings-200-light'    = @('--sample', '--sample-settings')
+    'settings-200-dark'     = @('--sample', '--sample-settings', '--sample-dark')
+    'onboarding-200-light'  = @('--sample-onboarding')
 }
 foreach ($s in $sections) {
     if ($s -eq 'all') { continue }
@@ -67,21 +81,33 @@ if ($Arch -eq 'x64') {
 }
 
 $made = 0; $skipped = @()
-foreach ($name in $scenes.Keys) {
+function Show-Scene([string]$name, [string[]]$sceneArguments) {
     $png = Join-Path $Out "$name.png"
-    $arguments = @($scenes[$name]) + @('--sample-now', '2026-10-15T12:00:00', '--shot', $png)   # the runners' time zones differ, so "today" would too
+    $arguments = @($sceneArguments) + @('--sample-now', '2026-10-15T12:00:00', '--shot', $png)   # the runners' time zones differ, so "today" would too
     if ($Arch -eq 'x64') { $arguments += @('--shot-screen', (Join-Path $Out "$name-screen.png")) }
     $p = Start-Process $Exe -ArgumentList $arguments -PassThru
     $null = $p.Handle   # keeps the exit code readable after the process ends
     if (-not $p.WaitForExit(40000)) { Stop-Stuck $p $name $png }
     Remove-Item "$png.log" -ErrorAction SilentlyContinue
-    if ($p.ExitCode -eq 3) { $skipped += $name; continue }
+    if ($p.ExitCode -eq 3) { $script:skipped += $name; return }
     if ($p.ExitCode -ne 0) { throw "scene '$name' exited with $($p.ExitCode)" }
     foreach ($file in @($png) + $(if ($Arch -eq 'x64') { @((Join-Path $Out "$name-screen.png")) } else { @() })) {
         if (-not (Test-Path $file)) { throw "scene '$name' left no $(Split-Path $file -Leaf)" }
         if ((Get-Item $file).Length -lt 5KB) { throw "scene '$name': $(Split-Path $file -Leaf) is under 5 KB" }
     }
-    $made++
+    $script:made++
+}
+foreach ($name in $scenes.Keys) { Show-Scene $name $scenes[$name] }
+
+$access = 'HKCU:\Software\Microsoft\Accessibility'
+$before = (Get-ItemProperty $access -Name TextScaleFactor -ErrorAction SilentlyContinue).TextScaleFactor
+try {
+    if (-not (Test-Path $access)) { New-Item $access -Force | Out-Null }
+    Set-ItemProperty $access -Name TextScaleFactor -Value 200 -Type DWord
+    foreach ($name in $scaled.Keys) { Show-Scene $name $scaled[$name] }
+}
+finally {
+    if ($null -eq $before) { Remove-ItemProperty $access -Name TextScaleFactor -ErrorAction SilentlyContinue } else { Set-ItemProperty $access -Name TextScaleFactor -Value $before -Type DWord }
 }
 Remove-Item -Recurse -Force $data -ErrorAction SilentlyContinue
 Write-Host "SHOTS made=$made skipped=$($skipped.Count) ($($skipped -join ', ')) arch=$Arch"

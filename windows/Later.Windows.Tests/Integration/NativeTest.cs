@@ -13,6 +13,7 @@ internal struct Msg { public nint Hwnd; public uint Message; public nuint WParam
 /// Things only the tests do to a browser: switch tabs, minimize, close, pump messages. The product never does any of this.
 internal static unsafe partial class NativeTest
 {
+    [LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = StringMarshalling.Utf16)] internal static partial nint FindWindow(string? className, string? title);
     [LibraryImport("user32.dll")] internal static partial int ShowWindow(nint hwnd, int command);
     [LibraryImport("user32.dll")] internal static partial int SetForegroundWindow(nint hwnd);
     [LibraryImport("user32.dll")] internal static partial nint GetForegroundWindow();
@@ -185,6 +186,57 @@ internal sealed unsafe class UiaTest : IDisposable
     }
 
     public const int ButtonType = 50000, ListItemType = 50007, MenuItemType = 50011;
+
+    /// TogglePattern.Toggle on the first element of this name that has one (a switch shares its name with the text beside it). False when none does (yet).
+    public bool Toggle(nint hwnd, string name)
+    {
+        var root = Root(hwnd);
+        var byName = session.StringIs(UiaIds.Name, name);
+        IUIAutomationElementArray* found = null;
+        try
+        {
+            found = root->FindAll((TreeScope)UiaIds.ScopeDescendants, byName);
+            for (int i = 0; i < found->Length; i++)
+            {
+                var element = found->GetElement(i);
+                try { if (Call(element, 10015 /*Toggle*/, new Guid("94cf8058-9b8d-4ab9-8bfd-4cd0a33c8c70"), 3)) return true; }
+                finally { _ = element->Release(); }
+            }
+            return false;
+        }
+        finally { if (found is not null) _ = found->Release(); _ = byName->Release(); _ = root->Release(); }
+    }
+
+    /// The state (0 off, 1 on, 2 indeterminate) of the first element of this name that has a toggle; null when none does.
+    public int? ToggleState(nint hwnd, string name)
+    {
+        var root = Root(hwnd);
+        var byName = session.StringIs(UiaIds.Name, name);
+        IUIAutomationElementArray* found = null;
+        try
+        {
+            found = root->FindAll((TreeScope)UiaIds.ScopeDescendants, byName);
+            for (int i = 0; i < found->Length; i++)
+            {
+                var element = found->GetElement(i);
+                try
+                {
+                    IUnknown* unknown = element->GetCurrentPattern((UIA_PATTERN_ID)10015);
+                    if (unknown is null) continue;
+                    var iid = new Guid("94cf8058-9b8d-4ab9-8bfd-4cd0a33c8c70");   // IUIAutomationTogglePattern
+                    Marshal.ThrowExceptionForHR(Marshal.QueryInterface((nint)unknown, in iid, out var pointer));
+                    int state;
+                    int hr = ((delegate* unmanaged[Stdcall]<nint, int*, int>)(*(void***)pointer)[4])(pointer, &state);   // vtable slot 4 = get_CurrentToggleState
+                    _ = Marshal.Release(pointer); _ = unknown->Release();
+                    Marshal.ThrowExceptionForHR(hr);
+                    return state;
+                }
+                finally { _ = element->Release(); }
+            }
+            return null;
+        }
+        finally { if (found is not null) _ = found->Release(); _ = byName->Release(); _ = root->Release(); }
+    }
 
     /// Names of the elements of a control type, in tree order (the list's rows come in the list's order).
     public List<string> NamesOf(nint hwnd, int controlType)

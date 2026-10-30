@@ -17,7 +17,7 @@ namespace Later.App;
 /// activated. Before setup (Task 9) nothing is watched at all. Never starts an agent.
 /// Closing is prompt: it ends a wait for the lock, skips an engine start not yet begun, bounds the final save, and, as the last resort,
 /// ends the process (the lock is then abandoned, which the agent recovers from).
-internal sealed class AppEngine : IDisposable, IListEditor
+internal sealed class AppEngine : IDisposable, IListEditor, IWatchControls
 {
     /// The running engine and how to take it apart (without its final save, which `AppEngine` bounds itself).
     internal sealed record Started(LaterEngine Engine, Action Stop);
@@ -108,9 +108,24 @@ internal sealed class AppEngine : IDisposable, IListEditor
         thread.Post(Take);
     }
 
-    public void Resume() => thread.Post(() => running?.Engine.SetPaused(false));
+    public void Resume() => SetPaused(false);
 
-    public void SetView(LibraryGrouping grouping, LibrarySort sort, bool reversed) => thread.Post(() => running?.Engine.SetView(grouping, sort, reversed));
+    public void SetPaused(bool value) => Change(e => e.SetPaused(value), s => s with { Paused = value });
+
+    public void SetSavesFeedHomes(bool value) => Change(e => e.SetSavesFeedHomes(value), s => s with { SavesFeedHomes = value });
+
+    public void SetView(LibraryGrouping grouping, LibrarySort sort, bool reversed) =>
+        Change(e => e.SetView(grouping, sort, reversed), s => s with { Grouping = grouping, Sort = sort, SortReversed = reversed });
+
+    /// A setting: the running engine keeps it (and saves it); with none, the settings file is changed here, whole or not at all, for the next
+    /// engine to read. Before setup nothing is kept.
+    void Change(Action<LaterEngine> onEngine, Func<Settings, Settings> onFile) => thread.Post(() =>
+    {
+        if (running is { } r && !stopping) { onEngine(r.Engine); return; }
+        if (!onboarded || stopping) return;
+        try { SettingsStore.Save(paths.Settings, onFile(SettingsStore.Load(paths.Settings))); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    });
 
     /// The user's change, made here (the engine thread owns the library) as one Undo step, then the list is sent at once with `token`
     /// so the window's selection can move on from what went. Nothing is changed while there is no engine to save it.

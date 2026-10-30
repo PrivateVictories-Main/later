@@ -1,6 +1,8 @@
 using Later.App.Actions;
 using Later.App.ViewModels;
 using Later.Core;
+using Later.Windows.Platform;
+using Later.Windows.Reader;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
@@ -23,15 +25,20 @@ public sealed partial class ShellWindow : Window
 
     readonly LibraryViewModel model;
     readonly AppEngine? engine;
+    readonly IStartAtSignIn start;
+    readonly IFirewallBlock firewall;
     readonly ItemActions actions;
+    SettingsWindow? settings;
     readonly Dictionary<LibraryGrouping, RadioMenuFlyoutItem> groupItems = [];
     readonly Dictionary<LibrarySort, RadioMenuFlyoutItem> sortItems = [];
     readonly RadioMenuFlyoutItem newestItem = new() { GroupName = "Direction" }, oldestItem = new() { GroupName = "Direction" };
 
-    internal ShellWindow(LibraryViewModel model, AppEngine? engine, IListEditor? editor)
+    internal ShellWindow(LibraryViewModel model, AppEngine? engine, IListEditor? editor, IStartAtSignIn start, IFirewallBlock firewall)
     {
         this.model = model;
         this.engine = engine;
+        this.start = start;
+        this.firewall = firewall;
         InitializeComponent();
         actions = new ItemActions(model, editor, () => Root.XamlRoot);
 
@@ -51,7 +58,7 @@ public sealed partial class ShellWindow : Window
         Inspector.SearchFor += (_, host) => SearchBox.Text = host;
         Inspector.DeleteStarting += (_, how) => List.FocusAfterNextMove(how);
         Sidebar.ResumeRequested += (_, _) => engine?.Resume();
-        Sidebar.OpenSettingsRequested += (_, _) => { };   // Task 9 opens Settings
+        Sidebar.OpenSettingsRequested += (_, _) => ShowSettings();
         SearchBox.Text = model.Search;
         SearchBox.TextChanged += (box, _) => model.SetSearch(box.Text);
         BuildMenus();
@@ -128,6 +135,21 @@ public sealed partial class ShellWindow : Window
         else { model.Hide(); engine?.SetVisible(false); }
     }
 
+    // MARK: Settings
+
+    /// Opens Settings, or brings it forward if it is open. Quitting from there closes this window: the engine is handed back and the app ends.
+    void ShowSettings()
+    {
+        if (settings is not null) { settings.Activate(); return; }
+        var version = typeof(ShellWindow).Assembly.GetName().Version ?? new Version(0, 0);
+        var path = engine is null ? null : AppPaths.Default.Settings;   // a sample run has no engine, and no settings file
+        var created = settings = new SettingsWindow(new SettingsModel(model, engine, start, firewall, BrowserDiscovery.ExePath, path, $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}"), Close);
+        created.Closed += (_, _) => settings = null;
+        created.Activate();
+    }
+
+    void OnSettingsClick(object sender, RoutedEventArgs e) => ShowSettings();
+
     // MARK: Menus
 
     void BuildMenus()
@@ -177,7 +199,7 @@ public sealed partial class ShellWindow : Window
         oldestItem.IsChecked = model.SortReversed;
     }
 
-    /// Ctrl+F finds, Ctrl+1 to Ctrl+9 go to the sidebar's first nine sections, Ctrl+A selects every page, Ctrl+Z and Ctrl+Y undo and redo.
+    /// Ctrl+F finds, Ctrl+, opens Settings, Ctrl+1 to Ctrl+9 go to the sidebar's first nine sections, Ctrl+A selects every page, Ctrl+Z and Ctrl+Y undo and redo.
     /// Handled as keys pass through the window's content, so they work wherever the keyboard is; in a text field the field keeps its own
     /// Ctrl+Z, Ctrl+Y and Ctrl+A.
     void OnContentPreviewKeyDown(object sender, KeyRoutedEventArgs e)
@@ -188,6 +210,7 @@ public sealed partial class ShellWindow : Window
         switch (e.Key)
         {
             case VirtualKey.F: SearchBox.Focus(FocusState.Keyboard); break;
+            case (VirtualKey)0xBC /*VK_OEM_COMMA*/: ShowSettings(); break;
             case VirtualKey.Z when field is not { CanUndo: true }: actions.Undo(); break;
             case VirtualKey.Y when field is not { CanRedo: true }: actions.Redo(); break;
             case VirtualKey.A when field is not { Text.Length: > 0 }: model.SelectAll(); break;
@@ -249,58 +272,20 @@ public sealed partial class ShellWindow : Window
             var bounds = element.TransformToVisual(null).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
             return new RectInt32((int)Math.Round(bounds.X * Scale), (int)Math.Round(bounds.Y * Scale), (int)Math.Round(bounds.Width * Scale), (int)Math.Round(bounds.Height * Scale));
         }
-        InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, [Region(SearchBox), Region(GroupButton), Region(SortButton)]);
+        InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, [Region(SearchBox), Region(GroupButton), Region(SortButton), Region(SettingsButton)]);
     }
 
 #if DEBUG
-    // MARK: Sample mode and screenshots (Debug only; a Release build carries none of it)
+    // MARK: Sample mode (Debug only; a Release build carries none of it)
 
-    bool activatedOnce, loadedOnce, shotStarted;
-    Microsoft.UI.Dispatching.DispatcherQueueTimer? shotTimer;
-
+    /// A sample run is sized by its own flags, and may be dark or have its picture taken (see `SampleShot`).
     void ApplySample()
     {
         if (!Sample.Enabled) return;
-        if (Sample.Dark)
-        {
-            Root.RequestedTheme = ElementTheme.Dark;
-            AppWindow.TitleBar.ButtonForegroundColor = Colors.White;
-            AppWindow.TitleBar.ButtonInactiveForegroundColor = Colors.Gray;
-        }
         var (width, height) = Sample.ShotSize;
         AppWindow.Resize(new SizeInt32(width, height));
         AppWindow.Move(new PointInt32(10, 10));
-        if (Sample.ShotPath is null && Sample.ShotScreenPath is null) return;
-        Activated += (_, _) => { Mark("activated"); activatedOnce = true; StartShot(); };
-        Root.Loaded += (_, _) => { Mark("loaded"); loadedOnce = true; StartShot(); };
-        Mark("wired");
-    }
-
-    /// A line for the scene's progress, in a file beside its picture: what the screenshot script prints when a scene does not finish.
-    static void Mark(string what)
-    {
-        if ((Sample.ShotPath ?? Sample.ShotScreenPath) is not { } path) return;
-        try { File.AppendAllText(path + ".log", what + "\n"); }
-        catch (IOException) { }
-    }
-
-    /// Once the window is active and its content loaded: wait for the first frame to settle, take the picture, and quit.
-    void StartShot()
-    {
-        if (!activatedOnce || !loadedOnce || shotStarted) return;
-        shotStarted = true;
-        Mark("timer started");
-        var timer = shotTimer = DispatcherQueue.CreateTimer();   // in a field: a timer nothing refers to can be collected before it ticks
-        timer.Interval = TimeSpan.FromMilliseconds(Sample.ShotDelayMs);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
-        {
-            Mark("tick");
-            try { ScreenCapture.Save(WinRT.Interop.WindowNative.GetWindowHandle(this), Sample.ShotPath, Sample.ShotScreenPath); Mark("saved"); }
-            catch (Exception e) { Mark("failed " + e.GetType().Name); throw; }
-            finally { Application.Current.Exit(); }
-        };
-        timer.Start();
+        SampleShot.Attach(this, Root);
     }
 #endif
 }

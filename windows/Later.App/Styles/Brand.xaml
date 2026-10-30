@@ -24,6 +24,16 @@
       <SolidColorBrush x:Key="SectionDoneBrush" Color="#1B8A3C" />
       <SolidColorBrush x:Key="StatusGoodBrush" Color="#2BB24C" />
       <SolidColorBrush x:Key="StatusWarningBrush" Color="#C75300" />
+      <!-- A setting's tile in Settings: a color, a white symbol. The wash behind the welcome's icon: the brand violet fading out. -->
+      <SolidColorBrush x:Key="TileGreenBrush" Color="#1E8E3E" />
+      <SolidColorBrush x:Key="TileOrangeBrush" Color="#C75300" />
+      <SolidColorBrush x:Key="TileIndigoBrush" Color="#4B36C2" />
+      <SolidColorBrush x:Key="TileBlueBrush" Color="#0A6CCB" />
+      <SolidColorBrush x:Key="TileTealBrush" Color="#0C7F86" />
+      <SolidColorBrush x:Key="TileGlyphBrush" Color="#FFFFFF" />
+      <Color x:Key="WashStartColor">#4B36C2</Color>
+      <Color x:Key="WashEndColor">#004B36C2</Color>
+      <x:Double x:Key="WashOpacity">0.28</x:Double>
     </ResourceDictionary>
     <ResourceDictionary x:Key="Dark">
       <Color x:Key="SystemAccentColor">#8F8AF7</Color>
@@ -45,6 +55,15 @@
       <SolidColorBrush x:Key="SectionDoneBrush" Color="#4CD964" />
       <SolidColorBrush x:Key="StatusGoodBrush" Color="#4CD964" />
       <SolidColorBrush x:Key="StatusWarningBrush" Color="#FFB067" />
+      <SolidColorBrush x:Key="TileGreenBrush" Color="#2EA64F" />
+      <SolidColorBrush x:Key="TileOrangeBrush" Color="#D9660B" />
+      <SolidColorBrush x:Key="TileIndigoBrush" Color="#6A58D6" />
+      <SolidColorBrush x:Key="TileBlueBrush" Color="#1F7DD8" />
+      <SolidColorBrush x:Key="TileTealBrush" Color="#1A8F96" />
+      <SolidColorBrush x:Key="TileGlyphBrush" Color="#FFFFFF" />
+      <Color x:Key="WashStartColor">#8F8AF7</Color>
+      <Color x:Key="WashEndColor">#008F8AF7</Color>
+      <x:Double x:Key="WashOpacity">0.45</x:Double>
     </ResourceDictionary>
     <ResourceDictionary x:Key="HighContrast">
       <SolidColorBrush x:Key="BrandBrush" Color="{ThemeResource SystemColorHotlightColor}" />   <!-- a foreground colour; Highlight is a selection fill -->
@@ -59,6 +78,15 @@
       <SolidColorBrush x:Key="SectionDoneBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
       <SolidColorBrush x:Key="StatusGoodBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
       <SolidColorBrush x:Key="StatusWarningBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="TileGreenBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="TileOrangeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="TileIndigoBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="TileBlueBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="TileTealBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="TileGlyphBrush" Color="{ThemeResource SystemColorWindowColor}" />
+      <Color x:Key="WashStartColor">#00000000</Color>
+      <Color x:Key="WashEndColor">#00000000</Color>
+      <x:Double x:Key="WashOpacity">0</x:Double>
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

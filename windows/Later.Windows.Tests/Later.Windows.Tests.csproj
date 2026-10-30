@@ -19,5 +19,6 @@
     <Compile Include="..\Later.App\AppEngine.cs" LinkBase="App" />
     <Compile Include="..\Later.App\Icons\SiteIconStore.cs" LinkBase="App\Icons" />
     <Compile Include="..\Later.App\Actions\Opener.cs" LinkBase="App\Actions" />
+    <Compile Include="..\Later.App\NoticesText.cs" LinkBase="App" />
   </ItemGroup>
 </Project>
