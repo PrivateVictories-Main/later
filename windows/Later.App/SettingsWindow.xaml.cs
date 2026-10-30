@@ -6,6 +6,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using Windows.System;
@@ -52,6 +53,10 @@ public sealed partial class SettingsWindow : Window
         bar.ButtonInactiveBackgroundColor = Colors.Transparent;
         if (AppWindow.Presenter is OverlappedPresenter presenter) { presenter.IsResizable = false; presenter.IsMaximizable = false; }
 
+        StartupAppsButton.Click += (_, _) => OpenStartupApps();
+        var escape = new KeyboardAccelerator { Key = VirtualKey.Escape };   // closes Settings, unless something open in it (the order's list) takes the key first
+        escape.Invoked += (_, e) => { e.Handled = true; Close(); };
+        Root.KeyboardAccelerators.Add(escape);
         SortBox.ItemsSource = SettingsModel.SortTitles;
         VersionText.Text = $"Later {model.Version}";
         model.Changed += Update;
@@ -122,9 +127,7 @@ public sealed partial class SettingsWindow : Window
     void OnSortChanged(object sender, SelectionChangedEventArgs e) { if (!syncing && SortBox.SelectedIndex >= 0) model.SetSort((LibrarySort)SortBox.SelectedIndex); }
 
     /// The Startup apps page of Windows' Settings, for the user to look at (the one address Later hands the system on its own account).
-#pragma warning disable CA1822 // named in the XAML, so it cannot be static
-    void OnOpenStartupApps(object sender, RoutedEventArgs e)
-#pragma warning restore CA1822
+    static void OpenStartupApps()
     {
         try { _ = Launcher.LaunchUriAsync(new Uri(SettingsModel.StartupAppsUri)); }
         catch (Exception ex) when (ex is InvalidOperationException or COMException) { }

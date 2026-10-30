@@ -58,7 +58,7 @@
                       AutomationProperties.AccessibilityView="Raw" />
             <StackPanel Grid.Column="1" Spacing="10">
               <TextBlock x:Name="StartNoteText" TextWrapping="WrapWholeWords" AutomationProperties.LiveSetting="Polite" />
-              <Button Content="Open Startup apps" Click="OnOpenStartupApps" />
+              <Button x:Name="StartupAppsButton" Content="Open Startup apps" />
             </StackPanel>
           </Grid>
         </Border>

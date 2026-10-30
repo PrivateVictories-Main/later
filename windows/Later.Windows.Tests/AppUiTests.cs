@@ -495,6 +495,18 @@ public class AppUiTests
     }
 
     [Fact]
+    public void EscapeClosesSettings()
+    {
+        using var dir = new TempDir();
+        using var app = RunningApp.Start(dir.Path, "--sample-settings", "--sample-now", "2026-10-15T12:00:00");
+        WaitForAll(app, "the Settings window", "Quit Later", "Default order");
+        app.Focus();
+        Thread.Sleep(200);
+        NativeTest.Press(0x1B /*VK_ESCAPE*/);
+        Assert.True(app.Process.WaitForExit(15_000), "Esc did not close Settings (the last window of a sample run, so the app ends)");
+    }
+
+    [Fact]
     public void PausingInTheSampleSettingsChangesWhatTheHeaderSaysAndWritesNothing()
     {
         using var dir = new TempDir();
