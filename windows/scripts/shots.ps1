@@ -49,7 +49,7 @@ if ($Arch -eq 'x64') {
 $made = 0; $skipped = @()
 foreach ($name in $scenes.Keys) {
     $png = Join-Path $Out "$name.png"
-    $arguments = @($scenes[$name]) + @('--shot', $png)
+    $arguments = @($scenes[$name]) + @('--sample-now', '2026-10-15T12:00:00', '--shot', $png)   # the runners' time zones differ, so "today" would too
     if ($Arch -eq 'x64') { $arguments += @('--shot-screen', (Join-Path $Out "$name-screen.png")) }
     $p = Start-Process $Exe -ArgumentList $arguments -PassThru
     $null = $p.Handle   # keeps the exit code readable after the process ends
