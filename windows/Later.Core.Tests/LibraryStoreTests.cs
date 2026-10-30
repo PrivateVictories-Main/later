@@ -28,6 +28,22 @@ public class LibraryStoreTests
     // Check: what Load would find, touching nothing (the background helper's question).
 
     [Fact]
+    public void PeekReadsTheListOrItsBackupAndTouchesNothing()
+    {
+        using var dir = new TempDir(); var store = StoreIn(dir);
+        Assert.Empty(store.Peek("busy").Data.Items);
+        store.Save(Sample("A")); store.Save(Sample("B"));
+        Assert.Equal("B", store.Peek("busy").Data.Items.Single().Title);
+        Garbage(dir.At("library.json"));
+        var peeked = store.Peek("busy");
+        Assert.Equal("A", peeked.Data.Items.Single().Title);   // the backup, and the damaged file is still where it was
+        Assert.False(peeked.Writable);
+        Assert.Equal("busy", peeked.Notice);
+        Assert.Empty(CorruptCopies(dir));
+        Assert.Equal("{garbage", File.ReadAllText(dir.At("library.json")));
+    }
+
+    [Fact]
     public void CheckSaysFineForAReadableOrAMissingList()
     {
         using var dir = new TempDir(); var store = StoreIn(dir);

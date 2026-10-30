@@ -46,6 +46,10 @@ public sealed class LibraryStore
         return backupUnreadable ? Health.Unreadable : Health.NeedsRecovery;
     }
 
+    /// The list as it is on disk, touching no file: for a process that does not hold the engine lock, so it neither recovers nor
+    /// saves. Falls back to the backup copy, then to an empty list.
+    public Loaded Peek(string notice) => new(Decode(FilePath, out _) ?? Decode(BackupPath, out _) ?? new LibraryData(), notice, Writable: false);
+
     public Loaded Load()
     {
         if (Decode(FilePath, out var unreadable) is { } data) { primaryKnownGood = true; return new Loaded(data, null); }
