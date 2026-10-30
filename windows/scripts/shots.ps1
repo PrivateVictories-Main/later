@@ -50,7 +50,8 @@ function Stop-Stuck($p, [string]$name, [string]$png) {
     $made = if ($png) { Test-Path $png } else { 'n/a' }
     $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-2) } -MaxEvents 6 -ErrorAction SilentlyContinue |
         ForEach-Object { "$($_.ProviderName): $(($_.Message -split "`n")[0])" })
-    $info = "responding=$($p.Responding) window='$($p.MainWindowTitle)' picture=$made"
+    $log = if ($png -and (Test-Path "$png.log")) { (Get-Content "$png.log") -join ',' } else { 'none' }
+    $info = "responding=$($p.Responding) window='$($p.MainWindowTitle)' picture=$made progress=$log"
     $p.Kill($true)
     throw "scene '$name' did not finish in 40 s ($info) $($events -join ' | ')"
 }
@@ -60,6 +61,7 @@ if ($Arch -eq 'x64') {
         $p = Start-Process $Exe -ArgumentList (@('--sample') + $(if ($theme -eq 'dark') { @('--sample-dark') } else { @() }) + @('--shot-size', '1000x700', '--shot-screen', (Join-Path $Out "mica-$theme.png"))) -PassThru
         $null = $p.Handle
         if (-not $p.WaitForExit(40000)) { Stop-Stuck $p "mica-$theme" (Join-Path $Out "mica-$theme.png") }
+        Remove-Item (Join-Path $Out "mica-$theme.png.log") -ErrorAction SilentlyContinue
         if ($p.ExitCode -ne 0) { throw "mica-$theme exited with $($p.ExitCode)" }
     }
 }
@@ -72,6 +74,7 @@ foreach ($name in $scenes.Keys) {
     $p = Start-Process $Exe -ArgumentList $arguments -PassThru
     $null = $p.Handle   # keeps the exit code readable after the process ends
     if (-not $p.WaitForExit(40000)) { Stop-Stuck $p $name $png }
+    Remove-Item "$png.log" -ErrorAction SilentlyContinue
     if ($p.ExitCode -eq 3) { $skipped += $name; continue }
     if ($p.ExitCode -ne 0) { throw "scene '$name' exited with $($p.ExitCode)" }
     foreach ($file in @($png) + $(if ($Arch -eq 'x64') { @((Join-Path $Out "$name-screen.png")) } else { @() })) {

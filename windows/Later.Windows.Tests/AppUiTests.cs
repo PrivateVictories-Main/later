@@ -158,7 +158,11 @@ public class AppUiTests
     {
         app.Focus();
         Thread.Sleep(200);   // the window has the keyboard before it is pressed
+        bool offered = app.Names().Contains("Undo");   // the bar that offers it, for a few seconds after a change
         NativeTest.Press((byte)'Z', control: true);
+        if (offered)
+            Wait(() => !app.Names().Contains("Undo"), TimeSpan.FromSeconds(5),
+                 $"Ctrl+Z to reach the window (it is {(NativeTest.GetForegroundWindow() == app.Window ? "" : "not ")}the foreground window)");
     }
 
     [Fact]

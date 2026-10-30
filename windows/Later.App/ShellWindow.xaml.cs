@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.System;
+using Windows.UI.Core;
 
 namespace Later.App;
 
@@ -62,7 +63,7 @@ public sealed partial class ShellWindow : Window
                 engine?.SetView(model.Grouping, model.Sort, model.SortReversed);
             }
         };
-        AddAccelerators();
+        Root.PreviewKeyDown += OnContentPreviewKeyDown;
         ShowLoaded();
         if (!model.IsLoaded)
         {
@@ -175,26 +176,27 @@ public sealed partial class ShellWindow : Window
     }
 
     /// Ctrl+F finds, Ctrl+1 to Ctrl+9 go to the sidebar's first nine sections, Ctrl+A selects every page, Ctrl+Z and Ctrl+Y undo and redo.
-    /// On the window so they work wherever the keyboard is; in a text field the field keeps its own Ctrl+Z, Ctrl+Y and Ctrl+A.
-    void AddAccelerators()
+    /// Handled as keys pass through the window's content, so they work wherever the keyboard is; in a text field the field keeps its own
+    /// Ctrl+Z, Ctrl+Y and Ctrl+A.
+    void OnContentPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        void Add(VirtualKey key, Func<bool> action)
+        if (!Down(VirtualKey.Control) || Down(VirtualKey.Menu)) return;
+        bool inText = Root.XamlRoot is { } xaml && FocusManager.GetFocusedElement(xaml) is TextBox;
+        switch (e.Key)
         {
-            var accelerator = new KeyboardAccelerator { Key = key, Modifiers = VirtualKeyModifiers.Control };
-            accelerator.Invoked += (_, e) => e.Handled = action();
-            Root.KeyboardAccelerators.Add(accelerator);
+            case VirtualKey.F: SearchBox.Focus(FocusState.Keyboard); break;
+            case VirtualKey.Z when !inText: actions.Undo(); break;
+            case VirtualKey.Y when !inText: actions.Redo(); break;
+            case VirtualKey.A when !inText: model.SelectAll(); break;
+            case >= VirtualKey.Number1 and <= VirtualKey.Number9:
+                model.Section = LibrarySection.Ordered[e.Key - VirtualKey.Number1];
+                break;
+            default: return;
         }
-        bool InText() => Root.XamlRoot is { } xaml && FocusManager.GetFocusedElement(xaml) is TextBox;
-        Add(VirtualKey.F, () => { SearchBox.Focus(FocusState.Keyboard); return true; });
-        Add(VirtualKey.Z, () => { if (InText()) return false; actions.Undo(); return true; });
-        Add(VirtualKey.Y, () => { if (InText()) return false; actions.Redo(); return true; });
-        Add(VirtualKey.A, () => { if (InText()) return false; model.SelectAll(); return true; });
-        for (int i = 0; i < 9; i++)
-        {
-            var section = LibrarySection.Ordered[i];
-            Add(VirtualKey.Number1 + i, () => { model.Section = section; return true; });
-        }
+        e.Handled = true;
     }
+
+    static bool Down(VirtualKey key) => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 
     /// A letter typed in the list: the search field takes it and the keyboard, with the caret after it.
     void StartSearch(string text)
@@ -265,8 +267,17 @@ public sealed partial class ShellWindow : Window
         AppWindow.Resize(new SizeInt32(width, height));
         AppWindow.Move(new PointInt32(10, 10));
         if (Sample.ShotPath is null && Sample.ShotScreenPath is null) return;
-        Activated += (_, _) => { activatedOnce = true; StartShot(); };
-        Root.Loaded += (_, _) => { loadedOnce = true; StartShot(); };
+        Activated += (_, _) => { Mark("activated"); activatedOnce = true; StartShot(); };
+        Root.Loaded += (_, _) => { Mark("loaded"); loadedOnce = true; StartShot(); };
+        Mark("wired");
+    }
+
+    /// A line for the scene's progress, in a file beside its picture: what the screenshot script prints when a scene does not finish.
+    static void Mark(string what)
+    {
+        if ((Sample.ShotPath ?? Sample.ShotScreenPath) is not { } path) return;
+        try { File.AppendAllText(path + ".log", what + "\n"); }
+        catch (IOException) { }
     }
 
     /// Once the window is active and its content loaded: wait for the first frame to settle, take the picture, and quit.
@@ -274,12 +285,15 @@ public sealed partial class ShellWindow : Window
     {
         if (!activatedOnce || !loadedOnce || shotStarted) return;
         shotStarted = true;
+        Mark("timer started");
         var timer = DispatcherQueue.CreateTimer();
         timer.Interval = TimeSpan.FromMilliseconds(Sample.ShotDelayMs);
         timer.IsRepeating = false;
         timer.Tick += (_, _) =>
         {
-            try { ScreenCapture.Save(WinRT.Interop.WindowNative.GetWindowHandle(this), Sample.ShotPath, Sample.ShotScreenPath); }
+            Mark("tick");
+            try { ScreenCapture.Save(WinRT.Interop.WindowNative.GetWindowHandle(this), Sample.ShotPath, Sample.ShotScreenPath); Mark("saved"); }
+            catch (Exception e) { Mark("failed " + e.GetType().Name); throw; }
             finally { Application.Current.Exit(); }
         };
         timer.Start();
