@@ -68,11 +68,11 @@ public sealed partial class ShellWindow : Window
         if (!model.IsLoaded)
         {
             // A ring only if the list takes a moment, so a quick start shows no flash of it.
-            var wait = DispatcherQueue.CreateTimer();
-            wait.Interval = TimeSpan.FromMilliseconds(600);
-            wait.IsRepeating = false;
-            wait.Tick += (_, _) => { if (!model.IsLoaded) Loading.Visibility = Visibility.Visible; };
-            wait.Start();
+            loadingTimer = DispatcherQueue.CreateTimer();   // kept in a field: a timer nothing refers to can be collected before it ticks
+            loadingTimer.Interval = TimeSpan.FromMilliseconds(600);
+            loadingTimer.IsRepeating = false;
+            loadingTimer.Tick += (_, _) => { if (!model.IsLoaded) Loading.Visibility = Visibility.Visible; };
+            loadingTimer.Start();
         }
 
         Root.Loaded += (_, _) =>
@@ -104,6 +104,7 @@ public sealed partial class ShellWindow : Window
     // MARK: Loading and showing
 
     bool shown;   // what the model and the engine were last told
+    Microsoft.UI.Dispatching.DispatcherQueueTimer? loadingTimer;
 
     /// Until the first list arrives the panes are not shown: a library being loaded is not an empty one.
     void ShowLoaded()
@@ -181,13 +182,14 @@ public sealed partial class ShellWindow : Window
     void OnContentPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (!Down(VirtualKey.Control) || Down(VirtualKey.Menu)) return;
-        bool inText = Root.XamlRoot is { } xaml && FocusManager.GetFocusedElement(xaml) is TextBox;
+        // A text field keeps its own Ctrl+Z and Ctrl+Y while it has something to undo or redo, and Ctrl+A while it holds text.
+        var field = Root.XamlRoot is { } xaml ? FocusManager.GetFocusedElement(xaml) as TextBox : null;
         switch (e.Key)
         {
             case VirtualKey.F: SearchBox.Focus(FocusState.Keyboard); break;
-            case VirtualKey.Z when !inText: actions.Undo(); break;
-            case VirtualKey.Y when !inText: actions.Redo(); break;
-            case VirtualKey.A when !inText: model.SelectAll(); break;
+            case VirtualKey.Z when field is not { CanUndo: true }: actions.Undo(); break;
+            case VirtualKey.Y when field is not { CanRedo: true }: actions.Redo(); break;
+            case VirtualKey.A when field is not { Text.Length: > 0 }: model.SelectAll(); break;
             case >= VirtualKey.Number1 and <= VirtualKey.Number9:
                 model.Section = LibrarySection.Ordered[e.Key - VirtualKey.Number1];
                 break;
@@ -253,6 +255,7 @@ public sealed partial class ShellWindow : Window
     // MARK: Sample mode and screenshots (Debug only; a Release build carries none of it)
 
     bool activatedOnce, loadedOnce, shotStarted;
+    Microsoft.UI.Dispatching.DispatcherQueueTimer? shotTimer;
 
     void ApplySample()
     {
@@ -286,7 +289,7 @@ public sealed partial class ShellWindow : Window
         if (!activatedOnce || !loadedOnce || shotStarted) return;
         shotStarted = true;
         Mark("timer started");
-        var timer = DispatcherQueue.CreateTimer();
+        var timer = shotTimer = DispatcherQueue.CreateTimer();   // in a field: a timer nothing refers to can be collected before it ticks
         timer.Interval = TimeSpan.FromMilliseconds(Sample.ShotDelayMs);
         timer.IsRepeating = false;
         timer.Tick += (_, _) =>

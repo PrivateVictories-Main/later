@@ -51,6 +51,8 @@ public class AppUiTests
 
         public string? NameOfId(string automationId) => uia.NameOfId(Window, automationId);
 
+        public string FocusedElement() => uia.FocusedElement();
+
         public bool Invoke(string name, int controlType = UiaTest.ButtonType) => uia.Invoke(Window, name, controlType);
 
         public bool Choose(string name) => uia.ChooseInProcess(Process.Id, name);
@@ -162,7 +164,7 @@ public class AppUiTests
         NativeTest.Press((byte)'Z', control: true);
         if (offered)
             Wait(() => !app.Names().Contains("Undo"), TimeSpan.FromSeconds(5),
-                 $"Ctrl+Z to reach the window (it is {(NativeTest.GetForegroundWindow() == app.Window ? "" : "not ")}the foreground window)");
+                 $"Ctrl+Z to reach the window (it is {(NativeTest.GetForegroundWindow() == app.Window ? "" : "not ")}the foreground window; the keyboard is on: {app.FocusedElement()})");
     }
 
     [Fact]

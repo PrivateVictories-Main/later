@@ -123,6 +123,14 @@ internal sealed unsafe class UiaTest : IDisposable
         return names;
     }
 
+    /// Which element has the keyboard: class, name and automation id.
+    public string FocusedElement()
+    {
+        var element = session.Automation->GetFocusedElement();
+        try { return $"{UiaSession.Current(element, UiaIds.ClassName)} | {UiaSession.Current(element, UiaIds.Name)} | {UiaSession.Current(element, UiaIds.AutomationId)}"; }
+        finally { _ = element->Release(); }
+    }
+
     public const int ButtonType = 50000, ListItemType = 50007, MenuItemType = 50011;
 
     /// Names of the elements of a control type, in tree order (the list's rows come in the list's order).
