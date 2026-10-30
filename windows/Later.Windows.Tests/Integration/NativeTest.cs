@@ -25,6 +25,10 @@ internal static unsafe partial class NativeTest
     [LibraryImport("user32.dll")] internal static partial void keybd_event(byte key, byte scan, uint flags, nuint extra);
     [LibraryImport("kernel32.dll")] internal static partial uint GetCurrentThreadId();
     [LibraryImport("user32.dll")] internal static partial uint GetWindowThreadProcessId(nint hwnd, nint processId);
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowThreadProcessId")] private static partial uint GetWindowThreadProcessIdOut(nint hwnd, out uint processId);
+
+    /// The process the foreground window belongs to (the app's own windows count as the app, whichever one the process calls its main).
+    internal static uint ForegroundProcess() { _ = GetWindowThreadProcessIdOut(GetForegroundWindow(), out var pid); return pid; }
     [LibraryImport("user32.dll")] internal static partial int AttachThreadInput(uint from, uint to, int attach);
 
     internal const int SwMinimize = 6, SwRestore = 9;
@@ -34,11 +38,11 @@ internal static unsafe partial class NativeTest
 
     /// Takes the keyboard for `hwnd` even when another window holds the foreground (a runner can have a first-run page up): Windows only lets
     /// the foreground's own thread hand it over, so the test joins that thread's input for the moment, with Alt tapped first as the usual nudge.
-    internal static bool BringToFront(nint hwnd)
+    internal static bool BringToFront(nint hwnd, uint processId)
     {
         for (int attempt = 0; attempt < 5; attempt++)
         {
-            if (GetForegroundWindow() == hwnd) return true;
+            if (ForegroundProcess() == processId) return true;
             keybd_event(0x12 /*VK_MENU*/, 0, 0, 0);
             keybd_event(0x12, 0, 2, 0);
             uint front = GetWindowThreadProcessId(GetForegroundWindow(), 0), mine = GetCurrentThreadId();
@@ -48,7 +52,7 @@ internal static unsafe partial class NativeTest
             if (joined) _ = AttachThreadInput(mine, front, 0);
             Thread.Sleep(200);
         }
-        return GetForegroundWindow() == hwnd;
+        return ForegroundProcess() == processId;
     }
 
     /// Presses a key (a virtual-key code; a letter's is its capital's character) and lets go, with Ctrl held when asked.

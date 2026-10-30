@@ -65,7 +65,7 @@ public class AppUiTests
         public void Focus()
         {
             for (int pages = 0; pages < 10 && DismissFirstRunPage(); pages++) Thread.Sleep(2000);   // a runner's first-run pages hold the keyboard
-            if (!NativeTest.BringToFront(Window))
+            if (!NativeTest.BringToFront(Window, (uint)Process.Id))
                 throw new Xunit.Sdk.XunitException($"the app could not take the keyboard; it is on: {FocusedElement()}; foreground window {NativeTest.GetForegroundWindow():x}, the app's {Window:x}");
         }
 
