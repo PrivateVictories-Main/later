@@ -286,6 +286,9 @@ jobs:
           global-json-file: windows/global.json
       - name: Publish a Debug app
         run: dotnet publish windows/Later.App/Later.App.csproj -c Debug -r ${{ matrix.rid }} -p:Platform=${{ matrix.arch }} --self-contained true -o windows/out-debug/${{ matrix.rid }}
+      - name: Dismiss the first-run page
+        shell: pwsh
+        run: windows/scripts/dismiss-first-run.ps1
       - name: UI tests
         env:
           LATER_EXE: '${{ github.workspace }}/windows/out-debug/${{ matrix.rid }}/Later.exe'
