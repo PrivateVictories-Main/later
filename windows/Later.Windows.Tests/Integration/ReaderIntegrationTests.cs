@@ -176,14 +176,14 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
             int Count(WatchEventKind k) { lock (events) return events.Count(e => e.Kind == k); }
             // A tab switch retitles the window. Always to a tab that is not the selected one; a browser that is slow to switch (first-run work on
             // a busy runner) gets three tries of 4 s, and a miss says what the hook saw.
-            bool seen = false; long t0 = 0;
-            for (int attempt = 0; attempt < 3 && !seen; attempt++)
+            bool switched = false; long t0 = 0;
+            for (int attempt = 0; attempt < 3 && !switched; attempt++)
             {
                 int before = Count(WatchEventKind.NameChanged); t0 = Environment.TickCount64;
                 uia.SelectTab(hwnd, uia.Tabs(hwnd).First(t => !t.Selected).Index);
-                seen = WaitUntil(() => Count(WatchEventKind.NameChanged) > before, TimeSpan.FromSeconds(4));
+                switched = WaitUntil(() => Count(WatchEventKind.NameChanged) > before, TimeSpan.FromSeconds(4));
             }
-            Assert.True(seen, $"no NameChanged in 3 tries of 4 s; hook events seen={watcher!.EventsSeen}, title='{WindowsOf(b).FirstOrDefault(w => w.Hwnd == hwnd)?.Title}', selected tab={uia.Tabs(hwnd).FirstOrDefault(t => t.Selected)?.Index}");
+            Assert.True(switched, $"no NameChanged in 3 tries of 4 s; hook events seen={watcher!.EventsSeen}, title='{WindowsOf(b).FirstOrDefault(w => w.Hwnd == hwnd)?.Title}', selected tab={uia.Tabs(hwnd).FirstOrDefault(t => t.Selected)?.Index}");
             long latency; lock (events) latency = events.First(e => e.Kind == WatchEventKind.NameChanged && e.At >= t0).At - t0;
             output.WriteLine($"HOOK {b}: first NameChanged {latency} ms after the last switch started");
 
