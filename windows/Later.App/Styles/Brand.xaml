@@ -1,0 +1,55 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- The Mac icon's violet and indigo as the accent (the endpoints of the gradient in Resources/AppIcon.icon/icon.json), and one
+       color per kind, shared by its sidebar glyph, its empty state and its overview row so a kind reads the same everywhere.
+       Every color here has a light, a dark and a high-contrast value. -->
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <Color x:Key="SystemAccentColor">#4B36C2</Color>
+      <Color x:Key="SystemAccentColorLight1">#6A58D6</Color>
+      <Color x:Key="SystemAccentColorDark1">#3A2A9E</Color>
+      <SolidColorBrush x:Key="BrandBrush" Color="#4B36C2" />
+      <SolidColorBrush x:Key="SecondaryTextBrush" Color="#5F5F66" />
+      <SolidColorBrush x:Key="KindShoppingBrush" Color="#D9560B" />
+      <SolidColorBrush x:Key="KindPostsBrush" Color="#0A6CCB" />
+      <SolidColorBrush x:Key="KindSchoolBrush" Color="#8A38C9" />
+      <SolidColorBrush x:Key="KindReadingBrush" Color="#0C7F86" />
+      <SolidColorBrush x:Key="KindVideosBrush" Color="#CC2F68" />
+      <SolidColorBrush x:Key="KindToolsBrush" Color="#8F6200" />
+      <SolidColorBrush x:Key="KindOtherBrush" Color="#6B6B73" />
+      <SolidColorBrush x:Key="SectionDoneBrush" Color="#1B8A3C" />
+      <SolidColorBrush x:Key="StatusGoodBrush" Color="#2BB24C" />
+      <SolidColorBrush x:Key="StatusWarningBrush" Color="#C75300" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <Color x:Key="SystemAccentColor">#8F8AF7</Color>
+      <Color x:Key="SystemAccentColorLight1">#A9A5FA</Color>
+      <Color x:Key="SystemAccentColorDark1">#6F69E0</Color>
+      <SolidColorBrush x:Key="BrandBrush" Color="#8F8AF7" />
+      <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A6A6AE" />
+      <SolidColorBrush x:Key="KindShoppingBrush" Color="#FF9F43" />
+      <SolidColorBrush x:Key="KindPostsBrush" Color="#5AAEFF" />
+      <SolidColorBrush x:Key="KindSchoolBrush" Color="#C58AF9" />
+      <SolidColorBrush x:Key="KindReadingBrush" Color="#4FD1C5" />
+      <SolidColorBrush x:Key="KindVideosBrush" Color="#FF7AA2" />
+      <SolidColorBrush x:Key="KindToolsBrush" Color="#FFD60A" />
+      <SolidColorBrush x:Key="KindOtherBrush" Color="#A6A6AE" />
+      <SolidColorBrush x:Key="SectionDoneBrush" Color="#4CD964" />
+      <SolidColorBrush x:Key="StatusGoodBrush" Color="#4CD964" />
+      <SolidColorBrush x:Key="StatusWarningBrush" Color="#FFB067" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="HighContrast">
+      <SolidColorBrush x:Key="BrandBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+      <SolidColorBrush x:Key="SecondaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="KindShoppingBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="KindPostsBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="KindSchoolBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="KindReadingBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="KindVideosBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="KindToolsBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="KindOtherBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="SectionDoneBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="StatusGoodBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+      <SolidColorBrush x:Key="StatusWarningBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

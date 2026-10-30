@@ -16,6 +16,7 @@
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <PublishReadyToRun>false</PublishReadyToRun>
     <LaterProduct>true</LaterProduct>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>   <!-- LibraryImport (Debug screenshot capture) -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>   <!-- generated XAML code warns; the network ban and string-comparison rules are errors via .editorconfig -->
   </PropertyGroup>
   <!-- The app uses no networking, so the self-contained runtime's network-capable files (msquic.dll, createdump.exe and the
@@ -36,6 +37,8 @@
   </Target>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="System.Drawing.Common" Condition="'$(Configuration)' == 'Debug'" />
+    <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\Later.Core\Later.Core.csproj" />
     <ProjectReference Include="..\Later.Windows\Later.Windows.csproj" />
   </ItemGroup>

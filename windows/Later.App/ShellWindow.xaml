@@ -1,0 +1,45 @@
+<Window x:Class="Later.App.ShellWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:panes="using:Later.App.Panes"
+        Title="Later">
+  <Grid x:Name="Root">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="48" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- Title bar area: drag region + search + Group By + Sort By (the Mac's toolbar) -->
+    <Grid x:Name="TitleBar" Grid.Row="0" Padding="12,0,140,0" ColumnSpacing="8">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="240" />   <!-- the sidebar's width, so the search box lines up with the list -->
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Image Source="ms-appx:///Assets/Later-512.png" Width="16" Height="16" AutomationProperties.AccessibilityView="Raw" />
+        <TextBlock Text="Later" VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" />
+      </StackPanel>
+      <AutoSuggestBox x:Name="SearchBox" Grid.Column="1" PlaceholderText="Search" QueryIcon="Find" MaxWidth="420"
+                      AutomationProperties.Name="Search saved pages" VerticalAlignment="Center" />
+      <DropDownButton x:Name="GroupButton" Grid.Column="2" Content="Group By" AutomationProperties.Name="Group By" VerticalAlignment="Center" />
+      <DropDownButton x:Name="SortButton" Grid.Column="3" Content="Sort By" AutomationProperties.Name="Sort By" VerticalAlignment="Center" />
+    </Grid>
+
+    <Grid Grid.Row="1" x:Name="Panes" ColumnSpacing="0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="240" />
+        <ColumnDefinition Width="*" MinWidth="320" />
+        <ColumnDefinition Width="320" />
+      </Grid.ColumnDefinitions>
+      <!-- Mica shows through the sidebar; the list and the inspector sit on one quiet layer over it, with its top-left corner rounded. -->
+      <Border Grid.Column="1" Grid.ColumnSpan="2" CornerRadius="8,0,0,0" BorderThickness="1,1,0,0"
+              Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" />
+      <Border Grid.Column="2" BorderThickness="1,0,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" />
+      <panes:SidebarPane x:Name="Sidebar" Grid.Column="0" />
+      <panes:ListPane x:Name="List" Grid.Column="1" />
+      <panes:InspectorPane x:Name="Inspector" Grid.Column="2" />
+    </Grid>
+  </Grid>
+</Window>

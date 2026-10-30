@@ -1,0 +1,85 @@
+<UserControl x:Class="Later.App.Panes.SidebarPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <UserControl.Resources>
+    <Style x:Key="WarningGlyph" TargetType="FontIcon">
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Foreground" Value="{ThemeResource StatusWarningBrush}" />
+    </Style>
+  </UserControl.Resources>
+  <NavigationView x:Name="Nav" PaneDisplayMode="Left" IsSettingsVisible="False" IsBackButtonVisible="Collapsed"
+                  IsPaneToggleButtonVisible="False" IsPaneOpen="True" OpenPaneLength="240" Background="Transparent"
+                  AutomationProperties.Name="Library sections" SelectionChanged="OnSelectionChanged">
+    <NavigationView.MenuItems>
+      <NavigationViewItemHeader Content="Library" />
+      <NavigationViewItem x:Name="AllItem" Content="All" Tag="All">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE8F1;" Foreground="{ThemeResource BrandBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="AllBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItem x:Name="ShoppingItem" Content="Shopping" Tag="Shopping">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE719;" Foreground="{ThemeResource KindShoppingBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="ShoppingBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItem x:Name="PostsItem" Content="Posts" Tag="Posts">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE8F2;" Foreground="{ThemeResource KindPostsBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="PostsBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItem x:Name="SchoolItem" Content="School" Tag="School">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE7BE;" Foreground="{ThemeResource KindSchoolBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="SchoolBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItem x:Name="ReadingItem" Content="Reading" Tag="Reading">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE736;" Foreground="{ThemeResource KindReadingBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="ReadingBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItem x:Name="VideosItem" Content="Videos" Tag="Videos">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE714;" Foreground="{ThemeResource KindVideosBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="VideosBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItem x:Name="ToolsItem" Content="Tools" Tag="Tools">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE90F;" Foreground="{ThemeResource KindToolsBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="ToolsBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItem x:Name="OtherItem" Content="Other" Tag="Other">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE80A;" Foreground="{ThemeResource KindOtherBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="OtherBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItemSeparator />
+      <NavigationViewItem x:Name="OlderItem" Content="Older" Tag="Older">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE81C;" Foreground="{ThemeResource KindOtherBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="OlderBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItem x:Name="DoneItem" Content="Done" Tag="Done">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE73E;" Foreground="{ThemeResource SectionDoneBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="DoneBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+      <NavigationViewItemSeparator />
+      <NavigationViewItem x:Name="RegularsItem" Content="Regulars" Tag="Regulars">
+        <NavigationViewItem.Icon><FontIcon Glyph="&#xE8EE;" Foreground="{ThemeResource KindOtherBrush}" /></NavigationViewItem.Icon>
+        <NavigationViewItem.InfoBadge><InfoBadge x:Name="RegularsBadge" Style="{StaticResource InformationalValueInfoBadgeStyle}" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+      </NavigationViewItem>
+    </NavigationView.MenuItems>
+
+    <!-- What Later is doing, and anything to fix with the button that fixes it. -->
+    <NavigationView.PaneFooter>
+      <StackPanel x:Name="Footer" Margin="16,8,16,16" Spacing="10">
+        <StackPanel x:Name="ProblemsPanel" Spacing="8" Visibility="Collapsed">
+          <StackPanel x:Name="ProblemLines" Spacing="6" />
+          <Button x:Name="OpenSettingsButton" Content="Open Settings…" Click="OnOpenSettings" />
+        </StackPanel>
+        <Grid x:Name="PausedPanel" ColumnSpacing="8" Visibility="Collapsed">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <FontIcon Glyph="&#xE769;" Style="{StaticResource WarningGlyph}" AutomationProperties.AccessibilityView="Raw" />
+          <TextBlock Grid.Column="1" Text="Paused" VerticalAlignment="Center" Foreground="{ThemeResource SecondaryTextBrush}" />
+          <Button Grid.Column="2" Content="Resume" Click="OnResume" />
+        </Grid>
+        <Grid x:Name="StatusPanel" ColumnSpacing="8" Visibility="Collapsed">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+          <Ellipse x:Name="GoodDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{ThemeResource StatusGoodBrush}" AutomationProperties.AccessibilityView="Raw" />
+          <Ellipse x:Name="WarningDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{ThemeResource StatusWarningBrush}" Visibility="Collapsed" AutomationProperties.AccessibilityView="Raw" />
+          <TextBlock x:Name="StatusText" Grid.Column="1" TextWrapping="WrapWholeWords" Foreground="{ThemeResource SecondaryTextBrush}" />
+        </Grid>
+      </StackPanel>
+    </NavigationView.PaneFooter>
+  </NavigationView>
+</UserControl>

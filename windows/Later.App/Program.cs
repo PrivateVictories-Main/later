@@ -13,6 +13,7 @@ public static class Program
 #if DEBUG
         if (args.Contains("--test-hold-lock", StringComparer.Ordinal)) return HoldLock(crash: true);
         if (args.Contains("--test-hold-lock-clean", StringComparer.Ordinal)) return HoldLock(crash: false);
+        if (Sample.NotBuilt) return 3;   // a scene whose window a later task builds (settings, onboarding, a selection)
 #endif
         return RunApp();
     }

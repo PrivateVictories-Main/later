@@ -1,0 +1,53 @@
+<UserControl x:Class="Later.App.Panes.ListPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:Later.App.Panes">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- A problem with saving, until it is dismissed or fixed (the Mac's notice bar). -->
+    <InfoBar x:Name="Notice" Grid.Row="0" Severity="Warning" IsOpen="False" IsClosable="True" Margin="16,12,16,0"
+             Closed="OnNoticeClosed" />
+
+    <StackPanel Grid.Row="1" Margin="24,16,24,8" Spacing="2">
+      <TextBlock x:Name="Heading" Style="{StaticResource TitleTextBlockStyle}" AutomationProperties.HeadingLevel="Level1" />
+      <TextBlock x:Name="Summary" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" />
+    </StackPanel>
+
+    <ListView x:Name="Rows" Grid.Row="2" SelectionMode="Extended" IsItemClickEnabled="False" Padding="12,0,12,12"
+              AutomationProperties.Name="Saved pages">
+      <ListView.ItemContainerStyle>
+        <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+          <Setter Property="MinHeight" Value="56" />
+        </Style>
+      </ListView.ItemContainerStyle>
+      <ListView.ItemTemplate>
+        <DataTemplate x:DataType="local:RowText">
+          <Grid ColumnSpacing="16" Padding="0,8" AutomationProperties.Name="{x:Bind Name}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+              <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" MaxLines="1" />
+              <TextBlock Text="{x:Bind Site}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" MaxLines="1" />
+            </StackPanel>
+            <TextBlock Grid.Column="1" Text="{x:Bind When}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+      </ListView.ItemTemplate>
+    </ListView>
+
+    <!-- What an empty list says, by where the user is. -->
+    <StackPanel x:Name="Empty" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="360" Visibility="Collapsed" Margin="24,0,24,48">
+      <FontIcon x:Name="EmptyGlyph" FontSize="40" HorizontalAlignment="Center" Foreground="{ThemeResource BrandBrush}" AutomationProperties.AccessibilityView="Raw" />
+      <TextBlock x:Name="EmptyTitle" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="WrapWholeWords" />
+      <TextBlock x:Name="EmptyMessage" Foreground="{ThemeResource SecondaryTextBrush}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="WrapWholeWords" />
+      <Button x:Name="ShowOlder" Content="Show Older" HorizontalAlignment="Center" Margin="0,6,0,0" Visibility="Collapsed" Click="OnShowOlder" />
+    </StackPanel>
+  </Grid>
+</UserControl>
