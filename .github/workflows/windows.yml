@@ -2,7 +2,7 @@ name: Windows
 
 on:
   push:
-    branches: [main]
+    branches: [main, windows]   # the windows branch is built on its own pushes, not only through a pull request
   pull_request:
   workflow_dispatch:
 

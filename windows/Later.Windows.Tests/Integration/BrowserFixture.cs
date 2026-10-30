@@ -52,7 +52,8 @@ internal sealed class BrowserFixture : IDisposable
     void KillProfileProcesses()
     {
         foreach (var pid in LeftoverGuard.Pids(System.IO.Path.GetFileName(Profile)))
-            try { Process.GetProcessById(pid).Kill(true); } catch (ArgumentException) { } catch (InvalidOperationException) { }
+            try { Process.GetProcessById(pid).Kill(true); }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException or AggregateException or System.ComponentModel.Win32Exception) { }   // already gone, or going: access is denied for a process that is exiting
     }
 
     public static string? Exe(Browser b) => Environment.GetEnvironmentVariable(b == Browser.Chrome ? "LATER_CHROME" : "LATER_HELIUM");
