@@ -63,7 +63,7 @@ public sealed class EngineHost : IDisposable
 #endif
         var io = new RealBrowserIO(folder);
         var judge = new Judge(opened.Library, new HashSet<Browser>(), opened.Settings.SavesFeedHomes);   // replaced in Engine.Start, once the installed browsers are known
-        var engine = new Engine(opened.Library, judge, io, threadHost, opened.Store, opened.Settings, loadNotice: opened.Notice);
+        var engine = new Engine(opened.Library, judge, io, threadHost, opened.Store, opened.Settings, loadNotice: opened.Notice) { DaysCache = VisitDaysCache.Shared };
         engine.SettingsChanged += s =>
         {
             try { SettingsStore.Save(paths.Settings, s); }
@@ -80,7 +80,7 @@ public sealed class EngineHost : IDisposable
         foreach (var b in BrowserInfo.All)
         {
             var browser = b;
-            debouncers[b] = new Debouncer(DebounceDelay, () => threadHost.Post(() => engine.Ring(browser)));
+            debouncers[b] = new Debouncer(DebounceDelay, () => threadHost.Post(() => { PerfLog.Log.Wake("debounce"); engine.Ring(browser); }));
         }
         engine.Wake = b => debouncers[b].Poke();
         engine.ReadApplied += _ => watcher!.SetKnownBrowserWindows([.. BrowserInfo.All.SelectMany(b => io.KnownWindows(b))]);
@@ -94,32 +94,22 @@ public sealed class EngineHost : IDisposable
         Retarget();
 
         notifier = new SessionNotifier();
+        ConnectSession(notifier, engine, Retarget, () => { Stop(flush: true); sessionEnded?.Invoke(); });
+    }
+
+    /// What the session window's events do. Going away (lock, sleep, display off): time from now is neither reading nor leaving a
+    /// page open, and the browsers are read so what is open now is known. Coming back: the set of browser processes may be
+    /// different after a sleep, a lock or the display coming back, so they are hooked again, and what changed meanwhile is read.
+    internal static void ConnectSession(SessionNotifier notifier, Engine engine, Action retarget, Action sessionEnding)
+    {
+        void GoAway(string reason) { engine.SetAway(reason, true); engine.RingAll(); }
+        void Back(string reason) { engine.SetAway(reason, false); retarget(); engine.RingAll(); }
         notifier.Locked += () => GoAway("lock");
         notifier.Unlocked += () => Back("lock");
         notifier.Suspending += () => GoAway("sleep");
         notifier.Resumed += () => Back("sleep");
-        notifier.DisplayChanged += on => { if (on) Back("screen"); else GoAway("screen"); };
-        notifier.SessionEnding += () => { Stop(flush: true); sessionEnded?.Invoke(); };
-    }
-
-    /// Nobody is looking: time from now is neither reading nor leaving a page open. The browsers are read so what is open now is known.
-    void GoAway(string reason)
-    {
-        Engine.SetAway(reason, true);
-        Engine.RingAll();
-    }
-
-    void Back(string reason)
-    {
-        Engine.SetAway(reason, false);
-        WakeUp();
-    }
-
-    /// After a sleep, a lock or the display coming back the set of browser processes may be different, and what changed meanwhile is read.
-    void WakeUp()
-    {
-        Retarget();
-        Engine.RingAll();
+        // MUTANT: display not wired
+        notifier.SessionEnding += sessionEnding;
     }
 
     /// Hooks exactly the processes of the browser windows that exist now.

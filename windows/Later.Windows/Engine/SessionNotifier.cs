@@ -14,9 +14,11 @@ public sealed unsafe class SessionNotifier : IDisposable
     const uint WmEndSession = 0x0016, WmPowerBroadcast = 0x0218, WmSessionChange = 0x02B1;
     const int WtsSessionLock = 7, WtsSessionUnlock = 8;
     const int PbtSuspend = 4, PbtResumeSuspend = 7, PbtResumeAutomatic = 0x12, PbtPowerSettingChange = 0x8013;
-    /// GUID_CONSOLE_DISPLAY_STATE: the data is 0 (display off), 1 (on) or 2 (dimmed). Modern Standby starts when the display goes
-    /// off, so this arrives where a suspend message may not.
-    static readonly Guid ConsoleDisplayState = new("6fe69556-704a-47a0-8f24-c28d936fda47");
+    /// GUID_SESSION_DISPLAY_STATUS: the data is 0 (display off), 1 (on) or 2 (dimmed). Microsoft: "All applications that run in an
+    /// interactive user-mode session should use this setting"; GUID_CONSOLE_DISPLAY_STATE is for kernel-mode registrants and
+    /// describes the console, not the user's own display (a Remote Desktop session, a fast user switch). Modern Standby starts
+    /// when the display goes off, so this arrives where a suspend message may not.
+    internal static readonly Guid SessionDisplayStatus = new("6fe69556-704a-47a0-8f24-c28d936fda47")   /* MUTANT: console GUID */;
 
     static readonly NativeApi.WindowProc Proc = OnMessage;   // a static field: the class keeps the delegate alive for the process
     static readonly ConcurrentDictionary<nint, SessionNotifier> Instances = new();
@@ -58,13 +60,14 @@ public sealed unsafe class SessionNotifier : IDisposable
         if (Hwnd == 0) throw new Win32Exception();
         Instances[Hwnd] = this;
         RegisteredForSessionChanges = NativeApi.WTSRegisterSessionNotification(Hwnd, 0 /*NOTIFY_FOR_THIS_SESSION*/) != 0;
-        displayRegistration = NativeApi.RegisterPowerSettingNotification(Hwnd, in ConsoleDisplayState, 0 /*DEVICE_NOTIFY_WINDOW_HANDLE*/);
+        displayRegistration = NativeApi.RegisterPowerSettingNotification(Hwnd, in SessionDisplayStatus, 0 /*DEVICE_NOTIFY_WINDOW_HANDLE*/);
     }
 
     static nint OnMessage(nint hwnd, uint message, nuint wParam, nint lParam)
     {
         if (Instances.TryGetValue(hwnd, out var notifier))
         {
+            if (message is WmSessionChange or WmPowerBroadcast or WmEndSession) PerfLog.Log.Wake("session");
             switch (message)
             {
                 case WmSessionChange when (int)wParam == WtsSessionLock: notifier.Locked?.Invoke(); return 0;
@@ -82,7 +85,7 @@ public sealed unsafe class SessionNotifier : IDisposable
 
     void OnPowerSetting(PowerBroadcastSetting* setting)
     {
-        if (setting is null || setting->PowerSetting != ConsoleDisplayState || setting->DataLength < 4) return;
+        if (setting is null || setting->PowerSetting != SessionDisplayStatus || setting->DataLength < 4) return;
         bool on = setting->Data != 0;   // dimmed (2) is still on
         if (on == displayOn) return;
         displayOn = on;

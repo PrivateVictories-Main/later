@@ -230,6 +230,24 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         }
     }
 
+    /// A fact-finder, not a rule: what a minimized window shows UI Automation, so the engine's wait for a page in it is based on what is.
+    [Theory, MemberData(nameof(Browsers))]
+    public void WhatAMinimizedWindowShowsToUiAutomation(Browser b)
+    {
+        using var server = new FixtureServer();
+        using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2)]);
+        using var uia = new UiaTest();
+        Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 2, Slow), "two tabs did not appear");
+        var hwnd = WindowsOf(b)[0].Hwnd;
+        _ = NativeTest.ShowWindow(hwnd, NativeTest.SwMinimize);
+        Thread.Sleep(1500);
+        int tabs = uia.Tabs(hwnd).Count;
+        using var reader = ReaderFor(f.Profile);
+        var read = reader.Read(b);
+        output.WriteLine($"MINIMIZED {b}: UI Automation tabs={tabs}; reader status={read.Status} tabs={read.Snapshot?.Tabs.Count ?? 0}");
+        _ = NativeTest.ShowWindow(hwnd, NativeTest.SwRestore);
+    }
+
     [Theory, MemberData(nameof(Browsers))]
     public void HistoryGivesLinksToTabsOpenedBeforeLaterStarted(Browser b)
     {

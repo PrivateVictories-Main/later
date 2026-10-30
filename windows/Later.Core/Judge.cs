@@ -205,6 +205,12 @@ public sealed class Judge
         return first;
     }
 
+    /// Whether an unsaved page of this browser waits on the clock at all, however late: what `NextDeadline` looks for, without the
+    /// "after now" filter. A read that came back unreadable uses it to know the wait is not over.
+    public bool WaitsOnTheClock(Browser browser) => records.Any(r =>
+        r.Key.Browser == browser && !r.Value.Saved && !r.Value.LeftOpenQualified
+        && (r.Value.OffScreenSince is not null || (r.Value.Verdict is not null && r.Value.OnScreenSince is not null)));
+
     /// The browser's last copy quit. Time before now keeps its credit; then its pages are forgotten without
     /// ending them, so a relaunch that restores the session is a first read: no visits, nothing "came back".
     public void BrowserQuit(Browser browser, DateTime now)

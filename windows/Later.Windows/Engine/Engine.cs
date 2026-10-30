@@ -83,6 +83,8 @@ public sealed class Engine
     }
 
     public Library Library => library;
+    /// Where the History's answer is kept between engines; the owner of the process passes `VisitDaysCache.Shared`.
+    public VisitDaysCache DaysCache { get; init; } = new();
     public IReadOnlyDictionary<Browser, BrowserStatus> Status => new Dictionary<Browser, BrowserStatus>(status);
     public bool Paused => settings.Paused;
     public bool SavesFeedHomes => settings.SavesFeedHomes;
@@ -273,7 +275,10 @@ public sealed class Engine
                 ReadApplied?.Invoke(b);
                 break;
             case ReadStatus.Transient:
-                break;   // the next wake-up catches up
+                // The next wake-up catches up. A page that time alone could save must not wait on one that may never come (a
+                // minimized browser sends none): try again, with the same bound as for unresolved tabs, then wait for a real event.
+                // MUTANT: no retry
+                break;
             default:
                 CancelDeadline(b);
                 judge.BrowserUnreadable(b);
@@ -289,7 +294,7 @@ public sealed class Engine
         if (retries.GetValueOrDefault(b) >= MaxRetries) return false;
         retries[b] = retries.GetValueOrDefault(b) + 1;
         CancelRetry(b);
-        retryTimers[b] = host.After(RetryDelay, () => { retryTimers.Remove(b); Read(b); });
+        retryTimers[b] = host.After(RetryDelay, () => { PerfLog.Log.Wake("retry"); retryTimers.Remove(b); Read(b); });
         return true;
     }
 
@@ -307,7 +312,7 @@ public sealed class Engine
         if (judge.NextDeadline(b, now) is not { } at) return;
         var delay = at - now + DeadlineSlack;
         PerfLog.Log.Armed(b.Wire(), delay.TotalSeconds);
-        deadlineTimers[b] = host.After(delay, () => { deadlineTimers.Remove(b); Ring(b); });
+        deadlineTimers[b] = host.After(delay, () => { PerfLog.Log.Wake("deadline"); deadlineTimers.Remove(b); Ring(b); });
     }
 
     void CancelDeadline(Browser b)
@@ -396,9 +401,8 @@ public sealed class Engine
         var timer = Stopwatch.StartNew();
         host.RunBackground(() =>
         {
-            Dictionary<string, HashSet<int>> days;
-            try { days = io.VisitDays(since); }
-            catch (Exception e) when (e is not OutOfMemoryException) { days = []; }
+            PerfLog.Log.Wake("visitdays");
+            var days = new VisitDaysCache().Days(since, io.VisitDays);   // MUTANT: no shared cache
             host.Post(() =>
             {
                 if (stopped) return;
@@ -422,6 +426,7 @@ public sealed class Engine
         var timer = Stopwatch.StartNew();
         host.RunBackground(() =>
         {
+            PerfLog.Log.Wake("history");
             Dictionary<string, HistoryResult> results;
             try { results = io.History(links); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException) { results = []; }
@@ -466,6 +471,7 @@ public sealed class Engine
 
     void SaveNow()
     {
+        PerfLog.Log.Wake("save");
         saveScheduled = false; saveTimer = null;
         if (save is null || stopped) return;
         var data = library.CopyData();

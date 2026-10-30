@@ -9,6 +9,18 @@ internal static partial class SendTo
 {
     [System.Runtime.InteropServices.LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
     internal static partial nint Message(nint hwnd, uint message, nuint wParam, nint lParam);
+
+    /// A WM_POWERBROADCAST / PBT_POWERSETTINGCHANGE the way the system sends it: a POWERBROADCAST_SETTING behind lParam.
+    internal static void PowerSetting(nint hwnd, Guid setting, uint dataLength, int data)
+    {
+        var memory = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf<PowerBroadcastSetting>());
+        try
+        {
+            System.Runtime.InteropServices.Marshal.StructureToPtr(new PowerBroadcastSetting { PowerSetting = setting, DataLength = dataLength, Data = data }, memory, false);
+            Message(hwnd, 0x0218, 0x8013, memory);
+        }
+        finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(memory); }
+    }
 }
 
 public sealed class SessionNotifierTests : IDisposable
@@ -51,17 +63,7 @@ public sealed class SessionNotifierTests : IDisposable
 
     static readonly Guid ConsoleDisplayState = new("6fe69556-704a-47a0-8f24-c28d936fda47");
 
-    /// A WM_POWERBROADCAST / PBT_POWERSETTINGCHANGE the way the system sends it: a POWERBROADCAST_SETTING behind lParam.
-    void SendPowerSetting(Guid setting, uint dataLength, int data)
-    {
-        var memory = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf<PowerBroadcastSetting>());
-        try
-        {
-            System.Runtime.InteropServices.Marshal.StructureToPtr(new PowerBroadcastSetting { PowerSetting = setting, DataLength = dataLength, Data = data }, memory, false);
-            SendTo.Message(notifier.Hwnd, WmPowerBroadcast, 0x8013, memory);
-        }
-        finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(memory); }
-    }
+    void SendPowerSetting(Guid setting, uint dataLength, int data) => SendTo.PowerSetting(notifier.Hwnd, setting, dataLength, data);
 
     [Fact]
     public void WindowsAcceptedTheDisplayStateRegistration() => Assert.True(notifier.RegisteredForDisplayChanges);
@@ -69,18 +71,18 @@ public sealed class SessionNotifierTests : IDisposable
     [Fact]
     public void TheDisplayGoingOffComingOnOrDimmingIsReported()
     {
-        SendPowerSetting(ConsoleDisplayState, 4, 0);
-        SendPowerSetting(ConsoleDisplayState, 4, 1);
-        SendPowerSetting(ConsoleDisplayState, 4, 2);   // dimmed after on: still on, nothing new
-        SendPowerSetting(ConsoleDisplayState, 4, 0);
-        SendPowerSetting(ConsoleDisplayState, 4, 2);   // dimmed is on
+        SendPowerSetting(SessionNotifier.SessionDisplayStatus, 4, 0);
+        SendPowerSetting(SessionNotifier.SessionDisplayStatus, 4, 1);
+        SendPowerSetting(SessionNotifier.SessionDisplayStatus, 4, 2);   // dimmed after on: still on, nothing new
+        SendPowerSetting(SessionNotifier.SessionDisplayStatus, 4, 0);
+        SendPowerSetting(SessionNotifier.SessionDisplayStatus, 4, 2);   // dimmed is on
         Assert.Equal(["display off", "display on", "display off", "display on"], Seen());
     }
 
     [Fact]
     public void TheStateWindowsReportsAtRegistrationIsNotAChange()
     {
-        SendPowerSetting(ConsoleDisplayState, 4, 1);   // already on
+        SendPowerSetting(SessionNotifier.SessionDisplayStatus, 4, 1);   // already on
         Assert.Empty(Seen());
     }
 
@@ -88,7 +90,8 @@ public sealed class SessionNotifierTests : IDisposable
     public void OtherPowerSettingsAndATruncatedOneRaiseNothing()
     {
         SendPowerSetting(new Guid("5d3e9a59-e9d5-4b00-a6bd-ff34ff516548"), 4, 0);   // GUID_ACDC_POWER_SOURCE
-        SendPowerSetting(ConsoleDisplayState, 0, 0);
+        SendPowerSetting(SessionNotifier.SessionDisplayStatus, 0, 0);
+        SendPowerSetting(ConsoleDisplayState, 4, 0);   // the console setting is for kernel-mode registrants: not ours
         SendTo.Message(notifier.Hwnd, WmPowerBroadcast, 0x8013, 0);
         Assert.Empty(Seen());
     }

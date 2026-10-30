@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Later.Windows.Engine;
 using Later.Windows.Native;
 
 namespace Later.Windows.Reader;
@@ -77,6 +78,7 @@ public sealed class WinEventWatcher : IDisposable
     void OnWinEvent(nint hook, uint eventType, nint hwnd, int idObject, int idChild, uint eventThread, uint eventTime)
     {
         Interlocked.Increment(ref eventsSeen);
+        PerfLog.Log.Wake("winevent");
         if (idObject != User32.ObjIdWindow || hwnd == 0) return;
         switch (eventType)
         {

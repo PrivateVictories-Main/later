@@ -76,10 +76,17 @@ public class EngineTests
         public DateTime Now = T0;
         public readonly LaterEngine Engine;
 
-        public Rig(Settings? settings = null, Action<LibraryData>? save = null, string? loadNotice = null, Library? library = null)
+        public Rig(Settings? settings = null, Action<LibraryData>? save = null, string? loadNotice = null, Library? library = null, VisitDaysCache? daysCache = null)
         {
             Library = library ?? Library;
-            Engine = new LaterEngine(Library, new Judge(Library), IO, Host, save, settings ?? new Settings(), () => Now, loadNotice);
+            Engine = new LaterEngine(Library, new Judge(Library), IO, Host, save, settings ?? new Settings(), () => Now, loadNotice) { DaysCache = daysCache ?? new VisitDaysCache() };
+        }
+
+        /// A second engine on the same fakes, as the agent builds one at each handoff.
+        public (LaterEngine Engine, Library Library) NextEngine(VisitDaysCache daysCache)
+        {
+            var library = new Library();
+            return (new LaterEngine(library, new Judge(library), IO, Host, (Action<LibraryData>?)null, new Settings(), () => Now, null) { DaysCache = daysCache }, library);
         }
 
         public void Wait(double seconds) => Now = Now.AddSeconds(seconds);
@@ -317,6 +324,66 @@ public class EngineTests
         Assert.Empty(r.Engine.OpenCopies);
     }
 
+    // An armed read that comes back unreadable (a minimized browser exposes no tabs, a UI Automation call fails) must not end the wait.
+
+    [Fact]
+    public void AnArmedReadThatComesBackTransientIsTriedAgainTwiceAndThenLeftToTheNextRealEvent()
+    {
+        var r = new Rig();
+        ReadResult current = Ok(T(ShopHome, "Shop", active: true), T(Product));
+        r.IO.OnRead = _ => current;
+        r.Engine.Start();
+        r.Wait(61); current = Ended(ReadStatus.Transient);
+        r.Host.Fire();                                                              // the armed read
+        Assert.Equal(TimeSpan.FromSeconds(15), Assert.Single(r.Host.Shots).Delay);   // the same bound as for unresolved tabs
+        r.Wait(15); r.Host.Fire();
+        Assert.Equal(TimeSpan.FromSeconds(15), Assert.Single(r.Host.Shots).Delay);
+        r.Wait(15); r.Host.Fire();
+        Assert.Empty(r.Host.Shots);                                                 // no third try and no timer: a minimized browser is never polled
+        Assert.Equal(4, r.IO.Reads.Count);                                          // the start, the armed read and the two tries
+    }
+
+    [Fact]
+    public void ARetryAfterATransientArmedReadSavesThePageWhenTheBrowserAnswers()
+    {
+        var r = new Rig();
+        ReadResult current = Ok(T(ShopHome, "Shop", active: true), T(Product));
+        r.IO.OnRead = _ => current;
+        r.Engine.Start();
+        r.Wait(61); current = Ended(ReadStatus.Transient);
+        r.Host.Fire();
+        Assert.Empty(r.Library.Data.Items);
+        r.Wait(15); current = Ok(T(ShopHome, "Shop", active: true), T(Product));
+        r.Host.Fire();
+        Assert.Equal([Product], r.Library.Data.Items.Select(i => i.Url).ToArray());
+    }
+
+    [Fact]
+    public void ATransientReadWithNothingWaitingOnTheClockArmsNothing()
+    {
+        var r = new Rig();
+        ReadResult current = Ok(T(ShopHome, "Shop", active: true));
+        r.IO.OnRead = _ => current;
+        r.Engine.Start();
+        current = Ended(ReadStatus.Transient);
+        r.Engine.Ring(Browser.Helium);
+        Assert.Empty(r.Host.Shots);
+    }
+
+    [Fact]
+    public void APageSeenBeforeTheBrowserBecameUnreadableIsStillSavedWhenTheBrowserQuits()
+    {
+        var r = new Rig();
+        ReadResult current = Ok(T(ShopHome, "Shop", active: true), T(Product));
+        r.IO.OnRead = _ => current;
+        r.Engine.Start();
+        r.Wait(61); current = Ended(ReadStatus.Transient);
+        r.Host.Fire();
+        current = Ended(ReadStatus.NotRunning); r.Wait(5);
+        r.Engine.Ring(Browser.Helium);                                              // the window was destroyed: BrowserQuit ends the records
+        Assert.Equal([Product], r.Library.Data.Items.Select(i => i.Url).ToArray());
+    }
+
     // A page that time alone could still save: one read is armed for its moment, and only while there is such a page.
 
     [Fact]
@@ -484,6 +551,36 @@ public class EngineTests
     }
 
     [Fact]
+    public void TwoEnginesOnTheSameDayMakeOneHistoryQuery()
+    {
+        var cache = new VisitDaysCache();
+        var r = new Rig(daysCache: cache);
+        r.IO.OnVisitDays = _ => DashDays(T0, 5);
+        r.Engine.Start();
+        r.Engine.Stop(flush: false);
+        var (second, library) = r.NextEngine(cache);   // the handoff to the app and back
+        second.Start();
+        Assert.Single(r.IO.VisitDayAsks);
+        Assert.Equal(5, library.VisitDays("dash.example.com", Familiarity.Today(T0)));
+    }
+
+    [Fact]
+    public void ANewDayAsksAgainAndAFailedAnswerFallsBackToTheLastGoodOneInTheNextEngine()
+    {
+        var cache = new VisitDaysCache();
+        var r = new Rig(daysCache: cache);
+        r.IO.OnVisitDays = _ => DashDays(T0, 5);
+        r.Engine.Start();
+        r.Engine.Stop(flush: false);
+        r.Wait(86_400);
+        r.IO.OnVisitDays = _ => throw new InvalidOperationException("locked");
+        var (second, library) = r.NextEngine(cache);
+        second.Start();
+        Assert.Equal(2, r.IO.VisitDayAsks.Count);
+        Assert.Equal(5, library.VisitDays("dash.example.com", Familiarity.Today(T0)));
+    }
+
+    [Fact]
     public void WithNoDaysToGoByNothingIsMigrated()
     {
         var library = new Library();
@@ -529,6 +626,36 @@ public class EngineTests
         r.Wait(8 * 3600); r.Engine.SetAway("screen", false);
         r.Engine.Ring(Browser.Helium);
         Assert.Empty(r.Library.Data.Items);
+    }
+
+    [Fact]
+    public void TheDisplayGoingOffThroughTheSessionWindowIsAwayForTheScreenAndReadsTheBrowsers()
+    {
+        var r = new Rig();
+        r.IO.OnRead = _ => Ok(T(Product, active: true));
+        r.Engine.Start();
+        int readsBefore = r.IO.Reads.Count;
+        using var thread = new EngineThread();
+        SessionNotifier? notifier = null;
+        using var up = new ManualResetEventSlim();
+        var runner = new Thread(() => thread.Run(
+            init: () => { notifier = new SessionNotifier(); EngineHost.ConnectSession(notifier, r.Engine, () => { }, () => { }); up.Set(); },
+            waitHandles: () => [],
+            signaled: _ => { },
+            onExit: () => notifier!.Dispose()));
+        runner.Start();
+        try
+        {
+            Assert.True(up.Wait(10_000));
+            r.Wait(5);
+            SendTo.PowerSetting(notifier!.Hwnd, SessionNotifier.SessionDisplayStatus, 4, 0);   // display off
+            Assert.True(r.IO.Reads.Count > readsBefore);                                       // going away reads what is open
+            r.Wait(8 * 3600);
+            SendTo.PowerSetting(notifier.Hwnd, SessionNotifier.SessionDisplayStatus, 4, 1);    // display on
+            r.Engine.Ring(Browser.Helium);
+            Assert.Empty(r.Library.Data.Items);                                                // the night was not reading time
+        }
+        finally { thread.Quit(); runner.Join(10_000); }
     }
 
     [Fact]

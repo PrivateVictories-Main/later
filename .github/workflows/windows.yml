@@ -208,9 +208,15 @@ jobs:
         env:
           LATER_EXE: '${{ github.workspace }}/windows/out-debug/${{ matrix.rid }}/Later.exe'
         run: dotnet test windows/Later.Windows.Tests -c Release --filter "Category=Integration&FullyQualifiedName~AgentIntegration" --logger "console;verbosity=detailed"
+      - name: Experiment build with ReadyToRun (not shipped)
+        continue-on-error: true
+        run: dotnet publish windows/Later.App/Later.App.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.arch }} --self-contained true -p:PublishReadyToRun=true -o windows/out-r2r/${{ matrix.rid }}
       - name: Agent memory and CPU, cold and warm (Release)
         shell: pwsh
-        run: ./windows/scripts/measure-agent.ps1 -Exe "windows/out/${{ matrix.rid }}/Later.exe" -Seconds 30
+        run: |
+          $r2r = 'windows/out-r2r/${{ matrix.rid }}/Later.exe'
+          $extra = if (Test-Path $r2r) { @('-ReadyToRunExe', $r2r) } else { @() }
+          ./windows/scripts/measure-agent.ps1 -Exe "windows/out/${{ matrix.rid }}/Later.exe" -Seconds 30 -Experiment @extra
       - name: Nothing left behind
         if: always()
         shell: pwsh

@@ -18,6 +18,7 @@ public static class Agent
     public static int Run()
     {
         Footprint.Mark("agent entered");
+        Footprint.Listen();
         var paths = AppPaths.Default;
         using var only = SingleInstance.Claim(paths.InstanceSuffix);   // before anything is read or written
         if (only is null) return 0;                                     // another agent watches
@@ -41,7 +42,7 @@ public static class Agent
 
         void TryAgainLater()
         {
-            retry = threadHost.After(loadRetries[Math.Min(attempts++, loadRetries.Length - 1)], () => { retry = null; if (holding && host is null) Watch(); });
+            retry = threadHost.After(loadRetries[Math.Min(attempts++, loadRetries.Length - 1)], () => { PerfLog.Log.Wake("loadretry"); retry = null; if (holding && host is null) Watch(); });
         }
 
         // We hold the lock: start the engine unless the list says not to.
@@ -79,18 +80,20 @@ public static class Agent
             Watch();
         }
 
-        // The app asked for the engine: save, let go at once, and only then take the engine apart (a read may still be running).
+        // The app asked for the engine.
         void Yield()
         {
             retry?.Dispose(); retry = null;
             var yielded = host; host = null;
-            if (yielded is not null)
-            {
-                yielded.Stop(flush: true);   // a failed final save is reported through SaveFailedChanged
-                if (!yielded.Engine.SaveFailed) status.Clear();
-            }
-            gate.Release(); holding = false;
-            if (yielded is not null) ThreadPool.QueueUserWorkItem(_ => yielded.Dispose());
+            LetGo(
+                stopAndSave: yielded is null ? null : () =>
+                {
+                    yielded.Stop(flush: true);   // a failed final save is reported through SaveFailedChanged
+                    if (!yielded.Engine.SaveFailed) status.Clear();
+                },
+                release: () => { gate.Release(); holding = false; },
+                takeApart: yielded is null ? null : yielded.Dispose,
+                onPool: work => ThreadPool.QueueUserWorkItem(_ => work()));
         }
 
         thread.Run(
@@ -112,6 +115,16 @@ public static class Agent
                 if (holding) gate.Release();
             });
         return 0;
+    }
+
+    /// The order of a handoff: save, let go of the lock at once, and only then take the engine apart. Taking it apart waits for a
+    /// read that may still be running (a browser that does not answer), and the app is waiting for the lock all that time.
+    internal static void LetGo(Action? stopAndSave, Action release, Action? takeApart, Action<Action> onPool)
+    {
+        stopAndSave?.Invoke();
+        takeApart?.Invoke();   // MUTANT: taken apart before the release
+        release();
+        _ = onPool;
     }
 
     /// A named object that lives as long as the process: a second agent finds it there and leaves. Without it, two agents would

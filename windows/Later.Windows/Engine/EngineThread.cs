@@ -60,7 +60,7 @@ public sealed class EngineThread : IDisposable
         return true;
     }
 
-    void Drain() { while (queue.TryDequeue(out var a)) a(); }
+    void Drain() { while (queue.TryDequeue(out var a)) { PerfLog.Log.Wake("post"); a(); } }
 
     /// Runs `a` on the engine thread, in the order posted.
     public void Post(Action a)

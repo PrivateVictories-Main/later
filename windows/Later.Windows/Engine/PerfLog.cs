@@ -56,6 +56,13 @@ public sealed class PerfLog : EventSource
         if (IsEnabled()) WriteEvent(9, browser, seconds);
     }
 
+    /// Something woke the process: `kind` says what, nothing else. The idle gate counts these (see `Footprint.Listen`).
+    [Event(10, Level = EventLevel.Informational)]
+    public void Wake(string kind)
+    {
+        if (IsEnabled()) WriteEvent(10, kind);
+    }
+
     [Event(8, Level = EventLevel.Informational)]
     public void PlacesRefreshed(int backToList, int regulars, int done, int items)
     {
