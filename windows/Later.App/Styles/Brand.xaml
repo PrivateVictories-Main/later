@@ -2,7 +2,7 @@
   <!-- The Mac icon's violet and indigo as the accent (the endpoints of the gradient in Resources/AppIcon.icon/icon.json), and one
        color per kind, shared by its sidebar glyph, its empty state and its overview row so a kind reads the same everywhere.
        Every color here has a light, a dark and a high-contrast value. -->
-  <x:Double x:Key="NavigationViewItemOnLeftMinHeight">36</x:Double>
+  <x:Double x:Key="NavigationViewItemOnLeftMinHeight">34</x:Double>
   <ResourceDictionary.ThemeDictionaries>
     <ResourceDictionary x:Key="Light">
       <Color x:Key="SystemAccentColor">#4B36C2</Color>
