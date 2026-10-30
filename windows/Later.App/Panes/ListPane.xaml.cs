@@ -21,6 +21,9 @@ public sealed partial class ListPane : UserControl
 
     public ListPane() => InitializeComponent();
 
+    /// Where the keyboard starts, so the search box does not open with a caret in it.
+    public void FocusList() => Rows.Focus(FocusState.Programmatic);
+
     public void Bind(LibraryViewModel viewModel)
     {
         model = viewModel;

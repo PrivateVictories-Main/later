@@ -2,11 +2,16 @@
   <!-- The Mac icon's violet and indigo as the accent (the endpoints of the gradient in Resources/AppIcon.icon/icon.json), and one
        color per kind, shared by its sidebar glyph, its empty state and its overview row so a kind reads the same everywhere.
        Every color here has a light, a dark and a high-contrast value. -->
+  <x:Double x:Key="NavigationViewItemOnLeftMinHeight">36</x:Double>
   <ResourceDictionary.ThemeDictionaries>
     <ResourceDictionary x:Key="Light">
       <Color x:Key="SystemAccentColor">#4B36C2</Color>
       <Color x:Key="SystemAccentColorLight1">#6A58D6</Color>
+      <Color x:Key="SystemAccentColorLight2">#8A7BE4</Color>
+      <Color x:Key="SystemAccentColorLight3">#A9A5FA</Color>
       <Color x:Key="SystemAccentColorDark1">#3A2A9E</Color>
+      <Color x:Key="SystemAccentColorDark2">#2C2080</Color>
+      <Color x:Key="SystemAccentColorDark3">#1F1660</Color>
       <SolidColorBrush x:Key="BrandBrush" Color="#4B36C2" />
       <SolidColorBrush x:Key="SecondaryTextBrush" Color="#5F5F66" />
       <SolidColorBrush x:Key="KindShoppingBrush" Color="#D9560B" />
@@ -23,7 +28,11 @@
     <ResourceDictionary x:Key="Dark">
       <Color x:Key="SystemAccentColor">#8F8AF7</Color>
       <Color x:Key="SystemAccentColorLight1">#A9A5FA</Color>
+      <Color x:Key="SystemAccentColorLight2">#C3C0FC</Color>
+      <Color x:Key="SystemAccentColorLight3">#D9D7FD</Color>
       <Color x:Key="SystemAccentColorDark1">#6F69E0</Color>
+      <Color x:Key="SystemAccentColorDark2">#5A54C4</Color>
+      <Color x:Key="SystemAccentColorDark3">#4640A0</Color>
       <SolidColorBrush x:Key="BrandBrush" Color="#8F8AF7" />
       <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A6A6AE" />
       <SolidColorBrush x:Key="KindShoppingBrush" Color="#FF9F43" />

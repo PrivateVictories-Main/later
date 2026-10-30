@@ -150,12 +150,16 @@ public class AppUiTests
             var names = app.WaitForName(n => n.StartsWith("Later is busy saving", StringComparison.Ordinal), "the read-only notice");
             Assert.Contains(names, n => n.StartsWith("Slow web, a.example.com, Reading, saved ", StringComparison.Ordinal));   // the list is there
             gate.Release();
-            // Coming back to the window asks again, and the lock is free now.
+            // Coming back to the window asks again, and the lock is free now. Restoring the window activates it.
             Wait(() =>
             {
+                _ = NativeTest.ShowWindow(app.Window, NativeTest.SwMinimize);
+                _ = NativeTest.ShowWindow(app.Window, NativeTest.SwRestore);
                 _ = NativeTest.SetForegroundWindow(app.Window);
-                return !gate.TryAcquireAndRelease() && !app.Names().Any(n => n.StartsWith("Later is busy saving", StringComparison.Ordinal));
+                Thread.Sleep(1000);
+                return !gate.TryAcquireAndRelease();
             }, Slow, "the app to take the lock once it was free");
+            Wait(() => !app.Names().Any(n => n.StartsWith("Later is busy saving", StringComparison.Ordinal)), Slow, "the read-only notice to go");
         }
         finally { try { gate.Release(); } catch (System.ComponentModel.Win32Exception) { } }
     }

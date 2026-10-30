@@ -60,12 +60,13 @@ public sealed partial class ShellWindow : Window
         Root.Loaded += (_, _) =>
         {
             StartSize(); KeepMinimumSize(); UpdateTitleBarRegions();
+            List.FocusList();
             Root.XamlRoot.Changed += (_, _) => { KeepMinimumSize(); UpdateTitleBarRegions(); };   // another display's scale
         };
         TitleBar.SizeChanged += (_, _) => UpdateTitleBarRegions();
         VisibilityChanged += (_, e) =>
         {
-            if (e.Visible) { model.Wake(DateTime.UtcNow); engine?.SetVisible(true); }
+            if (e.Visible) { model.Wake(DateTime.UtcNow); engine?.SetVisible(true); engine?.RetryLock(); }
             else { model.Hide(); engine?.SetVisible(false); }
         };
         Activated += (_, e) =>

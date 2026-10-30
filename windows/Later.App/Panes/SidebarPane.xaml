@@ -62,7 +62,8 @@
 
     <!-- What Later is doing, and anything to fix with the button that fixes it. -->
     <NavigationView.PaneFooter>
-      <StackPanel x:Name="Footer" Margin="16,8,16,16" Spacing="10">
+      <Border BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="12,4,12,0">
+      <StackPanel x:Name="Footer" Margin="4,12,4,14" Spacing="10">
         <StackPanel x:Name="ProblemsPanel" Spacing="8" Visibility="Collapsed">
           <StackPanel x:Name="ProblemLines" Spacing="6" />
           <Button x:Name="OpenSettingsButton" Content="Open Settings…" Click="OnOpenSettings" />
@@ -80,6 +81,7 @@
           <TextBlock x:Name="StatusText" Grid.Column="1" TextWrapping="WrapWholeWords" Foreground="{ThemeResource SecondaryTextBrush}" />
         </Grid>
       </StackPanel>
+      </Border>
     </NavigationView.PaneFooter>
   </NavigationView>
 </UserControl>

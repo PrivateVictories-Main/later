@@ -12,7 +12,7 @@ namespace Later.App;
 /// lock after a final save, which wakes the agent. The window sees only snapshots, at most one per 100 ms and none while hidden.
 /// Without the lock (the agent is slow to answer) the list is shown read-only and asked for again whenever the window is shown or
 /// activated. Before setup (Task 9) nothing is watched at all. Never starts an agent.
-internal sealed class AppEngine
+internal sealed class AppEngine : IDisposable
 {
     static readonly TimeSpan HandoffTimeout = TimeSpan.FromSeconds(5), Coalesce = TimeSpan.FromMilliseconds(100);
     static readonly IReadOnlyDictionary<Browser, BrowserStatus> NoStatuses = new Dictionary<Browser, BrowserStatus>();
@@ -48,7 +48,7 @@ internal sealed class AppEngine
 
     public void Start()
     {
-        var runner = new Thread(() => thread.Run(init: Init, waitHandles: () => [], signaled: _ => { }, onExit: OnExit)) { Name = "Later.EngineRunner", IsBackground = true };
+        var runner = new Thread(() => { try { thread.Run(init: Init, waitHandles: () => [], signaled: _ => { }, onExit: OnExit); } finally { Dispose(); } }) { Name = "Later.EngineRunner", IsBackground = true };
         runner.Start();
     }
 
@@ -73,6 +73,8 @@ internal sealed class AppEngine
 
     /// The window closed: save, let go of the lock (the agent takes over), and end the thread.
     public void Shutdown() => thread.Quit();
+
+    public void Dispose() => thread.Dispose();
 
     void Init()
     {
