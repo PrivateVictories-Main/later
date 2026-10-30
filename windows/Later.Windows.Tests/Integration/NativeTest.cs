@@ -14,6 +14,7 @@ internal static unsafe partial class NativeTest
 {
     [LibraryImport("user32.dll")] internal static partial int ShowWindow(nint hwnd, int command);
     [LibraryImport("user32.dll")] internal static partial int SetForegroundWindow(nint hwnd);
+    [LibraryImport("user32.dll")] internal static partial nint GetForegroundWindow();
     [LibraryImport("user32.dll", EntryPoint = "PostMessageW")] internal static partial int PostMessage(nint hwnd, uint message, nuint wParam, nint lParam);
     [LibraryImport("user32.dll", EntryPoint = "PostThreadMessageW")] internal static partial int PostThreadMessage(uint thread, uint message, nuint wParam, nint lParam);
     [LibraryImport("user32.dll", EntryPoint = "GetMessageW")] internal static partial int GetMessage(out Msg msg, nint hwnd, uint min, uint max);
@@ -157,6 +158,36 @@ internal sealed unsafe class UiaTest : IDisposable
     public bool Choose(nint hwnd, string name, int controlType = MenuItemType) =>
         Act(hwnd, name, controlType, 10000 /*Invoke*/, new Guid("fb377fbe-8ea6-46d5-9c73-6499642d3059"), 3)
         || Act(hwnd, name, controlType, 10010 /*SelectionItem*/, new Guid("a8efa66a-0fda-421a-9194-38021f3578ea"), 3);
+
+    /// A menu's choice: the menu may be a window of its own, so the whole desktop's tree is searched, for this process's element of this name.
+    /// Invoke, else Select, else Toggle: whichever the item supports.
+    public bool ChooseInProcess(int processId, string name)
+    {
+        var root = session.Automation->GetRootElement();
+        var byName = session.StringIs(UiaIds.Name, name);
+        VARIANT pid = default;
+        Marshal.GetNativeVariantForObject(processId, (nint)(&pid));
+        var byProcess = session.Automation->CreatePropertyCondition((UIA_PROPERTY_ID)30002 /*ProcessId*/, pid);
+        var both = session.Automation->CreateAndCondition(byName, byProcess);
+        IUIAutomationElementArray* found = null;
+        try
+        {
+            found = root->FindAll((TreeScope)UiaIds.ScopeDescendants, both);
+            for (int i = 0; i < found->Length; i++)
+            {
+                var element = found->GetElement(i);
+                try
+                {
+                    if (Call(element, 10000, new Guid("fb377fbe-8ea6-46d5-9c73-6499642d3059"), 3)
+                        || Call(element, 10010, new Guid("a8efa66a-0fda-421a-9194-38021f3578ea"), 3)
+                        || Call(element, 10015, new Guid("94cf8058-9b8d-4ab9-8bfd-4cd0a33c8c70"), 3)) return true;
+                }
+                finally { _ = element->Release(); }
+            }
+            return false;
+        }
+        finally { if (found is not null) _ = found->Release(); _ = both->Release(); _ = byProcess->Release(); _ = byName->Release(); _ = root->Release(); }
+    }
 
     /// SelectionItemPattern.Select (or AddToSelection) on the first list row for which `which` holds.
     public bool SelectRow(nint hwnd, Func<string, bool> which, bool add = false)

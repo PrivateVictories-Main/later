@@ -53,7 +53,7 @@ public class AppUiTests
 
         public bool Invoke(string name, int controlType = UiaTest.ButtonType) => uia.Invoke(Window, name, controlType);
 
-        public bool Choose(string name) => uia.Choose(Window, name);
+        public bool Choose(string name) => uia.ChooseInProcess(Process.Id, name);
 
         public bool SelectRow(Func<string, bool> which, bool add = false) => uia.SelectRow(Window, which, add);
 
@@ -148,12 +148,16 @@ public class AppUiTests
         Wait(() => { var names = app.Names(); return counts.All(c => names.Contains($"{c.Section.Title}, {c.Count}")); }, Slow, "the sidebar to say " + string.Join(", ", counts.Select(c => $"{c.Section.Title} {c.Count}")));
 
     /// Tries until the element is there and takes the action: the window may still be laying out.
-    static void Do(Func<bool> action, string what) =>
-        Wait(() => { try { return action(); } catch (System.Runtime.InteropServices.COMException) { return false; } }, Slow, what);
+    static void Do(Func<bool> action, string what, RunningApp? app = null)
+    {
+        try { Wait(() => { try { return action(); } catch (System.Runtime.InteropServices.COMException) { return false; } }, Slow, what); }
+        catch (Xunit.Sdk.XunitException e) when (app is not null) { throw new Xunit.Sdk.XunitException(e.Message + " | the window names: " + string.Join("; ", app.Names().Take(60))); }
+    }
 
     static void Undo(RunningApp app)
     {
         app.Focus();
+        Thread.Sleep(200);   // the window has the keyboard before it is pressed
         NativeTest.Press((byte)'Z', control: true);
     }
 
@@ -253,7 +257,7 @@ public class AppUiTests
         using var app = SampleApp(dir);
         app.WaitForName(n => n == "Today, 4 pages", "the list");
         Do(() => app.Invoke("Group By"), "the Group By button");
-        Do(() => app.Choose("Site"), "the Site choice");
+        Do(() => app.Choose("Site"), "the Site choice", app);
         var expected = Expected(LibrarySection.All, grouping: LibraryGrouping.Site);
         WaitForList(app, expected, "a heading for every site");
         Assert.Equal(expected.OfType<RowModel>().Select(r => r.Site).Distinct().Count(), expected.OfType<GroupHeaderRow>().Count());   // one heading per host

@@ -47,7 +47,11 @@ public sealed partial class ListPane : UserControl
     bool syncing, fromList;
     int lastIndex;
 
-    public ListPane() => InitializeComponent();
+    public ListPane()
+    {
+        InitializeComponent();
+        Rows.ContainerContentChanging += OnContainerContentChanging;
+    }
 
     /// Esc in the list with a search going: the window clears the search field.
     public event EventHandler? ClearSearchRequested;
@@ -87,9 +91,21 @@ public sealed partial class ListPane : UserControl
         Heading.Text = model.Searching ? "Search" : model.Section.Title;
         Summary.Text = SummaryText(listing);
         UpdateEmptyDone();
+        bool hadFocus = FocusIsInList();
         Sync(ListRows.Build(listing, model.Section, model.Searching, model.EffectiveGrouping, model.GroupingActive, model.Sort, model.Now, model.IsFolded));
         ShowEmptyState();
         ApplySelection(scroll: false);
+        // A change that removes the row the keyboard was on would send it to the first thing that takes it, the search box, where Ctrl+Z undoes
+        // typing instead of the change. It stays in the list.
+        if (hadFocus && !FocusIsInList() && entries.Count > 0) Rows.Focus(FocusState.Programmatic);
+    }
+
+    bool FocusIsInList()
+    {
+        if (XamlRoot is null) return false;
+        for (var node = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject; node is not null; node = VisualTreeHelper.GetParent(node))
+            if (ReferenceEquals(node, Rows)) return true;
+        return false;
     }
 
     /// Brings the list control's items to `next` with the fewest changes, so a change somewhere in the list keeps the scroll position
@@ -196,7 +212,7 @@ public sealed partial class ListPane : UserControl
 
     // MARK: Rows
 
-    void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    static void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         if (args.InRecycleQueue) return;
         AutomationProperties.SetName(args.ItemContainer, args.Item.ToString());

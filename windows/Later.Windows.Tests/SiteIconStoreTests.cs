@@ -99,7 +99,7 @@ public sealed class SiteIconStoreTests : IDisposable
         File.WriteAllBytes(Path.Combine(folder, "a.example.com.png"), Png);
         var store = Store(folder);
         store.Update([Page("a.example.com")]);
-        Assert.Equal(["a.example.com.png"], Directory.GetFiles(folder).Select(Path.GetFileName).ToArray());
+        Assert.Equal(["a.example.com.png"], Directory.GetFiles(folder).Select(f => new FileInfo(f).Name).ToArray());
         File.WriteAllBytes(Path.Combine(folder, "later.example.com.png"), Png);
         store.Update([Page("a.example.com")]);
         Assert.True(File.Exists(Path.Combine(folder, "later.example.com.png")));   // once per launch: not again

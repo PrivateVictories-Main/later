@@ -118,7 +118,7 @@
     <ListView x:Name="Rows" Grid.Row="2" SelectionMode="Extended" IsItemClickEnabled="False" Padding="12,0,12,12"
               AutomationProperties.Name="Saved pages" ItemTemplateSelector="{StaticResource Templates}" ItemContainerStyleSelector="{StaticResource Containers}"
               SelectionChanged="OnSelectionChanged" DoubleTapped="OnDoubleTapped" ContextRequested="OnContextRequested"
-              PreviewKeyDown="OnPreviewKeyDown" CharacterReceived="OnCharacterReceived" ContainerContentChanging="OnContainerContentChanging" />
+              PreviewKeyDown="OnPreviewKeyDown" CharacterReceived="OnCharacterReceived" />
 
     <!-- What an empty list says, by where the user is. -->
     <StackPanel x:Name="Empty" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="360" Visibility="Collapsed" Margin="24,0,24,48">

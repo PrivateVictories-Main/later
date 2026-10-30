@@ -18,7 +18,7 @@ public sealed class RowsTests
         LibraryListing.Build(library.Data, open ? SampleLibrary.OpenCopies(library) : new Dictionary<string, int>(), library.PageKey, section, search, Now, grouping, sort, false,
                              new HashSet<string>(), Utc, EnUs);
 
-    List<object> Flat(Listing listing, LibrarySection? section = null, bool searching = false, LibraryGrouping grouping = LibraryGrouping.Date, bool groupingActive = true,
+    static List<object> Flat(Listing listing, LibrarySection? section = null, bool searching = false, LibraryGrouping grouping = LibraryGrouping.Date, bool groupingActive = true,
                       LibrarySort sort = LibrarySort.LastSeen, Func<string, bool>? folded = null) =>
         ListRows.Build(listing, section ?? LibrarySection.All, searching, grouping, groupingActive, sort, Now, folded ?? (_ => false), Utc, EnUs);
 
@@ -80,11 +80,11 @@ public sealed class RowsTests
     {
         bool KindShown(List<object> rows) => rows.OfType<RowModel>().All(r => r.ShowsKind);
         Assert.True(KindShown(Flat(Listing(LibrarySection.All))));
-        Assert.False(Flat(Listing(LibrarySection.OfKind(Kind.School)), LibrarySection.OfKind(Kind.School)).OfType<RowModel>().Any(r => r.ShowsKind));   // a kind's own section
+        Assert.DoesNotContain(Flat(Listing(LibrarySection.OfKind(Kind.School)), LibrarySection.OfKind(Kind.School)).OfType<RowModel>(), r => r.ShowsKind);   // a kind's own section
         Assert.True(KindShown(Flat(Listing(LibrarySection.OfKind(Kind.School), "a"), LibrarySection.OfKind(Kind.School), searching: true)));   // a search mixes kinds
-        Assert.False(Flat(Listing(LibrarySection.All), grouping: LibraryGrouping.Kind).OfType<RowModel>().Any(r => r.ShowsKind));   // the kind heading says it
+        Assert.DoesNotContain(Flat(Listing(LibrarySection.All), grouping: LibraryGrouping.Kind).OfType<RowModel>(), r => r.ShowsKind);   // the kind heading says it
         var bySite = Flat(Listing(LibrarySection.All, grouping: LibraryGrouping.Site), grouping: LibraryGrouping.Site);
-        Assert.False(bySite.OfType<RowModel>().Any(r => r.ShowsHost));
+        Assert.DoesNotContain(bySite.OfType<RowModel>(), r => r.ShowsHost);
         Assert.All(bySite.OfType<GroupHeaderRow>(), h => { Assert.Equal(HeaderStyle.Site, h.Style); Assert.True(h.IsSite); });
         Assert.True(Flat(Listing(LibrarySection.All)).OfType<RowModel>().All(r => r.ShowsHost));
     }
