@@ -12,6 +12,7 @@ public sealed class EngineThread : IDisposable
     readonly ManualResetEventSlim ready = new();
     Thread? thread;
     volatile uint threadId;
+    int quitRequested;
 
     public int ThreadId => (int)threadId;
     public bool IsEngineThread => thread is not null && Environment.CurrentManagedThreadId == thread.ManagedThreadId;
@@ -32,7 +33,9 @@ public sealed class EngineThread : IDisposable
     {
         _ = NativeApi.PeekMessage(out _, 0, 0, 0, 0);   // creates this thread's message queue
         threadId = NativeApi.GetCurrentThreadId();
+        Interlocked.MemoryBarrier();   // pairs with Quit: either it sees the thread id and posts, or this sees its request
         ready.Set();
+        if (Volatile.Read(ref quitRequested) != 0) { onExit(); return; }   // asked to quit before the thread existed: nothing starts
         init();
         Drain();   // work posted before the queue existed
         while (true)
@@ -69,8 +72,10 @@ public sealed class EngineThread : IDisposable
         if (threadId != 0) _ = NativeApi.PostThreadMessage(threadId, NativeApi.WmApp, 0, 0);
     }
 
+    /// Ends the loop, also when called before the thread exists or while `init` is still running (the request is kept).
     public void Quit()
     {
+        Interlocked.Exchange(ref quitRequested, 1);
         if (threadId != 0) _ = NativeApi.PostThreadMessage(threadId, NativeApi.WmQuit, 0, 0);
     }
 

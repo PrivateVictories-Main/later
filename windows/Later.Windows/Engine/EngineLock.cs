@@ -27,10 +27,15 @@ public sealed class EngineLock : IDisposable
     public nint HandoffHandle => handoff;
 
     /// True when the mutex is owned now, also when its previous owner ended without releasing it.
-    public bool TryAcquire(TimeSpan timeout)
+    public bool TryAcquire(TimeSpan timeout) => TryAcquire(timeout, out _);
+
+    /// `abandoned` tells a clean hand-over from the previous owner ending without releasing (a crash, or a kill).
+    public bool TryAcquire(TimeSpan timeout, out bool abandoned)
     {
         uint ms = timeout == Timeout.InfiniteTimeSpan ? NativeApi.Infinite : (uint)Math.Clamp(timeout.TotalMilliseconds, 0, NativeApi.Infinite - 1);
-        return NativeApi.WaitForSingleObject(mutex, ms) switch
+        var result = NativeApi.WaitForSingleObject(mutex, ms);
+        abandoned = result == NativeApi.WaitAbandoned0;
+        return result switch
         {
             NativeApi.WaitObject0 or NativeApi.WaitAbandoned0 => true,
             NativeApi.WaitTimeout => false,
@@ -40,13 +45,15 @@ public sealed class EngineLock : IDisposable
 
     /// The app's way in: takes the engine now, or asks the agent for it and waits, up to `timeout`. The request is made again every
     /// 250 ms: an agent that has just been handed the lock clears the request before it starts watching, and one request that
-    /// lands in that moment would be lost. Each step waits on the mutex itself, so the wait ends the moment it is free. Engine thread.
-    public bool AcquireForApp(TimeSpan timeout)
+    /// lands in that moment would be lost. Each step waits on the mutex itself, so the wait ends the moment it is free. `cancelled`
+    /// is asked between steps (every 250 ms at most) and ends the wait early with false. Engine thread.
+    public bool AcquireForApp(TimeSpan timeout, Func<bool>? cancelled = null)
     {
         if (TryAcquire(TimeSpan.Zero)) return true;
         var elapsed = Stopwatch.StartNew();
         while (true)
         {
+            if (cancelled?.Invoke() == true) return false;
             SignalHandoff();
             var left = timeout - elapsed.Elapsed;
             if (left <= TimeSpan.Zero) return false;

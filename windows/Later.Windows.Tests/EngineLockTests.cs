@@ -150,6 +150,39 @@ public class EngineLockTests
     }
 
     [Fact]
+    public void ACleanReleaseIsToldApartFromAMutexLeftByAnEndedThread()
+    {
+        var suffix = Suffix();
+        using var watcher = EngineLock.Open(suffix);   // keeps the mutex alive between owners; this thread takes it in turn
+        OnThread(() => { using var gate = EngineLock.Open(suffix); return gate.TryAcquire(TimeSpan.Zero); });   // ends without releasing
+        Assert.True(watcher.TryAcquire(TimeSpan.FromSeconds(5), out var abandoned));
+        Assert.True(abandoned);
+        watcher.Release();
+        OnThread(() => { using var gate = EngineLock.Open(suffix); gate.TryAcquire(TimeSpan.Zero); gate.Release(); return true; });   // let go properly
+        Assert.True(watcher.TryAcquire(TimeSpan.FromSeconds(5), out abandoned));
+        Assert.False(abandoned);
+        watcher.Release();
+    }
+
+    [Fact]
+    public void AcquireForAppEndsEarlyWhenCancelled()
+    {
+        var suffix = Suffix();
+        using var held = new ManualResetEventSlim(); using var letGo = new ManualResetEventSlim();
+        var holder = new Thread(() => { using var gate = EngineLock.Open(suffix); gate.TryAcquire(TimeSpan.Zero); held.Set(); letGo.Wait(); gate.Release(); });
+        holder.Start();
+        Assert.True(held.Wait(10_000));
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        using var app = EngineLock.Open(suffix);
+        bool cancel = false;
+        var cancelling = new Thread(() => { Thread.Sleep(300); cancel = true; });
+        cancelling.Start();
+        Assert.False(OnThread(() => app.AcquireForApp(TimeSpan.FromSeconds(30), () => Volatile.Read(ref cancel))));
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(3), $"took {timer.ElapsedMilliseconds} ms");
+        cancelling.Join(); letGo.Set(); holder.Join();
+    }
+
+    [Fact]
     public void DifferentSuffixesDoNotShareAnything()
     {
         using var held = new ManualResetEventSlim(); using var letGo = new ManualResetEventSlim();

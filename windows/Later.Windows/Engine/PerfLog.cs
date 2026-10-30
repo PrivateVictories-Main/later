@@ -81,4 +81,25 @@ public sealed class PerfLog : EventSource
     {
         if (IsEnabled()) WriteEvent(8, backToList, regulars, done, items);
     }
+
+    /// The window app's final save did not finish in time, so the lock was let go without it: how long it waited, and how many pages were in the list.
+    [Event(13, Level = EventLevel.Warning)]
+    public void ExitFlushTimedOut(double ms, int items)
+    {
+        if (IsEnabled()) WriteEvent(13, ms, items);
+    }
+
+    /// The window app was shown or hidden (minimized counts as hidden), as far as the list following the engine goes.
+    [Event(14, Level = EventLevel.Informational)]
+    public void Shown(bool shown)
+    {
+        if (IsEnabled()) WriteEvent(14, shown);
+    }
+
+    /// The window app was closed but did not end by itself in time, so it was ended.
+    [Event(15, Level = EventLevel.Warning)]
+    public void ExitForced()
+    {
+        if (IsEnabled()) WriteEvent(15);
+    }
 }

@@ -105,6 +105,30 @@ public sealed class EngineThreadTests
     }
 
     [Fact]
+    public void AQuitSentBeforeTheThreadExistsIsNotLostAndNothingStarts()
+    {
+        using var engine = new EngineThread();
+        engine.Quit();   // Run has not been called: there is no thread to post to yet
+        bool started = false, exited = false;
+        var runner = new Thread(() => engine.Run(init: () => started = true, waitHandles: () => [], signaled: _ => { }, onExit: () => exited = true));
+        runner.Start();
+        Assert.True(runner.Join(10_000), "Run never returned: the quit was lost");
+        Assert.False(started);
+        Assert.True(exited);   // the owner still gets to let go of whatever it holds
+    }
+
+    [Fact]
+    public void AQuitSentWhileInitIsRunningEndsTheLoopRightAfter()
+    {
+        using var engine = new EngineThread();
+        bool exited = false;
+        var runner = new Thread(() => engine.Run(init: () => engine.Quit(), waitHandles: () => [], signaled: _ => { }, onExit: () => exited = true));
+        runner.Start();
+        Assert.True(runner.Join(10_000), "Run never returned");
+        Assert.True(exited);
+    }
+
+    [Fact]
     public void ThousandPostsFromOtherThreadsAllRunInOrder()
     {
         using var run = new Running();
