@@ -1,6 +1,6 @@
 # Renders the sample window in each scene of the list below and saves one PNG per scene (and, on x64, a second one from a plain
 # screen copy, named <scene>-screen.png, which shows the Mica backdrop). Debug builds only: the flags live in Sample.cs.
-# A scene whose window a later task builds makes the app exit with 3; it is skipped, not failed.
+# A scene whose window a later task builds (settings, onboarding) makes the app exit with 3; it is skipped, not failed.
 param(
     [Parameter(Mandatory)][string]$Exe,
     [Parameter(Mandatory)][string]$Out,
@@ -26,7 +26,14 @@ $scenes = [ordered]@{
     'search-results-light'  = @('--sample', '--sample-search', 'apple')
     'narrow-light'          = @('--sample', '--shot-size', '900x600')
     'narrow-dark'           = @('--sample', '--sample-dark', '--shot-size', '900x600')
-    'selection-light'       = @('--sample', '--sample-select', '2')
+    'selection-light'       = @('--sample', '--sample-select', '1')
+    'selection-dark'        = @('--sample', '--sample-dark', '--sample-select', '1')
+    'multi-light'           = @('--sample', '--sample-select', '3')
+    'multi-dark'            = @('--sample', '--sample-dark', '--sample-select', '3')
+    'regular-selected-light' = @('--sample', '--sample-section', 'regulars', '--sample-select', '1')
+    'regular-selected-dark' = @('--sample', '--sample-dark', '--sample-section', 'regulars', '--sample-select', '1')
+    'site-selected-dark'    = @('--sample', '--sample-dark', '--sample-group', 'site', '--sample-select', '1')
+    'narrow-selected-light' = @('--sample', '--sample-select', '1', '--shot-size', '900x600')
     'settings-light'        = @('--sample', '--sample-settings')
     'onboarding-light'      = @('--sample-onboarding')
 }

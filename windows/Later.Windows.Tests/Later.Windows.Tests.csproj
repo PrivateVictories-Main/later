@@ -17,5 +17,7 @@
   <ItemGroup>
     <Compile Include="..\Later.App\ViewModels\*.cs" LinkBase="App\ViewModels" />
     <Compile Include="..\Later.App\AppEngine.cs" LinkBase="App" />
+    <Compile Include="..\Later.App\Icons\SiteIconStore.cs" LinkBase="App\Icons" />
+    <Compile Include="..\Later.App\Actions\Opener.cs" LinkBase="App\Actions" />
   </ItemGroup>
 </Project>

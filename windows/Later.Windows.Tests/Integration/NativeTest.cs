@@ -26,6 +26,23 @@ internal static unsafe partial class NativeTest
     internal const int SwMinimize = 6, SwRestore = 9;
     internal const uint WmClose = 0x0010, WmQuit = 0x0012;
 
+    internal const byte VkControl = 0x11;
+
+    /// Presses a key (a virtual-key code; a letter's is its capital's character) and lets go, with Ctrl held when asked.
+    internal static void Press(byte key, bool control = false)
+    {
+        if (control) keybd_event(VkControl, 0, 0, 0);
+        keybd_event(key, 0, 0, 0);
+        keybd_event(key, 0, 2 /*KEYEVENTF_KEYUP*/, 0);
+        if (control) keybd_event(VkControl, 0, 2, 0);
+    }
+
+    /// Types lowercase letters and digits.
+    internal static void Type(string text)
+    {
+        foreach (var c in text) { Press((byte)char.ToUpperInvariant(c)); Thread.Sleep(30); }
+    }
+
     /// Runs the calling thread's message loop until WM_QUIT.
     internal static void Pump()
     {
@@ -102,6 +119,90 @@ internal sealed unsafe class UiaTest : IDisposable
         }
         finally { if (found is not null) _ = found->Release(); _ = all->Release(); _ = root->Release(); }
         return names;
+    }
+
+    public const int ButtonType = 50000, ListItemType = 50007, MenuItemType = 50011;
+
+    /// Names of the elements of a control type, in tree order (the list's rows come in the list's order).
+    public List<string> NamesOf(nint hwnd, int controlType)
+    {
+        var result = new List<string>();
+        var found = Find(hwnd, controlType, controlType);
+        try { foreach (var p in found) if (UiaSession.Current((IUIAutomationElement*)p, UiaIds.Name) is string { Length: > 0 } name) result.Add(name); }
+        finally { foreach (var p in found) _ = ((IUIAutomationElement*)p)->Release(); }
+        return result;
+    }
+
+    /// The name of the element with this automation id, or null when there is none.
+    public string? NameOfId(nint hwnd, string automationId)
+    {
+        var root = Root(hwnd);
+        var id = session.StringIs(UiaIds.AutomationId, automationId);
+        IUIAutomationElementArray* found = null;
+        try
+        {
+            found = root->FindAll((TreeScope)UiaIds.ScopeDescendants, id);
+            if (found->Length == 0) return null;
+            var element = found->GetElement(0);
+            try { return UiaSession.Current(element, UiaIds.Name) as string; }
+            finally { _ = element->Release(); }
+        }
+        finally { if (found is not null) _ = found->Release(); _ = id->Release(); _ = root->Release(); }
+    }
+
+    /// InvokePattern.Invoke on the first element of this control type and name. False when there is none (yet).
+    public bool Invoke(nint hwnd, string name, int controlType = ButtonType) => Act(hwnd, name, controlType, 10000 /*Invoke*/, new Guid("fb377fbe-8ea6-46d5-9c73-6499642d3059"), 3);
+
+    /// A menu item takes its click as Invoke, or, for the radio kind, as Select.
+    public bool Choose(nint hwnd, string name, int controlType = MenuItemType) =>
+        Act(hwnd, name, controlType, 10000 /*Invoke*/, new Guid("fb377fbe-8ea6-46d5-9c73-6499642d3059"), 3)
+        || Act(hwnd, name, controlType, 10010 /*SelectionItem*/, new Guid("a8efa66a-0fda-421a-9194-38021f3578ea"), 3);
+
+    /// SelectionItemPattern.Select (or AddToSelection) on the first list row for which `which` holds.
+    public bool SelectRow(nint hwnd, Func<string, bool> which, bool add = false)
+    {
+        var found = Find(hwnd, ListItemType, ListItemType);
+        try
+        {
+            foreach (var p in found)
+            {
+                var element = (IUIAutomationElement*)p;
+                if (UiaSession.Current(element, UiaIds.Name) is not string name || !which(name)) continue;
+                return Call(element, 10010 /*SelectionItem*/, new Guid("a8efa66a-0fda-421a-9194-38021f3578ea"), add ? 4 : 3);
+            }
+            return false;
+        }
+        finally { foreach (var p in found) _ = ((IUIAutomationElement*)p)->Release(); }
+    }
+
+    bool Act(nint hwnd, string name, int controlType, int pattern, Guid iid, int slot)
+    {
+        var root = Root(hwnd);
+        var byName = session.StringIs(UiaIds.Name, name);
+        var byType = session.ControlTypeIs(controlType);
+        var both = session.Automation->CreateAndCondition(byName, byType);
+        IUIAutomationElementArray* found = null;
+        try
+        {
+            found = root->FindAll((TreeScope)UiaIds.ScopeDescendants, both);
+            if (found->Length == 0) return false;
+            var element = found->GetElement(0);
+            try { return Call(element, pattern, iid, slot); }
+            finally { _ = element->Release(); }
+        }
+        finally { if (found is not null) _ = found->Release(); _ = both->Release(); _ = byType->Release(); _ = byName->Release(); _ = root->Release(); }
+    }
+
+    /// Calls a pattern's method taking no arguments (vtable slot 3 and up).
+    static bool Call(IUIAutomationElement* element, int pattern, Guid iid, int slot)
+    {
+        IUnknown* unknown = element->GetCurrentPattern((UIA_PATTERN_ID)pattern);
+        if (unknown is null) return false;   // the element does not support the pattern
+        Marshal.ThrowExceptionForHR(Marshal.QueryInterface((nint)unknown, in iid, out var pointer));
+        int hr = ((delegate* unmanaged[Stdcall]<nint, int>)(*(void***)pointer)[slot])(pointer);
+        _ = Marshal.Release(pointer); _ = unknown->Release();
+        Marshal.ThrowExceptionForHR(hr);
+        return true;
     }
 
     /// A depth-limited look at the window's UI tree, skipping page content, one line per node.

@@ -87,6 +87,9 @@ public sealed class Engine
     public VisitDaysCache DaysCache { get; init; } = new();
     public IReadOnlyDictionary<Browser, BrowserStatus> Status => new Dictionary<Browser, BrowserStatus>(status);
     public bool Paused => settings.Paused;
+
+    /// The browser that was last in front: where the window's Open goes first.
+    public Browser? LastBrowser { get; private set; }
     public bool SavesFeedHomes => settings.SavesFeedHomes;
     public Settings Settings => settings;
     /// The load notice, or, over it, the save-failed notice (which goes once saving works again).
@@ -338,6 +341,7 @@ public sealed class Engine
     /// Switching into or out of a browser is a moment to look: the one being left and the one being entered are read now.
     public void FrontAppChanged(Browser? browser)
     {
+        if (browser is { } front && front != LastBrowser) { LastBrowser = front; StateChanged?.Invoke(); }
         if (settings.Paused) return;
         var left = judge.FrontBrowser;
         judge.SetFrontBrowser(browser, clock());
@@ -424,6 +428,7 @@ public sealed class Engine
             {
                 if (stopped) return;
                 library.SetHistoryDays(days);
+                StateChanged?.Invoke();   // the inspector's "why" line is worked out from the days
                 PerfLog.Log.VisitDays(days.Count, library.RegularSiteCount(today), timer.Elapsed.TotalMilliseconds);
                 var (migrated, of) = library.MigrateRegulars(today);
                 if (of > 0) PerfLog.Log.RegularsMigrated(migrated, of);

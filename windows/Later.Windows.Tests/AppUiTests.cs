@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Later.App.ViewModels;
 using Later.Core;
 using Later.Windows.Engine;
 using Later.Windows.Native;
@@ -44,6 +45,20 @@ public class AppUiTests
         }
 
         public List<string> Names() => uia.Names(Window);
+
+        /// The names of the list's items (rows and headings), in the list's order.
+        public List<string> ListItems() => uia.NamesOf(Window, UiaTest.ListItemType);
+
+        public string? NameOfId(string automationId) => uia.NameOfId(Window, automationId);
+
+        public bool Invoke(string name, int controlType = UiaTest.ButtonType) => uia.Invoke(Window, name, controlType);
+
+        public bool Choose(string name) => uia.Choose(Window, name);
+
+        public bool SelectRow(Func<string, bool> which, bool add = false) => uia.SelectRow(Window, which, add);
+
+        /// Keys go to the foreground window.
+        public void Focus() => _ = NativeTest.SetForegroundWindow(Window);
 
         public string? Title => uia.RootName(Window);
 
@@ -96,6 +111,220 @@ public class AppUiTests
         Assert.Contains("Watching Helium and Chrome", names);
         Assert.Equal("Later", app.Title);
         Assert.Empty(Directory.GetFileSystemEntries(dir.Path));   // a sample run touches no data at all
+    }
+
+    // MARK: The list, the inspector and the actions (a sample run: its own list, edited in the window, nothing on disk)
+
+    static readonly DateTime SampleClock = SampleLibrary.NoonUtc(new DateTime(2026, 10, 15));
+
+    /// A sample window as tall as the whole list, so every row is laid out and so is in the UI Automation tree (a list shows only the
+    /// rows it draws).
+    static RunningApp SampleApp(TempDir dir, params string[] more) =>
+        RunningApp.Start(dir.Path, ["--sample", "--sample-now", "2026-10-15T12:00:00", "--shot-size", "1100x2400", .. more]);
+
+    /// The headings and rows a section, search and grouping show, as the list names them: worked out with the same clock, zone and culture.
+    static List<object> Expected(LibrarySection section, string search = "", LibraryGrouping grouping = LibraryGrouping.Date)
+    {
+        var library = SampleLibrary.Build(SampleClock);
+        var listing = LibraryListing.Build(library.Data, SampleLibrary.OpenCopies(library), library.PageKey, section, search, SampleClock, grouping, LibrarySort.LastSeen, false,
+                                           new HashSet<string>(), TimeZoneInfo.Local, System.Globalization.CultureInfo.CurrentCulture);
+        bool searching = search.Trim().Length > 0;
+        return ListRows.Build(listing, section, searching, LibraryListing.EffectiveGrouping(section, grouping), !searching, LibrarySort.LastSeen, SampleClock, _ => false);
+    }
+
+    static Dictionary<LibrarySection, int> SampleCounts() => LibraryQuery.Counts(SampleLibrary.Data(SampleClock), SampleClock);
+
+    /// Waits for the list to name exactly these entries, in this order.
+    static void WaitForList(RunningApp app, List<object> expected, string what)
+    {
+        var names = expected.Select(e => e.ToString()!).ToList();
+        var wanted = names.ToHashSet();
+        var shown = new List<string>();
+        Wait(() => { shown = app.ListItems().Where(wanted.Contains).ToList(); return shown.Count == names.Count; }, Slow, what);
+        Assert.Equal(names, shown);
+    }
+
+    static void WaitForCounts(RunningApp app, params (LibrarySection Section, int Count)[] counts) =>
+        Wait(() => { var names = app.Names(); return counts.All(c => names.Contains($"{c.Section.Title}, {c.Count}")); }, Slow, "the sidebar to say " + string.Join(", ", counts.Select(c => $"{c.Section.Title} {c.Count}")));
+
+    /// Tries until the element is there and takes the action: the window may still be laying out.
+    static void Do(Func<bool> action, string what) =>
+        Wait(() => { try { return action(); } catch (System.Runtime.InteropServices.COMException) { return false; } }, Slow, what);
+
+    static void Undo(RunningApp app)
+    {
+        app.Focus();
+        NativeTest.Press((byte)'Z', control: true);
+    }
+
+    [Fact]
+    public void TheListShowsEveryPageUnderItsHeadingsInOrder()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        var expected = Expected(LibrarySection.All);
+        WaitForList(app, expected, "every heading and row");
+        Assert.Equal(SampleCounts()[LibrarySection.All], expected.OfType<RowModel>().Count());   // as many rows as the sidebar says pages
+        Assert.Equal(["Today", "Yesterday", "Previous 7 Days", "Previous 30 Days"], expected.OfType<GroupHeaderRow>().Select(h => h.Title).ToArray());
+    }
+
+    [Fact]
+    public void SelectingARowShowsItsTitleItsWhyLineAndTheActionsByName()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        const string title = "Patagonia Nano Puff Jacket - Men's | REI Co-op";
+        app.WaitForName(n => n.StartsWith(title, StringComparison.Ordinal), "the first row");
+        Do(() => app.SelectRow(n => n.StartsWith(title, StringComparison.Ordinal)), "the row to be selectable");
+        Wait(() => app.NameOfId("InspectorTitle") == title, Slow, "the inspector to show the title");
+        var names = app.WaitForName(n => n == "Copy Link", "the inspector's actions");
+        Assert.Contains("New site", names);   // why the page is kept
+        foreach (var action in new[] { "Copy Link", "Mark Done", "Move to", "Not an Idea", "Delete" }) Assert.Contains(action, names);
+        Assert.Contains(names, n => n == "Open" || n.StartsWith("Open in ", StringComparison.Ordinal));
+        Assert.DoesNotContain("Keep Pages Like This", names);   // a page that is a thing has no regular choice
+    }
+
+    [Fact]
+    public void MarkDoneMovesAPageFromAllToDoneAndCtrlZBringsItBack()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        var counts = SampleCounts();
+        int all = counts[LibrarySection.All], done = counts[LibrarySection.Done];
+        WaitForCounts(app, (LibrarySection.All, all), (LibrarySection.Done, done));
+        var first = Expected(LibrarySection.All).OfType<RowModel>().First();
+        Do(() => app.SelectRow(n => n == first.Name), "the first row");
+        Do(() => app.Invoke("Mark Done"), "the Mark Done button");
+        WaitForCounts(app, (LibrarySection.All, all - 1), (LibrarySection.Done, done + 1));
+        Undo(app);
+        WaitForCounts(app, (LibrarySection.All, all), (LibrarySection.Done, done));
+    }
+
+    [Fact]
+    public void DeletingAPageSelectsTheNextOneAndUndoPutsItBackWhereItWas()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        var rows = Expected(LibrarySection.All).OfType<RowModel>().ToList();
+        WaitForList(app, Expected(LibrarySection.All), "every heading and row");
+        var target = rows[1];
+        Do(() => app.SelectRow(n => n == target.Name), "the second row");
+        Do(() => app.Invoke("Delete"), "the Delete button");
+        Wait(() => !app.ListItems().Contains(target.Name), Slow, "the row to go");
+        Assert.Equal(rows.Where(r => r != target).Select(r => r.Name).ToList(), app.ListItems().Where(n => n.Contains(", saved ", StringComparison.Ordinal)).ToList());
+        Wait(() => app.NameOfId("InspectorTitle") == rows[2].Title, Slow, "the selection to move on to the next page");
+        Undo(app);
+        Wait(() => app.ListItems().Contains(target.Name), Slow, "Undo to bring the row back");
+        Assert.Equal(rows.Select(r => r.Name).ToList(), app.ListItems().Where(n => n.Contains(", saved ", StringComparison.Ordinal)).ToList());   // at its old position
+    }
+
+    [Fact]
+    public void TypingIntoTheSearchBoxFiltersTheRowsAndTheHeadingsBecomeSavedAndDone()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        app.WaitForName(n => n == "Today, 4 pages", "the list");
+        app.Focus();
+        NativeTest.Press((byte)'F', control: true);   // Ctrl+F: the search box
+        Thread.Sleep(300);
+        NativeTest.Type("youtube");
+        WaitForList(app, Expected(LibrarySection.All, "youtube"), "the search results");
+        var names = app.Names();
+        Assert.Contains("Saved, 1 page", names);
+        Assert.Contains("Done, 1 page", names);
+        Assert.DoesNotContain("Today, 4 pages", names);
+    }
+
+    [Fact]
+    public void TypingALetterInTheListStartsASearchWithIt()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        app.WaitForName(n => n == "Today, 4 pages", "the list");
+        app.Focus();
+        NativeTest.Type("youtube");   // the keyboard starts in the list: the first letter starts the search and the rest follow it
+        WaitForList(app, Expected(LibrarySection.All, "youtube"), "the search results");
+    }
+
+    [Fact]
+    public void GroupBySiteGivesEachSiteItsOwnHeading()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        app.WaitForName(n => n == "Today, 4 pages", "the list");
+        Do(() => app.Invoke("Group By"), "the Group By button");
+        Do(() => app.Choose("Site"), "the Site choice");
+        var expected = Expected(LibrarySection.All, grouping: LibraryGrouping.Site);
+        WaitForList(app, expected, "a heading for every site");
+        Assert.Equal(expected.OfType<RowModel>().Select(r => r.Site).Distinct().Count(), expected.OfType<GroupHeaderRow>().Count());   // one heading per host
+    }
+
+    [Fact]
+    public void ChangingSeveralPagesAtOnceIsOneUndo()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        var counts = SampleCounts();
+        int all = counts[LibrarySection.All], done = counts[LibrarySection.Done];
+        var rows = Expected(LibrarySection.All).OfType<RowModel>().Take(3).ToList();
+        WaitForCounts(app, (LibrarySection.All, all));
+        Do(() => app.SelectRow(n => n == rows[0].Name), "the first row");
+        Do(() => app.SelectRow(n => n == rows[1].Name, add: true), "the second row");
+        Do(() => app.SelectRow(n => n == rows[2].Name, add: true), "the third row");
+        Wait(() => app.NameOfId("InspectorTitle") == "3 Pages", Slow, "the summary of three pages");
+        Do(() => app.Invoke("Mark Done"), "the Mark Done button");
+        WaitForCounts(app, (LibrarySection.All, all - 3), (LibrarySection.Done, done + 3));
+        Undo(app);
+        WaitForCounts(app, (LibrarySection.All, all), (LibrarySection.Done, done));   // one Undo, not three
+    }
+
+    [Fact]
+    public void ARegularPageOffersKeepPagesLikeThisWithItsWhyLineAndUndoBringsItBack()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir, "--sample-section", "regulars", "--sample-select", "1");
+        var counts = SampleCounts();
+        int all = counts[LibrarySection.All], regulars = counts[LibrarySection.Regulars];
+        var names = app.WaitForName(n => n == "Keep Pages Like This", "the regular's choice");
+        Assert.Contains(names, n => n.StartsWith("Regular · visited ", StringComparison.Ordinal));   // the Mac 1.4 why line
+        Assert.DoesNotContain("Mark Done", names);   // a regular still in the list has its own choice instead
+        Do(() => app.Invoke("Keep Pages Like This"), "the Keep Pages Like This button");
+        WaitForCounts(app, (LibrarySection.All, all + 1), (LibrarySection.Regulars, regulars - 1));
+        Undo(app);
+        WaitForCounts(app, (LibrarySection.All, all), (LibrarySection.Regulars, regulars));
+    }
+
+    [Fact]
+    public void AKeptPlaceOffersThisIsARegularAndUndoTakesItBack()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir, "--sample-section", "tools");
+        var counts = SampleCounts();
+        int all = counts[LibrarySection.All], regulars = counts[LibrarySection.Regulars], tools = counts[LibrarySection.OfKind(Kind.Tools)];
+        app.WaitForName(n => n.StartsWith("Tiny Tools", StringComparison.Ordinal), "the place's row");
+        Do(() => app.SelectRow(n => n.StartsWith("Tiny Tools", StringComparison.Ordinal)), "the place's row");
+        Do(() => app.Invoke("This Is a Regular"), "the This Is a Regular button");
+        WaitForCounts(app, (LibrarySection.All, all - 1), (LibrarySection.Regulars, regulars + 1), (LibrarySection.OfKind(Kind.Tools), tools - 1));
+        Undo(app);
+        WaitForCounts(app, (LibrarySection.All, all), (LibrarySection.Regulars, regulars), (LibrarySection.OfKind(Kind.Tools), tools));
+    }
+
+    [Fact]
+    public void EmptyDoneAsksFirstDeletesWhatDoneShowsAsOneUndo()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir, "--sample-section", "done");
+        int done = SampleCounts()[LibrarySection.Done];
+        WaitForCounts(app, (LibrarySection.Done, done));
+        Do(() => app.Invoke("Empty Done…"), "the Empty Done button");
+        Do(() => app.Invoke("Cancel"), "the question's Cancel");   // asked first: Cancel changes nothing
+        Thread.Sleep(500);
+        Assert.Contains($"Done, {done}", app.Names());
+        Do(() => app.Invoke("Empty Done…"), "the Empty Done button");
+        Do(() => app.Invoke("Empty Done"), "the question's Empty Done");
+        WaitForCounts(app, (LibrarySection.Done, 0));
+        Undo(app);
+        WaitForCounts(app, (LibrarySection.Done, done));
     }
 
     [Fact]

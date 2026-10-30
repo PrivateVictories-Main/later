@@ -289,6 +289,53 @@ public sealed class AppEngineTests : IDisposable
         return (app, Add, () => { lock (uiGate) return model.Counts.GetValueOrDefault(LibrarySection.All); });
     }
 
+    /// Three pages saved, the window shown and the start settled.
+    (AppEngine App, Library Library) RunningWithPages(bool canSave)
+    {
+        SetUp();
+        var library = new Library();
+        for (int i = 0; i < 3; i++) library.Save($"https://a.example.com/articles/{i}", $"Page {i}", Reading, Browser.Helium, DateTime.UtcNow.AddMinutes(-i));
+        var app = NewApp((_, h, _) => Quiet(h, library, canSave ? _ => { } : null));
+        lock (uiGate) model.Wake(DateTime.UtcNow);
+        app.SetVisible(true);
+        app.Start();
+        Assert.True(WaitFor(() => Snapshots >= 1));
+        Thread.Sleep(500);
+        return (app, library);
+    }
+
+    [Fact]
+    public void AChangeIsMadeOnTheEngineThreadAsOneUndoSentAtOnceAndUndoPutsItBack()
+    {
+        var (app, _) = RunningWithPages(canSave: true);
+        Guid first; int token;
+        lock (uiGate) { first = model.Current.RowIds[0]; model.SetSelection([first]); token = model.BeginChange([first]); }
+        app.Apply(token, (library, undo) => ItemChanges.Delete(library, undo, [first], DateTime.UtcNow));
+        Assert.True(WaitFor(() => { lock (uiGate) return model.UndoName == "Delete"; }), "the change never came back");
+        lock (uiGate)
+        {
+            Assert.Equal(2, model.Current.Items.Count);
+            Assert.Equal(model.Current.RowIds[0], model.Selected.Single());   // the selection moved on to the next page
+        }
+        app.Undo();
+        Assert.True(WaitFor(() => { lock (uiGate) return model.Current.Items.Count == 3; }), "Undo never came back");
+    }
+
+    [Fact]
+    public void WithoutAnEngineThatCanSaveNothingIsChanged()
+    {
+        var (app, library) = RunningWithPages(canSave: false);
+        Guid first;
+        lock (uiGate) first = model.Current.RowIds[0];
+        int token;
+        lock (uiGate) token = model.BeginChange([first]);
+        app.Apply(token, (lib, undo) => ItemChanges.Delete(lib, undo, [first], DateTime.UtcNow));
+        using var barrier = new ManualResetEventSlim();
+        app.Post(barrier.Set);   // after the change, which was posted first
+        Assert.True(barrier.Wait(10_000));
+        Assert.Equal(3, library.Data.Items.Count);
+    }
+
     [Fact]
     public void ABurstOfChangesIsOneSnapshot()
     {

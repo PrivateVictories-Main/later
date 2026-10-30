@@ -1,0 +1,10 @@
+<UserControl x:Class="Later.App.Controls.SiteTile"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             AutomationProperties.AccessibilityView="Raw">
+  <!-- The site's icon on a soft tile of the site's own color, or its first letter when there is none. Decorative: the row names the site. -->
+  <Grid x:Name="Tile" BorderThickness="1" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}">
+    <Image x:Name="Icon" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+    <TextBlock x:Name="Letter" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" IsTextScaleFactorEnabled="False" />
+  </Grid>
+</UserControl>

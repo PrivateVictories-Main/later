@@ -1,3 +1,4 @@
+using Later.App.Actions;
 using Later.App.ViewModels;
 using Later.Core;
 using Microsoft.UI;
@@ -21,15 +22,17 @@ public sealed partial class ShellWindow : Window
 
     readonly LibraryViewModel model;
     readonly AppEngine? engine;
+    readonly ItemActions actions;
     readonly Dictionary<LibraryGrouping, RadioMenuFlyoutItem> groupItems = [];
     readonly Dictionary<LibrarySort, RadioMenuFlyoutItem> sortItems = [];
     readonly RadioMenuFlyoutItem newestItem = new() { GroupName = "Direction" }, oldestItem = new() { GroupName = "Direction" };
 
-    internal ShellWindow(LibraryViewModel model, AppEngine? engine)
+    internal ShellWindow(LibraryViewModel model, AppEngine? engine, IListEditor? editor)
     {
         this.model = model;
         this.engine = engine;
         InitializeComponent();
+        actions = new ItemActions(model, editor, () => Root.XamlRoot);
 
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
@@ -40,8 +43,11 @@ public sealed partial class ShellWindow : Window
         bar.ButtonInactiveBackgroundColor = Colors.Transparent;
 
         Sidebar.Bind(model);
-        List.Bind(model);
-        Inspector.Bind(model);
+        List.Bind(model, actions);
+        Inspector.Bind(model, actions);
+        List.ClearSearchRequested += (_, _) => SearchBox.Text = "";
+        List.TypeToSearch += (_, text) => StartSearch(model.Search + text);
+        Inspector.SearchFor += (_, host) => SearchBox.Text = host;
         Sidebar.ResumeRequested += (_, _) => engine?.Resume();
         Sidebar.OpenSettingsRequested += (_, _) => { };   // Task 9 opens Settings
         SearchBox.Text = model.Search;
@@ -168,21 +174,46 @@ public sealed partial class ShellWindow : Window
         oldestItem.IsChecked = model.SortReversed;
     }
 
-    /// Ctrl+F finds, Ctrl+1 to Ctrl+9 go to the sidebar's first nine sections.
+    /// Ctrl+F finds, Ctrl+1 to Ctrl+9 go to the sidebar's first nine sections, Ctrl+A selects every page, Ctrl+Z and Ctrl+Y undo and redo.
+    /// On the window so they work wherever the keyboard is; in a text field the field keeps its own Ctrl+Z, Ctrl+Y and Ctrl+A.
     void AddAccelerators()
     {
-        void Add(VirtualKey key, Action action)
+        void Add(VirtualKey key, Func<bool> action)
         {
             var accelerator = new KeyboardAccelerator { Key = key, Modifiers = VirtualKeyModifiers.Control };
-            accelerator.Invoked += (_, e) => { action(); e.Handled = true; };
+            accelerator.Invoked += (_, e) => e.Handled = action();
             Root.KeyboardAccelerators.Add(accelerator);
         }
-        Add(VirtualKey.F, () => SearchBox.Focus(FocusState.Keyboard));
+        bool InText() => Root.XamlRoot is { } xaml && FocusManager.GetFocusedElement(xaml) is TextBox;
+        Add(VirtualKey.F, () => { SearchBox.Focus(FocusState.Keyboard); return true; });
+        Add(VirtualKey.Z, () => { if (InText()) return false; actions.Undo(); return true; });
+        Add(VirtualKey.Y, () => { if (InText()) return false; actions.Redo(); return true; });
+        Add(VirtualKey.A, () => { if (InText()) return false; model.SelectAll(); return true; });
         for (int i = 0; i < 9; i++)
         {
             var section = LibrarySection.Ordered[i];
-            Add(VirtualKey.Number1 + i, () => model.Section = section);
+            Add(VirtualKey.Number1 + i, () => { model.Section = section; return true; });
         }
+    }
+
+    /// A letter typed in the list: the search field takes it and the keyboard, with the caret after it.
+    void StartSearch(string text)
+    {
+        SearchBox.Text = text;
+        SearchBox.Focus(FocusState.Keyboard);
+        // Focusing a text field selects what it holds; the next letter must add to the search, not replace it.
+        if (FindTextBox(SearchBox) is { } box) { box.SelectionStart = box.Text.Length; box.SelectionLength = 0; }
+    }
+
+    static TextBox? FindTextBox(DependencyObject parent)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is TextBox box) return box;
+            if (FindTextBox(child) is { } found) return found;
+        }
+        return null;
     }
 
     // MARK: Size and the title bar

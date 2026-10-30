@@ -1,71 +1,185 @@
 <UserControl x:Class="Later.App.Panes.InspectorPane"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Later.App.ViewModels"
+             xmlns:controls="using:Later.App.Controls">
   <UserControl.Resources>
-    <Style x:Key="KindGlyph" TargetType="FontIcon">
-      <Setter Property="FontSize" Value="16" />
-      <Setter Property="Width" Value="24" />
-    </Style>
-    <Style x:Key="KindName" TargetType="TextBlock">
-      <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-    <Style x:Key="KindCount" TargetType="TextBlock">
-      <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
-    </Style>
+    <DataTemplate x:Key="KindTemplate" x:DataType="vm:KindCount">
+      <Button Tag="{x:Bind Kind}" Click="OnKindClick" Style="{StaticResource SubtleButtonStyle}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+              MinHeight="36" Padding="8,4" AutomationProperties.Name="{x:Bind Name}" ToolTipService.ToolTip="{x:Bind Title}">
+        <Grid ColumnSpacing="12">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <controls:KindChip Kind="{x:Bind Kind}" HorizontalAlignment="Left" />
+          <TextBlock Grid.Column="1" Text="{x:Bind CountText}" Foreground="{ThemeResource SecondaryTextBrush}" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+        </Grid>
+      </Button>
+    </DataTemplate>
+    <DataTemplate x:Key="SiteTemplate" x:DataType="vm:SiteCount">
+      <Button Tag="{x:Bind Host}" Click="OnSiteClick" Style="{StaticResource SubtleButtonStyle}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+              MinHeight="36" Padding="8,4" AutomationProperties.Name="{x:Bind Name}" ToolTipService.ToolTip="{x:Bind Host}">
+        <Grid ColumnSpacing="10">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <controls:SiteTile Host="{x:Bind Host}" TileSize="26" />
+          <TextBlock Grid.Column="1" Text="{x:Bind Host}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+          <TextBlock Grid.Column="2" Text="{x:Bind CountText}" Foreground="{ThemeResource SecondaryTextBrush}" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+        </Grid>
+      </Button>
+    </DataTemplate>
+    <DataTemplate x:Key="FactTemplate" x:DataType="vm:Fact">
+      <Grid ColumnSpacing="12" Padding="14,9" AutomationProperties.Name="{x:Bind Name}">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" MinWidth="72" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+        <TextBlock Text="{x:Bind Label}" Foreground="{ThemeResource SecondaryTextBrush}" AutomationProperties.AccessibilityView="Raw" />
+        <TextBlock Grid.Column="1" Text="{x:Bind Value}" TextWrapping="WrapWholeWords" TextAlignment="Right" AutomationProperties.AccessibilityView="Raw" />
+      </Grid>
+    </DataTemplate>
   </UserControl.Resources>
-  <!-- Nothing selected: an overview of the list. Task 8 adds the details of one page and the summary of several. -->
+
   <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <StackPanel Padding="24,20,24,24" Spacing="20">
-      <StackPanel Spacing="2">
-        <TextBlock Text="Overview" Style="{StaticResource SubtitleTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
-        <TextBlock x:Name="Caption" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" TextWrapping="WrapWholeWords" />
+    <Grid>
+      <!-- Nothing selected: an overview of the list. A kind or a site takes the user to its pages. -->
+      <StackPanel x:Name="OverviewPanel" Padding="24,20,24,24" Spacing="20">
+        <StackPanel Spacing="2">
+          <TextBlock Text="Overview" Style="{StaticResource SubtitleTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+          <TextBlock x:Name="Caption" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" TextWrapping="WrapWholeWords" />
+        </StackPanel>
+        <StackPanel x:Name="ByKind" Spacing="4">
+          <TextBlock Text="By kind" Style="{StaticResource BodyStrongTextBlockStyle}" AutomationProperties.HeadingLevel="Level3" Margin="0,0,0,4" />
+          <ItemsControl x:Name="KindList" ItemTemplate="{StaticResource KindTemplate}" />
+        </StackPanel>
+        <StackPanel x:Name="TopSites" Spacing="4">
+          <TextBlock Text="Top sites" Style="{StaticResource BodyStrongTextBlockStyle}" AutomationProperties.HeadingLevel="Level3" Margin="0,0,0,4" />
+          <ItemsControl x:Name="SiteList" ItemTemplate="{StaticResource SiteTemplate}" />
+        </StackPanel>
       </StackPanel>
-      <StackPanel x:Name="ByKind" Spacing="6">
-        <TextBlock Text="By kind" Style="{StaticResource BodyStrongTextBlockStyle}" AutomationProperties.HeadingLevel="Level3" Margin="0,0,0,4" />
-        <Grid x:Name="ShoppingRow" ColumnSpacing="12" MinHeight="32">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-          <FontIcon Glyph="&#xE719;" Style="{StaticResource KindGlyph}" Foreground="{ThemeResource KindShoppingBrush}" />
-          <TextBlock Grid.Column="1" Text="Shopping" Style="{StaticResource KindName}" />
-          <TextBlock x:Name="ShoppingCount" Grid.Column="2" Style="{StaticResource KindCount}" />
-        </Grid>
-        <Grid x:Name="PostsRow" ColumnSpacing="12" MinHeight="32">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-          <FontIcon Glyph="&#xE8F2;" Style="{StaticResource KindGlyph}" Foreground="{ThemeResource KindPostsBrush}" />
-          <TextBlock Grid.Column="1" Text="Posts" Style="{StaticResource KindName}" />
-          <TextBlock x:Name="PostsCount" Grid.Column="2" Style="{StaticResource KindCount}" />
-        </Grid>
-        <Grid x:Name="SchoolRow" ColumnSpacing="12" MinHeight="32">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-          <FontIcon Glyph="&#xE7BE;" Style="{StaticResource KindGlyph}" Foreground="{ThemeResource KindSchoolBrush}" />
-          <TextBlock Grid.Column="1" Text="School" Style="{StaticResource KindName}" />
-          <TextBlock x:Name="SchoolCount" Grid.Column="2" Style="{StaticResource KindCount}" />
-        </Grid>
-        <Grid x:Name="ReadingRow" ColumnSpacing="12" MinHeight="32">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-          <FontIcon Glyph="&#xE736;" Style="{StaticResource KindGlyph}" Foreground="{ThemeResource KindReadingBrush}" />
-          <TextBlock Grid.Column="1" Text="Reading" Style="{StaticResource KindName}" />
-          <TextBlock x:Name="ReadingCount" Grid.Column="2" Style="{StaticResource KindCount}" />
-        </Grid>
-        <Grid x:Name="VideosRow" ColumnSpacing="12" MinHeight="32">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-          <FontIcon Glyph="&#xE714;" Style="{StaticResource KindGlyph}" Foreground="{ThemeResource KindVideosBrush}" />
-          <TextBlock Grid.Column="1" Text="Videos" Style="{StaticResource KindName}" />
-          <TextBlock x:Name="VideosCount" Grid.Column="2" Style="{StaticResource KindCount}" />
-        </Grid>
-        <Grid x:Name="ToolsRow" ColumnSpacing="12" MinHeight="32">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-          <FontIcon Glyph="&#xE90F;" Style="{StaticResource KindGlyph}" Foreground="{ThemeResource KindToolsBrush}" />
-          <TextBlock Grid.Column="1" Text="Tools" Style="{StaticResource KindName}" />
-          <TextBlock x:Name="ToolsCount" Grid.Column="2" Style="{StaticResource KindCount}" />
-        </Grid>
-        <Grid x:Name="OtherRow" ColumnSpacing="12" MinHeight="32">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-          <FontIcon Glyph="&#xE80A;" Style="{StaticResource KindGlyph}" Foreground="{ThemeResource KindOtherBrush}" />
-          <TextBlock Grid.Column="1" Text="Other" Style="{StaticResource KindName}" />
-          <TextBlock x:Name="OtherCount" Grid.Column="2" Style="{StaticResource KindCount}" />
+
+      <!-- One page: what it is, why it is here, and what can be done with it. -->
+      <StackPanel x:Name="PagePanel" Padding="24,20,24,24" Spacing="16" Visibility="Collapsed">
+        <controls:SiteTile x:Name="PageTile" TileSize="64" HorizontalAlignment="Left" />
+        <StackPanel Spacing="6">
+          <TextBlock x:Name="PageTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" MaxLines="6" TextTrimming="CharacterEllipsis"
+                     IsTextSelectionEnabled="True" AutomationProperties.AutomationId="InspectorTitle" AutomationProperties.HeadingLevel="Level2" />
+          <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <FontIcon x:Name="WhyGlyph" FontSize="14" VerticalAlignment="Top" Margin="0,2,0,0" Foreground="{ThemeResource SecondaryTextBrush}" AutomationProperties.AccessibilityView="Raw" />
+            <TextBlock x:Name="WhyText" Grid.Column="1" Foreground="{ThemeResource SecondaryTextBrush}" TextWrapping="WrapWholeWords" AutomationProperties.AutomationId="InspectorWhy" />
+          </Grid>
+        </StackPanel>
+        <StackPanel Spacing="8">
+          <SplitButton x:Name="OpenButton" HorizontalAlignment="Stretch" Click="OnOpenClick">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <FontIcon Glyph="&#xE8A7;" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock x:Name="OpenText" AutomationProperties.AccessibilityView="Raw" />
+            </StackPanel>
+            <SplitButton.Flyout><MenuFlyout x:Name="OpenMenu" Opening="OnOpenMenuOpening" /></SplitButton.Flyout>
+          </SplitButton>
+          <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Button x:Name="CopyButton" HorizontalAlignment="Stretch" Click="OnCopy" AutomationProperties.Name="Copy Link">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon x:Name="CopyGlyph" Glyph="&#xE8C8;" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock x:Name="CopyText" Text="Copy Link" AutomationProperties.AccessibilityView="Raw" />
+              </StackPanel>
+            </Button>
+            <Button x:Name="DoneButton" Grid.Column="1" HorizontalAlignment="Stretch" Click="OnDone">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon x:Name="DoneGlyph" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock x:Name="DoneText" AutomationProperties.AccessibilityView="Raw" />
+              </StackPanel>
+            </Button>
+          </Grid>
+          <!-- Only for a place page: "Keep Pages Like This" on a regular, "This Is a Regular" on one that is kept. -->
+          <Button x:Name="CorrectionButton" HorizontalAlignment="Stretch" Click="OnCorrection" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <FontIcon x:Name="CorrectionGlyph" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock x:Name="CorrectionText" AutomationProperties.AccessibilityView="Raw" />
+            </StackPanel>
+          </Button>
+          <DropDownButton x:Name="MoveButton" HorizontalAlignment="Stretch" AutomationProperties.Name="Move to">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <FontIcon Glyph="&#xE8DE;" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock Text="Move to" AutomationProperties.AccessibilityView="Raw" />
+            </StackPanel>
+          </DropDownButton>
+        </StackPanel>
+        <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+          <StackPanel>
+            <ItemsControl x:Name="FactList" ItemTemplate="{StaticResource FactTemplate}" />
+            <Grid ColumnSpacing="12" Padding="14,9" AutomationProperties.Name="Link">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" MinWidth="72" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Text="Link" Foreground="{ThemeResource SecondaryTextBrush}" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock x:Name="LinkText" Grid.Column="1" TextTrimming="CharacterEllipsis" MaxLines="1" TextAlignment="Right" IsTextSelectionEnabled="True" />
+            </Grid>
+          </StackPanel>
+        </Border>
+        <Grid ColumnSpacing="8">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <Button x:Name="NotAnIdeaButton" HorizontalAlignment="Left" Click="OnNotAnIdea" AutomationProperties.Name="Not an Idea" ToolTipService.ToolTip="Remove this page and stop keeping pages like it (Ctrl+Z brings it back)">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <FontIcon Glyph="&#xE8F8;" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock Text="Not an Idea" AutomationProperties.AccessibilityView="Raw" />
+            </StackPanel>
+          </Button>
+          <Button x:Name="DeleteButton" Grid.Column="1" Click="OnDelete" AutomationProperties.Name="Delete" ToolTipService.ToolTip="Delete this page (Ctrl+Z brings it back)">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="{ThemeResource StatusWarningBrush}" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock Text="Delete" AutomationProperties.AccessibilityView="Raw" />
+            </StackPanel>
+          </Button>
         </Grid>
       </StackPanel>
-    </StackPanel>
+
+      <!-- Several pages: the same actions for all of them. -->
+      <StackPanel x:Name="PagesPanel" Padding="24,20,24,24" Spacing="16" Visibility="Collapsed">
+        <StackPanel Spacing="2">
+          <TextBlock x:Name="PagesHeading" Style="{StaticResource SubtitleTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" AutomationProperties.AutomationId="InspectorTitle" />
+          <TextBlock x:Name="PagesSites" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" />
+        </StackPanel>
+        <StackPanel Spacing="8">
+          <SplitButton x:Name="PagesOpenButton" HorizontalAlignment="Stretch" Click="OnOpenClick">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <FontIcon Glyph="&#xE8A7;" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock x:Name="PagesOpenText" AutomationProperties.AccessibilityView="Raw" />
+            </StackPanel>
+            <SplitButton.Flyout><MenuFlyout x:Name="PagesOpenMenu" Opening="OnOpenMenuOpening" /></SplitButton.Flyout>
+          </SplitButton>
+          <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Button x:Name="PagesCopyButton" HorizontalAlignment="Stretch" Click="OnCopy" AutomationProperties.Name="Copy Links">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon x:Name="PagesCopyGlyph" Glyph="&#xE8C8;" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock x:Name="PagesCopyText" Text="Copy Links" AutomationProperties.AccessibilityView="Raw" />
+              </StackPanel>
+            </Button>
+            <Button x:Name="PagesDoneButton" Grid.Column="1" HorizontalAlignment="Stretch" Click="OnDone">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon x:Name="PagesDoneGlyph" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock x:Name="PagesDoneText" AutomationProperties.AccessibilityView="Raw" />
+              </StackPanel>
+            </Button>
+          </Grid>
+          <DropDownButton x:Name="PagesMoveButton" HorizontalAlignment="Stretch" AutomationProperties.Name="Move to">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <FontIcon Glyph="&#xE8DE;" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock Text="Move to" AutomationProperties.AccessibilityView="Raw" />
+            </StackPanel>
+          </DropDownButton>
+        </StackPanel>
+        <Grid ColumnSpacing="8">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <Button x:Name="PagesNotIdeasButton" HorizontalAlignment="Left" Click="OnNotAnIdea" AutomationProperties.Name="Not Ideas" ToolTipService.ToolTip="Remove these pages and stop keeping pages like them (Ctrl+Z brings them back)">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <FontIcon Glyph="&#xE8F8;" FontSize="14" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock Text="Not Ideas" AutomationProperties.AccessibilityView="Raw" />
+            </StackPanel>
+          </Button>
+          <Button x:Name="PagesDeleteButton" Grid.Column="1" Click="OnDelete" ToolTipService.ToolTip="Delete these pages (Ctrl+Z brings them back)">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="{ThemeResource StatusWarningBrush}" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock x:Name="PagesDeleteText" AutomationProperties.AccessibilityView="Raw" />
+            </StackPanel>
+          </Button>
+        </Grid>
+      </StackPanel>
+    </Grid>
   </ScrollViewer>
 </UserControl>

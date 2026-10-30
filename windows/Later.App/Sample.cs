@@ -8,7 +8,7 @@ using Later.Core;
 /// library file and writes no setting, and no browser is watched or read. Every `--sample…` flag means a sample run. Compiled out of
 /// Release builds, where `Enabled` is a constant false (so the Release binary carries none of this, like the Mac's).
 ///   --sample-section <name>   --sample-group date|site|kind   --sample-sort <rawValue>   --sample-reversed
-///   --sample-search <text>    --sample-select <n>             --sample-dark              --sample-onboarding   --sample-settings
+///   --sample-search <text>    --sample-select <n> (the first n rows)       --sample-dark   --sample-onboarding   --sample-settings
 ///   --shot <png>  --shot-screen <png>  --shot-size WxH  --shot-delay <ms>   save the window (PrintWindow, a screen copy) and quit
 internal static class Sample
 {
@@ -57,8 +57,8 @@ internal static class Sample
 
     public static int ShotDelayMs => int.TryParse(Value("--shot-delay"), out var ms) ? ms : 1500;
 
-    /// A scene whose window does not exist yet: the app exits with 3 ("not built") before anything opens (Tasks 8 and 9 build them).
-    public static bool NotBuilt => Enabled && (Onboarding || Settings || SelectCount > 0);
+    /// A scene whose window does not exist yet: the app exits with 3 ("not built") before anything opens (Task 9 builds them).
+    public static bool NotBuilt => Enabled && (Onboarding || Settings);
 
     static bool Has(string flag) => Args.Contains(flag, StringComparer.Ordinal);
 
@@ -66,6 +66,24 @@ internal static class Sample
     {
         int i = Array.IndexOf(Args, flag);
         return i >= 0 && i + 1 < Args.Length ? Args[i + 1] : null;
+    }
+}
+/// A sample run's list editor: the user's changes are made on the window's own thread, to the sample's own library, and sent back to the
+/// view model as a snapshot. Nothing is read from or written to any file.
+internal sealed class SampleEditor(Later.App.ViewModels.LibraryViewModel model, Library library) : Later.App.ViewModels.IListEditor
+{
+    readonly UndoStack undo = new();
+
+    public void Apply(int token, Action<Library, UndoStack> work) { work(library, undo); Send(token); }
+
+    public void Undo() { undo.Undo(); Send(0); }
+
+    public void Redo() { undo.Redo(); Send(0); }
+
+    public void Send(int token)
+    {
+        model.SetSnapshot(library.CopyData(), SampleLibrary.OpenCopies(library), LibraryListing.VisitDays(library, Familiarity.Today(Sample.Clock)));
+        model.ChangeApplied(token, undo.UndoName);
     }
 }
 #else

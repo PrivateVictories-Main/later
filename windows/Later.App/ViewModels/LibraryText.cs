@@ -41,6 +41,9 @@ public static class LibraryText
         _ => "\uE8EE",
     };
 
+    /// Segoe Fluent Icons code points, one per kind (the same as its section's).
+    public static string Glyph(this Kind k) => Glyph(LibrarySection.OfKind(k));
+
     public static string EmptyTitle(this LibrarySection s) => s.Kind switch
     {
         SectionKind.All => "All caught up",

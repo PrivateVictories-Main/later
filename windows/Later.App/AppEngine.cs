@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using Later.App.Icons;
 using Later.App.ViewModels;
 using Later.Core;
 using Later.Windows.Engine;
@@ -16,7 +17,7 @@ namespace Later.App;
 /// activated. Before setup (Task 9) nothing is watched at all. Never starts an agent.
 /// Closing is prompt: it ends a wait for the lock, skips an engine start not yet begun, bounds the final save, and, as the last resort,
 /// ends the process (the lock is then abandoned, which the agent recovers from).
-internal sealed class AppEngine : IDisposable
+internal sealed class AppEngine : IDisposable, IListEditor
 {
     /// The running engine and how to take it apart (without its final save, which `AppEngine` bounds itself).
     internal sealed record Started(LaterEngine Engine, Action Stop);
@@ -37,6 +38,7 @@ internal sealed class AppEngine : IDisposable
     readonly EngineThread thread = new();
     readonly ThreadHost host;
     readonly AgentStatusFile agentStatus;
+    readonly SiteIconStore? icons;
     Thread? runner;
     Timer? watchdog;
 
@@ -48,7 +50,8 @@ internal sealed class AppEngine : IDisposable
     int peekVersion;
     string? readOnlyNotice, agentNotice;
     IDisposable? coalescer;
-    (Started? Run, int Revision, object? Copies, int Peek) sent = (null, -1, null, -1);
+    (Started? Run, int Revision, object? Copies, int Peek, int Days) sent = (null, -1, null, -1, -1);
+    UndoStack undo = new();   // the history of the list the running engine holds: a new engine is a new list
 
     // Both threads:
     volatile bool visible, needsLock, retryQueued, closing;
@@ -62,9 +65,9 @@ internal sealed class AppEngine : IDisposable
     internal Action ForceExit { get; init; } = () => Process.GetCurrentProcess().Kill();   // not Exit: that runs handlers that may be the thing that hangs
 
     /// `ui` runs an action on the window's thread (false when that thread is gone). `startEngine`: tests stand in for the hooks.
-    public AppEngine(AppPaths paths, LibraryViewModel model, Func<Action, bool> ui, Action exitApp, StartEngine? startEngine = null)
+    public AppEngine(AppPaths paths, LibraryViewModel model, Func<Action, bool> ui, Action exitApp, StartEngine? startEngine = null, SiteIconStore? icons = null)
     {
-        this.paths = paths; this.model = model; this.ui = ui; this.exitApp = exitApp;
+        this.paths = paths; this.model = model; this.ui = ui; this.exitApp = exitApp; this.icons = icons;
         this.startEngine = startEngine ?? StartWithHooks;
         host = new ThreadHost(thread);
         agentStatus = new AgentStatusFile(paths.AgentStatus);
@@ -94,7 +97,7 @@ internal sealed class AppEngine : IDisposable
         if (visible == value) return;
         visible = value;
         PerfLog.Log.Shown(value);
-        if (value) thread.Post(Publish);
+        if (value) thread.Post(() => Publish());
     }
 
     /// The window was shown or activated: a read-only list asks for the engine once more.
@@ -108,6 +111,18 @@ internal sealed class AppEngine : IDisposable
     public void Resume() => thread.Post(() => running?.Engine.SetPaused(false));
 
     public void SetView(LibraryGrouping grouping, LibrarySort sort, bool reversed) => thread.Post(() => running?.Engine.SetView(grouping, sort, reversed));
+
+    /// The user's change, made here (the engine thread owns the library) as one Undo step, then the list is sent at once with `token`
+    /// so the window's selection can move on from what went. Nothing is changed while there is no engine to save it.
+    public void Apply(int token, Action<Library, UndoStack> work) => thread.Post(() =>
+    {
+        if (running is { Engine.CanSave: true } r && !stopping) work(r.Engine.Library, undo);
+        Publish(token);
+    });
+
+    public void Undo() => thread.Post(() => { if (running is { Engine.CanSave: true } && !stopping) undo.Undo(); Publish(0); });
+
+    public void Redo() => thread.Post(() => { if (running is { Engine.CanSave: true } && !stopping) undo.Redo(); Publish(0); });
 
     /// The window closed: stop waiting, save, let go of the lock (the agent takes over), and end the thread.
     public void Shutdown()
@@ -153,6 +168,7 @@ internal sealed class AppEngine : IDisposable
             agentNotice = agentStatus.Take()?.Notice;   // what the agent could not do while the window was closed; cleared here, written again if it goes on
             var started = startEngine(paths, host, () => { ui(() => exitApp()); thread.Quit(); });
             running = started;
+            undo = new UndoStack();
             started.Engine.StateChanged += Changed;
             started.Engine.Library.Changed += Changed;
             Publish();
@@ -177,7 +193,7 @@ internal sealed class AppEngine : IDisposable
         coalescer = host.After(Coalesce, () => { coalescer = null; Publish(); });
     }
 
-    void Publish()
+    void Publish(int applied = 0)
     {
         if (!visible || stopping) return;
         var engine = running?.Engine;
@@ -186,13 +202,18 @@ internal sealed class AppEngine : IDisposable
             engine?.Paused ?? false,
             engine is null ? Join(agentNotice, readOnlyNotice) : engine.SaveFailed ? engine.Notice : Join(agentNotice, engine.Notice),
             engine?.CanSave ?? false,
-            onboarded);
-        var token = (running, engine?.Library.Revision ?? 0, (object?)engine?.OpenCopies, peekVersion);
-        if (token == sent) { ui(() => model.SetEngineState(state)); return; }
+            onboarded,
+            engine?.LastBrowser);
+        var undoName = undo.UndoName;
+        var token = (running, engine?.Library.Revision ?? 0, (object?)engine?.OpenCopies, peekVersion, engine?.Library.HistoryVersion ?? 0);
+        if (token == sent) { ui(() => { model.SetEngineState(state); model.ChangeApplied(applied, undoName); }); return; }
         sent = token;
         var data = engine is null ? peeked ?? new LibraryData() : engine.Library.CopyData();
         var copies = engine is null ? NoCopies : new Dictionary<string, int>(engine.OpenCopies);
-        ui(() => { model.SetSnapshot(data, copies); model.SetEngineState(state); });
+        // On how many of the last 28 days each site was visited, for the inspector's "why" line; the history answers some time after the start.
+        var days = engine is null ? null : LibraryListing.VisitDays(engine.Library, Familiarity.Today(DateTime.UtcNow));
+        ui(() => { model.SetSnapshot(data, copies, days); model.SetEngineState(state); model.ChangeApplied(applied, undoName); });
+        icons?.Update(data.Items);
     }
 
     static string? Join(string? a, string? b) => a is null ? b : b is null ? a : a + " " + b;

@@ -1,7 +1,90 @@
 <UserControl x:Class="Later.App.Panes.ListPane"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="using:Later.App.Panes">
+             xmlns:local="using:Later.App.Panes"
+             xmlns:vm="using:Later.App.ViewModels"
+             xmlns:controls="using:Later.App.Controls">
+  <UserControl.Resources>
+    <!-- A page: its site's tile, the title, then kind, site, when it was opened, whether it is open now, and the visits; the date it is
+         listed by at the right, giving way to Open and Done under the pointer in the same place. The item is named by RowModel.ToString(). -->
+    <DataTemplate x:Key="RowTemplate" x:DataType="vm:RowModel">
+      <Grid ColumnSpacing="12" Padding="4,10" MinHeight="64" Tag="{x:Bind Id}" PointerEntered="OnRowPointerEntered" PointerExited="OnRowPointerExited">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <controls:SiteTile Host="{x:Bind Site}" TileSize="36" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+          <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" MaxLines="1" AutomationProperties.AccessibilityView="Raw" />
+          <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <controls:KindChip Kind="{x:Bind Kind}" Visibility="{x:Bind ShowsKind}" />
+            <TextBlock Grid.Column="1" Text="{x:Bind SiteLine}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}"
+                       TextTrimming="CharacterEllipsis" MaxLines="1" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+            <TextBlock Grid.Column="2" Text="{x:Bind OpenedText}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}"
+                       MaxLines="1" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Visibility="{x:Bind IsOpen}" AutomationProperties.AccessibilityView="Raw">
+              <Ellipse Width="6" Height="6" Fill="{ThemeResource BrandBrush}" />
+              <TextBlock Text="{x:Bind OpenLabel}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" />
+            </StackPanel>
+            <TextBlock Grid.Column="4" Text="{x:Bind Visits}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}"
+                       MaxLines="1" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+          </Grid>
+        </StackPanel>
+        <Grid Grid.Column="2" VerticalAlignment="Center" MinWidth="64">
+          <TextBlock Text="{x:Bind When}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" HorizontalAlignment="Right" AutomationProperties.AccessibilityView="Raw" />
+          <!-- Collapsed until the pointer is over the row, so assistive technology reads one item per page; the same actions are in the inspector and the menu. -->
+          <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" Visibility="Collapsed">
+            <Button Tag="{x:Bind Id}" Click="OnRowOpen" Padding="8,6" ToolTipService.ToolTip="Open in your browser" AutomationProperties.Name="Open">
+              <FontIcon Glyph="&#xE8A7;" FontSize="14" />
+            </Button>
+            <Button Tag="{x:Bind Id}" Click="OnRowDone" Padding="8,6" Visibility="{x:Bind ShowsMarkDone}" ToolTipService.ToolTip="Mark Done" AutomationProperties.Name="Mark Done">
+              <FontIcon Glyph="&#xE73E;" FontSize="14" />
+            </Button>
+            <Button Tag="{x:Bind Id}" Click="OnRowDone" Padding="8,6" Visibility="{x:Bind ShowsMoveBack}" ToolTipService.ToolTip="Move Back to Later" AutomationProperties.Name="Move Back">
+              <FontIcon Glyph="&#xE7A7;" FontSize="14" />
+            </Button>
+            <Button Tag="{x:Bind Id}" Click="OnRowKeep" Padding="8,6" Visibility="{x:Bind Keeps}" ToolTipService.ToolTip="Keep pages like this in my list" AutomationProperties.Name="Keep Pages Like This">
+              <FontIcon Glyph="&#xE896;" FontSize="14" />
+            </Button>
+          </StackPanel>
+        </Grid>
+      </Grid>
+    </DataTemplate>
+
+    <!-- A heading: its chevron folds the group away, its count says how many pages are in it. -->
+    <DataTemplate x:Key="HeaderTemplate" x:DataType="vm:GroupHeaderRow">
+      <Button Tag="{x:Bind Title}" Click="OnHeaderClick" Style="{StaticResource SubtleButtonStyle}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,4"
+              AutomationProperties.Name="{x:Bind ActionName}" ToolTipService.ToolTip="{x:Bind ActionName}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <FontIcon Glyph="{x:Bind Chevron}" FontSize="10" Foreground="{ThemeResource SecondaryTextBrush}" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+          <controls:SiteTile Host="{x:Bind Title}" TileSize="20" Visibility="{x:Bind IsSite}" VerticalAlignment="Center" />
+          <controls:KindChip Kind="{x:Bind KindValue}" Visibility="{x:Bind IsKind}" />
+          <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}" Visibility="{x:Bind ShowsTitle}" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+          <TextBlock Text="{x:Bind CountText}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+        </StackPanel>
+      </Button>
+    </DataTemplate>
+
+    <local:RowTemplateSelector x:Key="Templates" Row="{StaticResource RowTemplate}" Header="{StaticResource HeaderTemplate}" />
+
+    <Style x:Key="RowContainer" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+      <Setter Property="MinHeight" Value="64" />
+    </Style>
+    <Style x:Key="HeaderContainer" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Margin" Value="0,10,0,0" />
+    </Style>
+    <local:ContainerStyleSelector x:Key="Containers" Row="{StaticResource RowContainer}" Header="{StaticResource HeaderContainer}" />
+  </UserControl.Resources>
+
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
@@ -13,34 +96,29 @@
     <InfoBar x:Name="Notice" Grid.Row="0" Severity="Warning" IsOpen="False" IsClosable="True" Margin="16,12,16,0"
              Closed="OnNoticeClosed" />
 
-    <StackPanel Grid.Row="1" Margin="24,16,24,8" Spacing="2">
-      <TextBlock x:Name="Heading" Style="{StaticResource TitleTextBlockStyle}" AutomationProperties.HeadingLevel="Level1" />
-      <TextBlock x:Name="Summary" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" />
-    </StackPanel>
+    <Grid Grid.Row="1" Margin="24,16,24,8" ColumnSpacing="12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <StackPanel Spacing="2">
+        <TextBlock x:Name="Heading" Style="{StaticResource TitleTextBlockStyle}" AutomationProperties.HeadingLevel="Level1" />
+        <TextBlock x:Name="Summary" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" />
+      </StackPanel>
+      <!-- Done only: everything it shows goes at once (asked first; Ctrl+Z brings it back). -->
+      <Button x:Name="EmptyDone" Grid.Column="1" Visibility="Collapsed" VerticalAlignment="Center" Click="OnEmptyDone"
+              AutomationProperties.Name="Empty Done…" ToolTipService.ToolTip="Delete everything in Done (Ctrl+Z brings it back)">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="{ThemeResource StatusWarningBrush}" AutomationProperties.AccessibilityView="Raw" />
+          <TextBlock Text="Empty Done…" AutomationProperties.AccessibilityView="Raw" />
+        </StackPanel>
+      </Button>
+    </Grid>
 
     <ListView x:Name="Rows" Grid.Row="2" SelectionMode="Extended" IsItemClickEnabled="False" Padding="12,0,12,12"
-              AutomationProperties.Name="Saved pages">
-      <ListView.ItemContainerStyle>
-        <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
-          <Setter Property="MinHeight" Value="56" />
-        </Style>
-      </ListView.ItemContainerStyle>
-      <ListView.ItemTemplate>
-        <DataTemplate x:DataType="local:RowText">
-          <Grid ColumnSpacing="16" Padding="0,8">   <!-- the item is named by RowText.ToString(); the parts are not read again -->
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Spacing="2" VerticalAlignment="Center">
-              <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" MaxLines="1" AutomationProperties.AccessibilityView="Raw" />
-              <TextBlock Text="{x:Bind Site}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" MaxLines="1" AutomationProperties.AccessibilityView="Raw" />
-            </StackPanel>
-            <TextBlock Grid.Column="1" Text="{x:Bind When}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
-          </Grid>
-        </DataTemplate>
-      </ListView.ItemTemplate>
-    </ListView>
+              AutomationProperties.Name="Saved pages" ItemTemplateSelector="{StaticResource Templates}" ItemContainerStyleSelector="{StaticResource Containers}"
+              SelectionChanged="OnSelectionChanged" DoubleTapped="OnDoubleTapped" ContextRequested="OnContextRequested"
+              PreviewKeyDown="OnPreviewKeyDown" CharacterReceived="OnCharacterReceived" ContainerContentChanging="OnContainerContentChanging" />
 
     <!-- What an empty list says, by where the user is. -->
     <StackPanel x:Name="Empty" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="360" Visibility="Collapsed" Margin="24,0,24,48">
@@ -49,5 +127,7 @@
       <TextBlock x:Name="EmptyMessage" Foreground="{ThemeResource SecondaryTextBrush}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="WrapWholeWords" />
       <Button x:Name="ShowOlder" Content="Show Older" HorizontalAlignment="Center" Margin="0,6,0,0" Visibility="Collapsed" Click="OnShowOlder" />
     </StackPanel>
+
+    <controls:UndoBar x:Name="UndoToast" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="24,0,24,16" MaxWidth="420" />
   </Grid>
 </UserControl>
