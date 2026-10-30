@@ -29,7 +29,7 @@
           <Image Source="ms-appx:///Assets/Later-512.png" Width="116" Height="116" HorizontalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
           <TextBlock Text="Welcome to Later" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="WrapWholeWords"
                      Margin="0,6,0,0" AutomationProperties.HeadingLevel="Level1" />
-          <TextBlock Text="Close tabs freely. Later keeps the ones worth coming back to." Style="{StaticResource SubtitleTextBlockStyle}" FontWeight="Normal"
+          <TextBlock Text="Close tabs freely. Later keeps the ones worth coming back to." Style="{StaticResource SubtitleTextBlockStyle}" FontWeight="Normal" FontSize="17"
                      Foreground="{ThemeResource SecondaryTextBrush}" TextAlignment="Center" TextWrapping="WrapWholeWords" />
         </StackPanel>
 

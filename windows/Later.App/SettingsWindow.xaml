@@ -47,12 +47,20 @@
                              Detail="Later keeps watching in the background, even when its window is closed.">
           <ToggleSwitch x:Name="StartSwitch" OnContent="On" OffContent="Off" MinWidth="0" Toggled="OnStartToggled" />
         </controls:SettingRow>
-        <Border x:Name="StartNotePanel" Visibility="Collapsed" Padding="14,10" CornerRadius="{ThemeResource ControlCornerRadius}"
+        <Border x:Name="StartNotePanel" Visibility="Collapsed" Padding="14,12" CornerRadius="{ThemeResource ControlCornerRadius}"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-          <StackPanel Spacing="8">
-            <TextBlock x:Name="StartNoteText" TextWrapping="WrapWholeWords" AutomationProperties.LiveSetting="Polite" />
-            <Button Content="Open Startup apps" Click="OnOpenStartupApps" />
-          </StackPanel>
+          <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="&#xE7BA;" FontSize="16" Foreground="{ThemeResource StatusWarningBrush}" VerticalAlignment="Top" Margin="0,2,0,0" IsTextScaleFactorEnabled="False"
+                      AutomationProperties.AccessibilityView="Raw" />
+            <StackPanel Grid.Column="1" Spacing="10">
+              <TextBlock x:Name="StartNoteText" TextWrapping="WrapWholeWords" AutomationProperties.LiveSetting="Polite" />
+              <Button Content="Open Startup apps" Click="OnOpenStartupApps" />
+            </StackPanel>
+          </Grid>
         </Border>
         <controls:SettingRow Glyph="&#xE769;" TileBrush="{ThemeResource TileOrangeBrush}" Title="Pause watching"
                              Detail="Later stops keeping new pages until you turn this back on.">

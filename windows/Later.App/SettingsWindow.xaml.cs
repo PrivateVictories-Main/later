@@ -156,10 +156,13 @@ public sealed partial class SettingsWindow : Window
         int width = (int)Math.Round(WidthDips * scale);
         int wanted = (int)Math.Ceiling((TitleBar.ActualHeight + PageStack.ActualHeight) * scale);
         int height = Math.Min(wanted, area.Height - (int)Math.Round(64 * scale));   // the frame and the taskbar's edge stay clear
+#if DEBUG
+        if (Sample.Enabled) height = wanted;   // a picture shows the whole page, whatever the screen it is taken on
+#endif
         var now = AppWindow.ClientSize;
         if (now.Width != width || now.Height != height) AppWindow.ResizeClient(new SizeInt32(width, height));
         if (resizes++ >= SettlingResizes) return;
         var size = AppWindow.Size;
-        AppWindow.Move(new PointInt32(area.X + (area.Width - size.Width) / 2, area.Y + (area.Height - size.Height) / 2));
+        AppWindow.Move(new PointInt32(area.X + (area.Width - size.Width) / 2, Math.Max(area.Y, area.Y + (area.Height - size.Height) / 2)));
     }
 }

@@ -251,7 +251,7 @@ public sealed class SettingsRoundTripTests : IDisposable
         Assert.Equal(new Settings(Onboarded: true, SavesFeedHomes: true, Sort: LibrarySort.Title), saved);
         Assert.Equal(StartState.On, start.State);
         Assert.Null(welcome.Failure);
-        Assert.Empty(Directory.GetFileSystemEntries(dir.Path).Where(f => !f.EndsWith("settings.json", StringComparison.Ordinal)));   // no scratch file is left beside it
+        Assert.DoesNotContain(Directory.GetFileSystemEntries(dir.Path), f => !f.EndsWith("settings.json", StringComparison.Ordinal));   // no scratch file is left beside it
     }
 
     [Fact]
@@ -270,7 +270,7 @@ public sealed class SettingsRoundTripTests : IDisposable
         var start = new InMemoryStartAtSignIn();
         var welcome = new OnboardingModel(Browsers(), start, dir.At("blocker/settings.json"));
         Assert.False(welcome.Start());
-        Assert.StartsWith("Later couldn't save its settings", welcome.Failure);
+        Assert.StartsWith("Later couldn't save its settings", welcome.Failure, StringComparison.Ordinal);
         Assert.Equal(StartState.Off, start.State);   // setup is not done, so nothing starts
     }
 
