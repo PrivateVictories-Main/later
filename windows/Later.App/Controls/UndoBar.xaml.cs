@@ -26,11 +26,11 @@ public sealed partial class UndoBar : UserControl
     public void Show(string name, Action onUndo)
     {
         undo = onUndo;
-        Message.Text = name;
         Visibility = Visibility.Visible;
-        // The text was set before the bar showed, which a live region does not announce reliably: say it outright.
-        (FrameworkElementAutomationPeer.FromElement(this) ?? FrameworkElementAutomationPeer.CreatePeerForElement(this))
-            .RaiseNotificationEvent(AutomationNotificationKind.ActionCompleted, AutomationNotificationProcessing.ImportantMostRecent, $"{name}. Press Control Z to undo.", "UndoOffer");
+        // A live region announces a change of its text while it shows, not text that was set before it did: set it now, and say so.
+        Message.Text = "";
+        Message.Text = name;
+        FrameworkElementAutomationPeer.FromElement(Message)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
         timer.Stop();
         timer.Start();
     }
