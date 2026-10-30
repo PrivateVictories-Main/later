@@ -181,5 +181,13 @@ public sealed partial class InspectorPane : UserControl
 
     void OnNotAnIdea(object sender, RoutedEventArgs e) { if (shown is not null) actions?.NotAnIdea(shown.Items); }
 
-    void OnDelete(object sender, RoutedEventArgs e) { if (shown is not null) actions?.Delete(shown.Items); }
+    /// A Delete is about to be made from here: the list takes the keyboard to the next page afterwards (`how` the user reached the button).
+    public event EventHandler<FocusState>? DeleteStarting;
+
+    void OnDelete(object sender, RoutedEventArgs e)
+    {
+        if (shown is null || actions is not { CanEdit: true }) return;
+        DeleteStarting?.Invoke(this, (sender as Control)?.FocusState ?? FocusState.Programmatic);
+        actions.Delete(shown.Items);
+    }
 }

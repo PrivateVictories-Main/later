@@ -82,4 +82,15 @@ public sealed class OpenerTests
         Assert.Null(OpenIn(null, Gone, Gone));
         Assert.Null(EngineState.None.OpenIn);                                    // no engine: "Open"
     }
+
+    [Fact]
+    public void TheOpenClickAndTheLabelNameTheSameBrowserEvenWhenTheStatusesStandStill()
+    {
+        // Watching is paused: Chrome was in front and its status froze at Watching, while Helium is the one that runs now.
+        var frozen = new EngineState(new Dictionary<Browser, BrowserStatus> { [Browser.Chrome] = BrowserStatus.Watching, [Browser.Helium] = BrowserStatus.NotRunning }, true, null, true, true, Browser.Chrome);
+        Assert.Equal(Browser.Chrome, frozen.OpenIn);                  // what the label says
+        Assert.Equal(frozen.OpenIn, frozen.Target());                 // where the click and the "open N pages?" question go
+        Assert.Equal(Browser.Helium, frozen.Target(Browser.Helium));  // a browser the user picked from the menu wins
+        Assert.Null(EngineState.None.Target());                       // no engine to ask: the machine's own browsers are looked at
+    }
 }

@@ -44,13 +44,16 @@ public sealed partial class ListPane : UserControl
     LibraryViewModel? model;
     ItemActions? actions;
     string? dismissed;
-    bool syncing, fromList;
+    bool syncing, fromList, focusNextMove;
     int lastIndex;
+    string? headingToFocus;
+    FocusState lastInput = FocusState.Programmatic;   // how the user last reached the list: the focus rectangle shows only after a key
 
     public ListPane()
     {
         InitializeComponent();
         Rows.ContainerContentChanging += OnContainerContentChanging;
+        Rows.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => lastInput = FocusState.Pointer), handledEventsToo: true);
     }
 
     /// Esc in the list with a search going: the window clears the search field.
@@ -61,6 +64,14 @@ public sealed partial class ListPane : UserControl
 
     /// Where the keyboard starts, so the search box does not open with a caret in it.
     public void FocusList() => Rows.Focus(FocusState.Programmatic);
+
+    /// A change started somewhere else (the inspector's Delete): when it moves the selection, the keyboard goes to the page it moves to,
+    /// or to the list when none is left, in the way (`how`) the user reached that button.
+    public void FocusAfterNextMove(FocusState how)
+    {
+        lastInput = how;
+        focusNextMove = true;
+    }
 
     internal void Bind(LibraryViewModel viewModel, ItemActions itemActions)
     {
@@ -92,27 +103,72 @@ public sealed partial class ListPane : UserControl
         Summary.Text = SummaryText(listing);
         UpdateEmptyDone();
         bool hadFocus = FocusIsInList();
+        var heading = headingToFocus ?? FocusedHeading();   // a heading's button is redrawn when it folds; the keyboard stays on it
         Sync(ListRows.Build(listing, model.Section, model.Searching, model.EffectiveGrouping, model.GroupingActive, model.Sort, model.Now, model.IsFolded));
         ShowEmptyState();
         ApplySelection(scroll: false);
         // A change that removes the row the keyboard was on would send it to the first thing that takes it, the search box, where Ctrl+Z undoes
         // typing instead of the change. It stays in the list.
-        if (hadFocus && !FocusIsInList() && entries.Count > 0) Rows.Focus(FocusState.Programmatic);
+        if (heading is not null && entries.OfType<GroupHeaderRow>().Any(h => h.Title == heading)) FocusHeading(heading);
+        else if (hadFocus && !FocusIsInList() && entries.Count > 0) Rows.Focus(FocusState.Programmatic);
+    }
+
+    string? FocusedHeading() =>
+        XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is Button { Tag: string title } button && IsInList(button) ? title : null;
+
+    /// The keyboard goes to the heading's button (after the list has laid out), so a folded group is brought back from where it was folded.
+    void FocusHeading(string title)
+    {
+        if (entries.OfType<GroupHeaderRow>().FirstOrDefault(h => h.Title == title) is not { } header) return;
+        Rows.ScrollIntoView(header);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (entries.OfType<GroupHeaderRow>().FirstOrDefault(h => h.Title == title) is { } now && Rows.ContainerFromItem(now) is DependencyObject container
+                && ButtonIn(container) is { } button)
+                button.Focus(lastInput == FocusState.Keyboard ? FocusState.Keyboard : FocusState.Programmatic);
+        });
+    }
+
+    static Button? ButtonIn(DependencyObject parent)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is Button button) return button;
+            if (ButtonIn(child) is { } found) return found;
+        }
+        return null;
+    }
+
+    void Fold(string title)
+    {
+        headingToFocus = title;
+        try { model!.ToggleFold(title); }
+        finally { headingToFocus = null; }
     }
 
     /// When the model (not the user in the list) moves the selection, as after a delete, the keyboard goes to the page it is now on, so the
-    /// next arrow key starts from there and not from the top.
+    /// next arrow key starts from there and not from the top. Not for a click: only a key draws a focus rectangle.
     void FocusCursor()
     {
-        if (fromList || model?.Cursor is not { } cursor || !FocusIsInList()) return;
+        bool asked = focusNextMove;
+        focusNextMove = false;
+        if (fromList || (!asked && !FocusIsInList())) return;
+        if (model?.Cursor is not { } cursor)
+        {
+            if (asked && entries.Count > 0) Rows.Focus(FocusState.Programmatic);   // the last page went: the list keeps the keyboard, not a panel that is gone
+            return;
+        }
+        var how = lastInput == FocusState.Keyboard ? FocusState.Keyboard : FocusState.Programmatic;
         if (entries.OfType<RowModel>().FirstOrDefault(r => r.Id == cursor) is { } row)
-            DispatcherQueue.TryEnqueue(() => (Rows.ContainerFromItem(row) as Control)?.Focus(FocusState.Keyboard));   // after the scroll has laid the row out
+            DispatcherQueue.TryEnqueue(() => (Rows.ContainerFromItem(row) as Control)?.Focus(how));   // after the scroll has laid the row out
     }
 
-    bool FocusIsInList()
+    bool FocusIsInList() => XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject node && IsInList(node);
+
+    bool IsInList(DependencyObject node)
     {
-        if (XamlRoot is null) return false;
-        for (var node = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject; node is not null; node = VisualTreeHelper.GetParent(node))
+        for (; node is not null; node = VisualTreeHelper.GetParent(node))
             if (ReferenceEquals(node, Rows)) return true;
         return false;
     }
@@ -261,7 +317,7 @@ public sealed partial class ListPane : UserControl
 
     void OnHeaderClick(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: string title }) model?.ToggleFold(title);
+        if (sender is FrameworkElement { Tag: string title }) Fold(title);
     }
 
     /// A double-click opens the page (or the selection, when it is one of them).
@@ -341,7 +397,17 @@ public sealed partial class ListPane : UserControl
     /// Shift and Ctrl+A are the list control's own.)
     void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (model is null || actions is null || e.OriginalSource is Button || IsDown(VirtualKey.Control) || IsDown(VirtualKey.Menu)) return;   // a button has its own Enter and Space
+        lastInput = FocusState.Keyboard;
+        if (model is null || actions is null || IsDown(VirtualKey.Control) || IsDown(VirtualKey.Menu)) return;
+        if (e.OriginalSource is Button button)   // a button has its own Enter and Space; a heading's also folds on Left and unfolds on Right
+        {
+            if (button.Tag is string heading && e.Key is VirtualKey.Left or VirtualKey.Right && !IsDown(VirtualKey.Shift) && model.IsFolded(heading) == (e.Key == VirtualKey.Right))
+            {
+                Fold(heading);
+                e.Handled = true;
+            }
+            return;
+        }
         var selected = model.SelectedItems;
         switch (e.Key)
         {
@@ -363,7 +429,7 @@ public sealed partial class ListPane : UserControl
                 var title = model.Current.Groups.FirstOrDefault(g => g.Items.Any(i => i.Id == at))?.Title;
                 if (title is not null && model.IsFolded(title) == (e.Key == VirtualKey.Right))
                 {
-                    model.ToggleFold(title);
+                    Fold(title);
                     e.Handled = true;
                 }
                 break;

@@ -49,6 +49,7 @@ public sealed partial class ShellWindow : Window
         List.ClearSearchRequested += (_, _) => SearchBox.Text = "";
         List.TypeToSearch += (_, text) => StartSearch(model.Search + text);
         Inspector.SearchFor += (_, host) => SearchBox.Text = host;
+        Inspector.DeleteStarting += (_, how) => List.FocusAfterNextMove(how);
         Sidebar.ResumeRequested += (_, _) => engine?.Resume();
         Sidebar.OpenSettingsRequested += (_, _) => { };   // Task 9 opens Settings
         SearchBox.Text = model.Search;

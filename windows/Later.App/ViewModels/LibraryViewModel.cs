@@ -18,6 +18,10 @@ public sealed record EngineState(IReadOnlyDictionary<Browser, BrowserStatus> Sta
         b => Statuses.TryGetValue(b, out var s) && s is BrowserStatus.Watching or BrowserStatus.ReadFailed,
         b => Statuses.TryGetValue(b, out var s) && s != BrowserStatus.NotInstalled);
 
+    /// Where an Open goes: the browser the user chose, else the one the label names. The click and the label read the same state, so they
+    /// never name different browsers (while watching is paused the statuses stand still, and so does both).
+    public Browser? Target(Browser? chosen = null) => chosen ?? OpenIn;
+
     /// The statuses by content: the engine hands out a new dictionary on every call, so a reference comparison never says "same".
     public bool Equals(EngineState? other) =>
         other is not null && Paused == other.Paused && Notice == other.Notice && CanEdit == other.CanEdit && Onboarded == other.Onboarded && LastBrowser == other.LastBrowser
@@ -167,13 +171,16 @@ public sealed class LibraryViewModel : INotifyPropertyChanged
 
     string FoldKeyOf(string groupTitle) => LibraryListing.FoldKey(EffectiveGrouping, sort, Searching, groupTitle);
 
-    /// Folds a heading away, or brings it back. The pages stay in the listing; only their rows go.
+    /// Folds a heading away, or brings it back. The pages stay in the listing; only their rows go, and a row that goes is no longer
+    /// selected, so no action can touch a page the list does not show.
     public void ToggleFold(string groupTitle)
     {
         var key = FoldKeyOf(groupTitle);
         if (!collapsed.Remove(key)) collapsed.Add(key);
         folds++;
         Refresh();
+        var shown = Current.RowIds.ToHashSet();
+        if (selected.Any(id => !shown.Contains(id))) SetSelection(selected.Where(shown.Contains));
     }
 
     // MARK: Selection

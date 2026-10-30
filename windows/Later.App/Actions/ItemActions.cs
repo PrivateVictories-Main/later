@@ -18,8 +18,9 @@ internal sealed class ItemActions(LibraryViewModel model, IListEditor? editor, F
 
     public bool CanEdit => model.CanEdit && editor is not null;
 
-    /// Where "Open" goes: the browser last in front if it runs, else any running one, else the first installed.
-    public Browser? DefaultBrowser => Opener.BrowserFor(model.Engine.LastBrowser);
+    /// Where "Open" goes, from the same state the inspector's label reads (`EngineState.OpenIn`). Without an engine to ask (a sample, a
+    /// list shown read-only) the label says just "Open" and the machine's own browsers are looked at, on the click.
+    public Browser? DefaultBrowser => model.Engine.Target() ?? Opener.BrowserFor(model.Engine.LastBrowser);
 
     public void Open(IReadOnlyList<Item> items, Browser? inBrowser = null)
     {
@@ -29,9 +30,9 @@ internal sealed class ItemActions(LibraryViewModel model, IListEditor? editor, F
 
     void OpenNow(IReadOnlyList<Item> items, Browser? inBrowser)
     {
-        var preferred = model.Engine.LastBrowser;
+        var browser = model.Engine.Target(inBrowser);
         foreach (var item in items)
-            _ = inBrowser is { } b ? Opener.Open(item.Url, b) : Opener.Open(item.Url, preferred);
+            _ = browser is { } b ? Opener.Open(item.Url, b) : Opener.Open(item.Url, model.Engine.LastBrowser);
     }
 
     async void AskToOpen(IReadOnlyList<Item> items, Browser? inBrowser)

@@ -103,10 +103,11 @@ public sealed class PerfLog : EventSource
         if (IsEnabled()) WriteEvent(15);
     }
 
-    /// A site icon lookup failed in a way nobody expected (the icons are cosmetic, so the app goes on without them): for how many hosts.
+    /// A site icon lookup failed in a way nobody expected (the icons are cosmetic, so the app goes on without them): for how many hosts,
+    /// and the exception's class only, as `ReadFailed` does.
     [Event(16, Level = EventLevel.Warning)]
-    public void IconLookupFailed(int hosts)
+    public void IconLookupFailed(int hosts, string errorClass)
     {
-        if (IsEnabled()) WriteEvent(16, hosts);
+        if (IsEnabled()) WriteEvent(16, hosts, errorClass);
     }
 }

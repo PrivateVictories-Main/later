@@ -109,9 +109,9 @@ internal sealed class SiteIconStore
                 }
             }
         }
-        catch (Exception)   // on a thread-pool thread an escape would end the process, for a cosmetic feature; the hosts count as missed (asked again in an hour)
+        catch (Exception e) when (e is not OutOfMemoryException)   // on a thread-pool thread an escape would end the process, for a cosmetic feature; the hosts count as missed (asked again in an hour)
         {
-            PerfLog.Log.IconLookupFailed(asked.Count);
+            PerfLog.Log.IconLookupFailed(asked.Count, e.GetType().Name);
             missing.AddRange(asked.Keys.Where(h => !found.ContainsKey(h)));
         }
         finally { Finish(found, missing); }

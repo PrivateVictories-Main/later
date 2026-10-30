@@ -182,6 +182,26 @@ public sealed class LibraryViewModelTests
     }
 
     [Fact]
+    public void FoldingAHeadingDeselectsItsPagesSoNoActionCanTouchWhatTheListDoesNotShow()
+    {
+        var model = Shown();
+        var first = model.Current.Groups[0];
+        var elsewhere = model.Current.Groups[1].Items[0].Id;
+        model.SetSelection([first.Items[0].Id, elsewhere], first.Items[0].Id);
+        model.ToggleFold(first.Title);
+        Assert.Equal([elsewhere], model.Selected.ToArray());   // only what the list still shows
+        Assert.Equal([elsewhere], model.SelectedItems.Select(i => i.Id).ToArray());
+        Assert.Equal(elsewhere, model.Cursor);
+        model.ToggleFold(first.Title);
+        Assert.Equal([elsewhere], model.Selected.ToArray());   // unfolding does not bring the selection back
+
+        model.SetSelection([first.Items[0].Id]);
+        model.ToggleFold(first.Title);
+        Assert.Empty(model.Selected);
+        Assert.Null(model.Cursor);
+    }
+
+    [Fact]
     public void ASearchFoldsUnderItsOwnKeysSoADateHeadingFoldedBeforeDoesNotHideAResult()
     {
         var model = Shown();

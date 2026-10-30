@@ -138,13 +138,33 @@ public sealed class SiteIconStoreTests : IDisposable
     public void ALookupThatFailsInAnUnexpectedWayEndsQuietlyAndTheNextOneStillRuns()
     {
         int tries = 0;
+        using var log = new LogCapture();
         var store = new SiteIconStore(Path.Combine(dir.Path, "icons"), () => { tries++; throw new InvalidOperationException("boom"); }, _ => true, () => now, work => work());
         var items = new[] { Page("a.example.com") };
         store.Update(items);   // would end the process on a pool thread
         Assert.Equal(1, tries);
+        Assert.Equal(["IconLookupFailed: 1, InvalidOperationException"], log.Lines("IconLookupFailed"));   // the count and the class, never the message
         now = now.AddHours(2);
         store.Update(items);   // not stuck as "running"
         Assert.Equal(2, tries);
         Assert.Null(store.For("a.example.com"));
+    }
+
+    /// The engine's own events (counts and timings), as a listener in the same process sees them.
+    sealed class LogCapture : System.Diagnostics.Tracing.EventListener
+    {
+        readonly List<string> lines = [];
+
+        protected override void OnEventSourceCreated(System.Diagnostics.Tracing.EventSource source)
+        {
+            if (source.Name == "Later-Engine") EnableEvents(source, System.Diagnostics.Tracing.EventLevel.Verbose);
+        }
+
+        protected override void OnEventWritten(System.Diagnostics.Tracing.EventWrittenEventArgs e)
+        {
+            lock (lines) lines.Add($"{e.EventName}: {(e.Payload is { } payload ? string.Join(", ", payload) : "")}");
+        }
+
+        public List<string> Lines(string name) { lock (lines) return lines.Where(l => l.StartsWith(name, StringComparison.Ordinal)).ToList(); }
     }
 }

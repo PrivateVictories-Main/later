@@ -175,15 +175,22 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         {
             int Count(WatchEventKind k) { lock (events) return events.Count(e => e.Kind == k); }
             // A tab switch retitles the window. Always to a tab that is not the selected one; a browser that is slow to switch (first-run work on
-            // a busy runner) gets three tries of 4 s, and a miss says what the hook saw.
-            bool switched = false; long t0 = 0;
-            for (int attempt = 0; attempt < 3 && !switched; attempt++)
+            // a busy runner) gets three tries of 4 s. A browser that did switch while the hook stayed silent is a lost event, and fails at once:
+            // a retry must not hide it. Every miss says what the hook and the browser saw.
+            bool switched = false; long t0 = 0; int attempts = 0;
+            for (; attempts < 3 && !switched; attempts++)
             {
                 int before = Count(WatchEventKind.NameChanged); t0 = Environment.TickCount64;
-                uia.SelectTab(hwnd, uia.Tabs(hwnd).First(t => !t.Selected).Index);
+                int target = uia.Tabs(hwnd).FirstOrDefault(t => !t.Selected)?.Index ?? (attempts + 1) % 3;   // a stalled tab strip may show none unselected
+                uia.SelectTab(hwnd, target);
                 switched = WaitUntil(() => Count(WatchEventKind.NameChanged) > before, TimeSpan.FromSeconds(4));
+                if (switched) continue;
+                var selectedNow = uia.Tabs(hwnd).FirstOrDefault(t => t.Selected)?.Index;
+                string seen = $"hook events seen={watcher!.EventsSeen}, title='{WindowsOf(b).FirstOrDefault(w => w.Hwnd == hwnd)?.Title}', selected tab={selectedNow}, asked for tab {target}, attempt {attempts + 1}";
+                Assert.False(selectedNow == target, $"the browser switched but the hook saw no NameChanged in 4 s; {seen}");
+                if (attempts == 2) Assert.Fail($"no NameChanged in 3 tries of 4 s; {seen}");
             }
-            Assert.True(switched, $"no NameChanged in 3 tries of 4 s; hook events seen={watcher!.EventsSeen}, title='{WindowsOf(b).FirstOrDefault(w => w.Hwnd == hwnd)?.Title}', selected tab={uia.Tabs(hwnd).FirstOrDefault(t => t.Selected)?.Index}");
+            output.WriteLine($"HOOK {b}: switched on attempt {attempts}");
             long latency; lock (events) latency = events.First(e => e.Kind == WatchEventKind.NameChanged && e.At >= t0).At - t0;
             output.WriteLine($"HOOK {b}: first NameChanged {latency} ms after the last switch started");
 

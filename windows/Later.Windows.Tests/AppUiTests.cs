@@ -334,6 +334,45 @@ public class AppUiTests
     }
 
     [Fact]
+    public void FoldingTheGroupOfASelectedPageLeavesNothingSelectedSoDeleteChangesNothingAndRightBringsTheRowsBack()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        int all = SampleCounts()[LibrarySection.All];
+        var first = Expected(LibrarySection.All).OfType<RowModel>().First();
+        WaitForList(app, Expected(LibrarySection.All), "every heading and row");
+        Do(() => app.SelectRow(n => n == first.Name), "the first row");
+        Wait(() => app.NameOfId("InspectorTitle") == first.Title, Slow, "the page to be selected");
+        app.Focus();
+        Thread.Sleep(200);
+        NativeTest.Press(0x25 /*VK_LEFT*/, extended: true);
+        app.WaitForName(n => n == "Expand Today", "the Today group to fold");
+        Wait(() => app.NameOfId("InspectorTitle") is null, Slow, "the hidden page to leave the selection (the inspector is back to its overview)");
+        NativeTest.Press(0x2E /*VK_DELETE*/, extended: true);
+        Thread.Sleep(700);
+        Assert.Contains($"All, {all}", app.Names());   // nothing was deleted
+        NativeTest.Press(0x27 /*VK_RIGHT*/, extended: true);   // the keyboard is on the heading, which unfolds
+        app.WaitForName(n => n == "Collapse Today", "the Today group to open again");
+        Wait(() => app.ListItems().Contains(first.Name), Slow, "the rows to come back");
+        Assert.Null(app.NameOfId("InspectorTitle"));   // unfolding brings no selection back
+    }
+
+    [Fact]
+    public void AfterADeleteFromTheInspectorTheKeyboardIsOnTheNextPageInTheList()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        var rows = Expected(LibrarySection.All).OfType<RowModel>().ToList();
+        WaitForList(app, Expected(LibrarySection.All), "every heading and row");
+        Do(() => app.SelectRow(n => n == rows[1].Name), "the second row");
+        app.Focus();
+        Thread.Sleep(200);
+        Do(() => app.Invoke("Delete"), "the Delete button");
+        Wait(() => !app.ListItems().Contains(rows[1].Name), Slow, "the row to go");
+        Wait(() => app.FocusedElement().Contains(rows[2].Name, StringComparison.Ordinal), Slow, $"the keyboard to leave the inspector for the next page (it is on: {app.FocusedElement()})");
+    }
+
+    [Fact]
     public void AfterADeleteTheKeyboardIsOnThePageTheSelectionMovedTo()
     {
         using var dir = new TempDir();
