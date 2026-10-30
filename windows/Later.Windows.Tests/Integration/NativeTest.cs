@@ -24,6 +24,11 @@ internal static unsafe partial class NativeTest
     [LibraryImport("user32.dll", EntryPoint = "DispatchMessageW")] internal static partial nint DispatchMessage(in Msg msg);
     [LibraryImport("user32.dll")] internal static partial void keybd_event(byte key, byte scan, uint flags, nuint extra);
     [LibraryImport("kernel32.dll")] internal static partial uint GetCurrentThreadId();
+    [LibraryImport("user32.dll")] private static partial void SwitchToThisWindow(nint hwnd, int altTab);
+    [LibraryImport("user32.dll")] private static partial int GetWindowRect(nint hwnd, out WindowRect rect);
+    [LibraryImport("user32.dll")] private static partial int SetCursorPos(int x, int y);
+    [LibraryImport("user32.dll")] private static partial void mouse_event(uint flags, uint dx, uint dy, uint data, nuint extra);
+    [StructLayout(LayoutKind.Sequential)] private struct WindowRect { public int Left, Top, Right, Bottom; }
     [LibraryImport("user32.dll")] internal static partial uint GetWindowThreadProcessId(nint hwnd, nint processId);
     [LibraryImport("user32.dll", EntryPoint = "GetWindowThreadProcessId")] private static partial uint GetWindowThreadProcessIdOut(nint hwnd, out uint processId);
 
@@ -51,6 +56,17 @@ internal static unsafe partial class NativeTest
             _ = SetForegroundWindow(hwnd);
             if (joined) _ = AttachThreadInput(mine, front, 0);
             Thread.Sleep(200);
+            if (ForegroundProcess() == processId) return true;
+            // Last resort, which Windows always honours: a click is the user's own choice of window. It lands on the window's invisible
+            // resize border, so it presses nothing of the app's.
+            SwitchToThisWindow(hwnd, 1);
+            if (attempt >= 1 && GetWindowRect(hwnd, out var r) != 0)
+            {
+                _ = SetCursorPos(r.Left + 3, (r.Top + r.Bottom) / 2);
+                mouse_event(0x0002 /*LEFTDOWN*/, 0, 0, 0, 0);
+                mouse_event(0x0004 /*LEFTUP*/, 0, 0, 0, 0);
+                Thread.Sleep(300);
+            }
         }
         return ForegroundProcess() == processId;
     }
