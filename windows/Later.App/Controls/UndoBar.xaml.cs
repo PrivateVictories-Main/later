@@ -1,5 +1,6 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Later.App.Controls;
@@ -27,6 +28,9 @@ public sealed partial class UndoBar : UserControl
         undo = onUndo;
         Message.Text = name;
         Visibility = Visibility.Visible;
+        // The text was set before the bar showed, which a live region does not announce reliably: say it outright.
+        (FrameworkElementAutomationPeer.FromElement(this) ?? FrameworkElementAutomationPeer.CreatePeerForElement(this))
+            .RaiseNotificationEvent(AutomationNotificationKind.ActionCompleted, AutomationNotificationProcessing.ImportantMostRecent, $"{name}. Press Control Z to undo.", "UndoOffer");
         timer.Stop();
         timer.Start();
     }

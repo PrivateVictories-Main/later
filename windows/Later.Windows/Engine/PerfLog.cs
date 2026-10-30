@@ -102,4 +102,11 @@ public sealed class PerfLog : EventSource
     {
         if (IsEnabled()) WriteEvent(15);
     }
+
+    /// A site icon lookup failed in a way nobody expected (the icons are cosmetic, so the app goes on without them): for how many hosts.
+    [Event(16, Level = EventLevel.Warning)]
+    public void IconLookupFailed(int hosts)
+    {
+        if (IsEnabled()) WriteEvent(16, hosts);
+    }
 }

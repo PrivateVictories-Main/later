@@ -296,6 +296,59 @@ public class AppUiTests
     }
 
     [Fact]
+    public void ARangeAcrossGroupHeadingsSelectsExactlyThePagesInItAndTheActionsActOnThem()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        var counts = SampleCounts();
+        int all = counts[LibrarySection.All], done = counts[LibrarySection.Done];
+        var rows = Expected(LibrarySection.All).OfType<RowModel>().ToList();
+        WaitForList(app, Expected(LibrarySection.All), "every heading and row");
+        Do(() => app.SelectRow(n => n == rows[0].Name), "the first row");
+        app.Focus();
+        Thread.Sleep(200);
+        NativeTest.Press(0x23 /*VK_END*/, shift: true, extended: true);   // a range from the first page to the last, with every heading in it
+        Wait(() => app.NameOfId("InspectorTitle") == $"{rows.Count} Pages", Slow, $"the inspector to say {rows.Count} pages (it says: {app.NameOfId("InspectorTitle")})");
+        Do(() => app.Invoke("Mark Done"), "the Mark Done button");
+        WaitForCounts(app, (LibrarySection.All, all - rows.Count), (LibrarySection.Done, done + rows.Count));   // every page of the range, not the first alone
+        Undo(app);
+        WaitForCounts(app, (LibrarySection.All, all), (LibrarySection.Done, done));
+    }
+
+    [Fact]
+    public void LeftFoldsThePagesGroupAndRightBringsItBack()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        var first = Expected(LibrarySection.All).OfType<RowModel>().First();
+        WaitForList(app, Expected(LibrarySection.All), "every heading and row");
+        Do(() => app.SelectRow(n => n == first.Name), "the first row");
+        app.Focus();
+        Thread.Sleep(200);
+        NativeTest.Press(0x25 /*VK_LEFT*/, extended: true);
+        app.WaitForName(n => n == "Expand Today", "the Today group to fold");
+        Assert.DoesNotContain(first.Name, app.ListItems());
+        NativeTest.Press(0x27 /*VK_RIGHT*/, extended: true);
+        app.WaitForName(n => n == "Collapse Today", "the Today group to open again");
+        Wait(() => app.ListItems().Contains(first.Name), Slow, "the rows to come back");
+    }
+
+    [Fact]
+    public void AfterADeleteTheKeyboardIsOnThePageTheSelectionMovedTo()
+    {
+        using var dir = new TempDir();
+        using var app = SampleApp(dir);
+        var rows = Expected(LibrarySection.All).OfType<RowModel>().ToList();
+        WaitForList(app, Expected(LibrarySection.All), "every heading and row");
+        Do(() => app.SelectRow(n => n == rows[1].Name), "the second row");
+        app.Focus();
+        Thread.Sleep(200);
+        NativeTest.Press(0x2E /*VK_DELETE*/, extended: true);
+        Wait(() => !app.ListItems().Contains(rows[1].Name), Slow, "the row to go");
+        Wait(() => app.FocusedElement().Contains(rows[2].Name, StringComparison.Ordinal), Slow, $"the keyboard to reach the next page (it is on: {app.FocusedElement()})");
+    }
+
+    [Fact]
     public void ARegularPageOffersKeepPagesLikeThisWithItsWhyLineAndUndoBringsItBack()
     {
         using var dir = new TempDir();

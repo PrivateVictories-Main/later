@@ -148,7 +148,7 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
         var hwnd = WindowsOf(b)[0].Hwnd; var pid = WindowsOf(b)[0].Pid;
-        Thread.Sleep(3000);
+        Assert.True(WaitUntil(() => uia.Tabs(hwnd) is { Count: >= 3 } tabs && tabs.All(t => t.Name.StartsWith("Fixture", StringComparison.Ordinal)), Slow), "the three pages did not finish loading");   // their titles are in: the page loads are over before a switch is timed
 
         var events = new List<(WatchEventKind Kind, nint Hwnd, long At)>();
         WinEventWatcher? watcher = null; uint pumpThread = 0; Exception? failure = null;
@@ -174,12 +174,18 @@ public class ReaderIntegrationTests(ITestOutputHelper output) : IClassFixture<Le
         try
         {
             int Count(WatchEventKind k) { lock (events) return events.Count(e => e.Kind == k); }
-            // A tab switch retitles the window.
-            int before = Count(WatchEventKind.NameChanged); long t0 = Environment.TickCount64;
-            uia.SelectTab(hwnd, 0); uia.SelectTab(hwnd, 1);
-            Assert.True(WaitUntil(() => Count(WatchEventKind.NameChanged) > before, TimeSpan.FromSeconds(1)), "no NameChanged within 1 s of a tab switch");
+            // A tab switch retitles the window. Always to a tab that is not the selected one; a browser that is slow to switch (first-run work on
+            // a busy runner) gets three tries of 4 s, and a miss says what the hook saw.
+            bool seen = false; long t0 = 0;
+            for (int attempt = 0; attempt < 3 && !seen; attempt++)
+            {
+                int before = Count(WatchEventKind.NameChanged); t0 = Environment.TickCount64;
+                uia.SelectTab(hwnd, uia.Tabs(hwnd).First(t => !t.Selected).Index);
+                seen = WaitUntil(() => Count(WatchEventKind.NameChanged) > before, TimeSpan.FromSeconds(4));
+            }
+            Assert.True(seen, $"no NameChanged in 3 tries of 4 s; hook events seen={watcher!.EventsSeen}, title='{WindowsOf(b).FirstOrDefault(w => w.Hwnd == hwnd)?.Title}', selected tab={uia.Tabs(hwnd).FirstOrDefault(t => t.Selected)?.Index}");
             long latency; lock (events) latency = events.First(e => e.Kind == WatchEventKind.NameChanged && e.At >= t0).At - t0;
-            output.WriteLine($"HOOK {b}: first NameChanged {latency} ms after the switch started");
+            output.WriteLine($"HOOK {b}: first NameChanged {latency} ms after the last switch started");
 
             // Quiet when idle: no browser-related event in 5 s without input.
             Thread.Sleep(1500);

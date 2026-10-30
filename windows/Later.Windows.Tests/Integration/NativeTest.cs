@@ -39,7 +39,7 @@ internal static unsafe partial class NativeTest
     internal const int SwMinimize = 6, SwRestore = 9;
     internal const uint WmClose = 0x0010, WmQuit = 0x0012;
 
-    internal const byte VkControl = 0x11;
+    internal const byte VkControl = 0x11, VkShift = 0x10;
 
     /// Takes the keyboard for `hwnd` even when another window holds the foreground (a runner can have a first-run page up): Windows only lets
     /// the foreground's own thread hand it over, so the test joins that thread's input for the moment, with Alt tapped first as the usual nudge.
@@ -72,11 +72,14 @@ internal static unsafe partial class NativeTest
     }
 
     /// Presses a key (a virtual-key code; a letter's is its capital's character) and lets go, with Ctrl held when asked.
-    internal static void Press(byte key, bool control = false)
+    internal static void Press(byte key, bool control = false, bool shift = false, bool extended = false)
     {
         if (control) keybd_event(VkControl, 0, 0, 0);
-        keybd_event(key, 0, 0, 0);
-        keybd_event(key, 0, 2 /*KEYEVENTF_KEYUP*/, 0);
+        if (shift) keybd_event(VkShift, 0, 0, 0);
+        uint ext = extended ? 1u /*KEYEVENTF_EXTENDEDKEY: the navigation keys, not the keypad's*/ : 0;
+        keybd_event(key, 0, ext, 0);
+        keybd_event(key, 0, ext | 2 /*KEYEVENTF_KEYUP*/, 0);
+        if (shift) keybd_event(VkShift, 0, 2, 0);
         if (control) keybd_event(VkControl, 0, 2, 0);
     }
 

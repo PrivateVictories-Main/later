@@ -34,7 +34,7 @@ public sealed partial class InspectorPane : UserControl
     void Update()
     {
         if (model is null || actions is null) return;
-        var openIn = actions.DefaultBrowser?.DisplayName();
+        var openIn = model.Engine.OpenIn?.DisplayName();   // from the engine's snapshot: never a look at the machine's processes on this thread
         var view = InspectorModel.For(model, openIn);
         shown = view;
         OverviewPanel.Visibility = view.Mode == InspectorMode.Overview ? Visibility.Visible : Visibility.Collapsed;

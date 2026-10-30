@@ -74,8 +74,11 @@ public static class ListRows
         var title = LibraryListing.DisplayTitle(item);
         bool done = item.Status == ItemStatus.Done;
         var saved = LibraryQuery.ShortDate(item.FirstSaved, now, tz, culture);
-        var name = $"{title}, {item.Host}, {item.Kind.Title()}, saved {saved}" + (copies > 0 ? ", open now" : "") + (done ? ", done" : "");
-        return new RowModel(item.Id, title, item.Host, item.Kind, hint ?? "", LibraryListing.OpenedText(item, sort, hint, now, tz) ?? "",
+        var opened = LibraryListing.OpenedText(item, sort, hint, now, tz) ?? "";
+        // What tells look-alike rows apart (three "Discussion" pages on one site) is in the name, as on the Mac.
+        var name = $"{title}, {item.Host}, {item.Kind.Title()}, saved {saved}" + string.Concat(new[] { hint ?? "", opened }.Where(t => t.Length > 0).Distinct().Select(t => ", " + t))
+                   + (copies > 0 ? ", open now" : "") + (done ? ", done" : "");
+        return new RowModel(item.Id, title, item.Host, item.Kind, hint ?? "", opened,
                             LibraryListing.VisitsLabel(item) ?? "", LibraryListing.OpenLabel(copies) ?? "", copies,
                             LibraryQuery.ShortDate(LibraryQuery.GroupDate(item, sort), now, tz, culture), done, item.IsActiveRegular, showsKind, showsHost, name);
     }

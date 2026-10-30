@@ -74,7 +74,7 @@ public sealed partial class ListPane : UserControl
                 case nameof(LibraryViewModel.Current): ShowList(); break;   // every section or search change comes with a new listing
                 case nameof(LibraryViewModel.Counts): ShowEmptyState(); break;
                 case nameof(LibraryViewModel.Engine): ShowNotice(); UpdateEmptyDone(); break;
-                case nameof(LibraryViewModel.Selected): ApplySelection(scroll: !fromList); break;
+                case nameof(LibraryViewModel.Selected): ApplySelection(scroll: !fromList); FocusCursor(); break;
                 case nameof(LibraryViewModel.UndoName): ShowUndo(); break;
             }
         };
@@ -98,6 +98,15 @@ public sealed partial class ListPane : UserControl
         // A change that removes the row the keyboard was on would send it to the first thing that takes it, the search box, where Ctrl+Z undoes
         // typing instead of the change. It stays in the list.
         if (hadFocus && !FocusIsInList() && entries.Count > 0) Rows.Focus(FocusState.Programmatic);
+    }
+
+    /// When the model (not the user in the list) moves the selection, as after a delete, the keyboard goes to the page it is now on, so the
+    /// next arrow key starts from there and not from the top.
+    void FocusCursor()
+    {
+        if (fromList || model?.Cursor is not { } cursor || !FocusIsInList()) return;
+        if (entries.OfType<RowModel>().FirstOrDefault(r => r.Id == cursor) is { } row)
+            DispatcherQueue.TryEnqueue(() => (Rows.ContainerFromItem(row) as Control)?.Focus(FocusState.Keyboard));   // after the scroll has laid the row out
     }
 
     bool FocusIsInList()
@@ -182,20 +191,28 @@ public sealed partial class ListPane : UserControl
     void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (syncing || model is null) return;
-        // Arrow keys step onto headings too; the selection goes on to the next page that way.
-        if (e.AddedItems.OfType<GroupHeaderRow>().FirstOrDefault() is { } header)
+        // Headings are never selected. A range (Shift+click, Shift+End) takes the headings in it along: they go, its pages stay and are
+        // reported below. An arrow key that steps onto a heading alone goes on to the next page instead.
+        var headers = Rows.SelectedItems.OfType<GroupHeaderRow>().ToList();
+        if (headers.Count > 0)
         {
-            int at = entries.IndexOf(header);
-            int step = at >= lastIndex ? 1 : -1;
+            var steppedOnto = e.AddedItems.Count == 1 ? e.AddedItems[0] as GroupHeaderRow : null;
             syncing = true;
-            try { Rows.SelectedItems.Remove(header); }
+            try { foreach (var h in headers) Rows.SelectedItems.Remove(h); }
             finally { syncing = false; }
-            object? target = NextRow(at, step) ?? NextRow(at, -step);
-            if (target is null) return;
-            Rows.SelectedItems.Add(target);   // raises this event again for the page
-            Rows.ScrollIntoView(target);
-            DispatcherQueue.TryEnqueue(() => (Rows.ContainerFromItem(target) as Control)?.Focus(FocusState.Keyboard));
-            return;
+            if (steppedOnto is not null)
+            {
+                int at = entries.IndexOf(steppedOnto);
+                object? target = NextRow(at, at >= lastIndex ? 1 : -1) ?? NextRow(at, at >= lastIndex ? -1 : 1);
+                if (target is null) return;
+                if (!Rows.SelectedItems.Contains(target))
+                {
+                    Rows.SelectedItems.Add(target);   // raises this event again for the page
+                    Rows.ScrollIntoView(target);
+                    DispatcherQueue.TryEnqueue(() => (Rows.ContainerFromItem(target) as Control)?.Focus(FocusState.Keyboard));
+                    return;
+                }
+            }
         }
         var added = e.AddedItems.OfType<RowModel>().LastOrDefault();
         if (added is not null) lastIndex = entries.IndexOf(added);
@@ -319,7 +336,8 @@ public sealed partial class ListPane : UserControl
 
     static bool IsDown(VirtualKey key) => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 
-    /// Enter opens the selection, Delete deletes it, Space toggles Done, Esc clears the search, then the selection. (The arrows, Home, End,
+    /// Enter opens the selection, Delete deletes it, Space toggles Done, Left and Right fold and unfold the page's group, Esc clears the search,
+    /// then the selection. (The arrows, Home, End,
     /// Shift and Ctrl+A are the list control's own.)
     void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -339,6 +357,15 @@ public sealed partial class ListPane : UserControl
                 // A regular still in the list has its own choice instead of Done.
                 if (!(selected.Count == 1 && selected[0].IsActiveRegular)) actions.SetDone(selected, !selected.All(i => i.Status == ItemStatus.Done));
                 e.Handled = true;
+                break;
+            case VirtualKey.Left or VirtualKey.Right when model.Cursor is { } at && !IsDown(VirtualKey.Shift):
+                // Headings are skipped by the arrows, so the keyboard folds the group of the page it is on (Left) and brings it back (Right).
+                var title = model.Current.Groups.FirstOrDefault(g => g.Items.Any(i => i.Id == at))?.Title;
+                if (title is not null && model.IsFolded(title) == (e.Key == VirtualKey.Right))
+                {
+                    model.ToggleFold(title);
+                    e.Handled = true;
+                }
                 break;
             case VirtualKey.Escape:
                 if (model.Searching) ClearSearchRequested?.Invoke(this, EventArgs.Empty);

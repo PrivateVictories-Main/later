@@ -133,4 +133,18 @@ public sealed class SiteIconStoreTests : IDisposable
         store.Update([Page("a.example.com")]);
         Assert.Empty(Directory.GetFileSystemEntries(dir.Path));
     }
+
+    [Fact]
+    public void ALookupThatFailsInAnUnexpectedWayEndsQuietlyAndTheNextOneStillRuns()
+    {
+        int tries = 0;
+        var store = new SiteIconStore(Path.Combine(dir.Path, "icons"), () => { tries++; throw new InvalidOperationException("boom"); }, _ => true, () => now, work => work());
+        var items = new[] { Page("a.example.com") };
+        store.Update(items);   // would end the process on a pool thread
+        Assert.Equal(1, tries);
+        now = now.AddHours(2);
+        store.Update(items);   // not stuck as "running"
+        Assert.Equal(2, tries);
+        Assert.Null(store.For("a.example.com"));
+    }
 }

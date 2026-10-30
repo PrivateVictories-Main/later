@@ -1,5 +1,7 @@
 using Later.App.Actions;
+using Later.App.ViewModels;
 using Later.Core;
+using Later.Windows.Engine;
 using Xunit;
 
 namespace Later.Windows.Tests;
@@ -60,5 +62,24 @@ public sealed class OpenerTests
         Assert.Equal(Browser.Helium, Opener.BrowserFor(null, _ => false, _ => true));
         Assert.Equal(Browser.Chrome, Opener.BrowserFor(null, _ => false, b => b == Browser.Chrome));
         Assert.Null(Opener.BrowserFor(Browser.Helium, _ => false, _ => false));
+    }
+
+    static Browser? OpenIn(Browser? last, BrowserStatus chrome, BrowserStatus helium) =>
+        new EngineState(new Dictionary<Browser, BrowserStatus> { [Browser.Chrome] = chrome, [Browser.Helium] = helium }, false, null, true, true, last).OpenIn;
+
+    [Fact]
+    public void TheOpenLabelFollowsTheMacsRuleFromTheEnginesStatusesAndNeverFromTheMachinesProcesses()
+    {
+        const BrowserStatus Up = BrowserStatus.Watching, Idle = BrowserStatus.NotRunning, Gone = BrowserStatus.NotInstalled;
+        Assert.Equal(Browser.Chrome, OpenIn(Browser.Chrome, Up, Up));            // the one last in front, when it runs
+        Assert.Equal(Browser.Helium, OpenIn(Browser.Helium, Up, Up));
+        Assert.Equal(Browser.Helium, OpenIn(Browser.Chrome, Idle, Up));          // else any running one
+        Assert.Equal(Browser.Chrome, OpenIn(null, Up, Idle));
+        Assert.Equal(Browser.Helium, OpenIn(Browser.Helium, Up, BrowserStatus.ReadFailed));   // a browser that runs but could not be read still runs
+        Assert.Equal(Browser.Chrome, OpenIn(Browser.Chrome, Idle, Idle));        // none runs: the last one, if installed
+        Assert.Equal(Browser.Helium, OpenIn(null, Idle, Idle));                  // else the first installed, Helium first
+        Assert.Equal(Browser.Chrome, OpenIn(null, Idle, Gone));
+        Assert.Null(OpenIn(null, Gone, Gone));
+        Assert.Null(EngineState.None.OpenIn);                                    // no engine: "Open"
     }
 }

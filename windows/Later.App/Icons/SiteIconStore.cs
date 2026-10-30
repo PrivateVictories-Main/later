@@ -1,4 +1,5 @@
 using Later.Core;
+using Later.Windows.Engine;
 using Later.Windows.Reader;
 
 namespace Later.App.Icons;
@@ -107,6 +108,11 @@ internal sealed class SiteIconStore
                     }   // RetryLater: asked again on the next show or save
                 }
             }
+        }
+        catch (Exception)   // on a thread-pool thread an escape would end the process, for a cosmetic feature; the hosts count as missed (asked again in an hour)
+        {
+            PerfLog.Log.IconLookupFailed(asked.Count);
+            missing.AddRange(asked.Keys.Where(h => !found.ContainsKey(h)));
         }
         finally { Finish(found, missing); }
     }

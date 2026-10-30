@@ -56,7 +56,8 @@ public sealed class RowsTests
         var rows = Flat(listing).OfType<RowModel>().ToList();
         var rei = rows.Single(r => r.Site == "rei.com");
         var item = listing.Items.Single(i => i.Id == rei.Id);
-        Assert.Equal($"Patagonia Nano Puff Jacket - Men's | REI Co-op, rei.com, Shopping, saved {LibraryQuery.ShortDate(item.FirstSaved, Now, Utc, EnUs)}" + (rei.IsOpen ? ", open now" : ""), rei.Name);
+        Assert.Equal($"Patagonia Nano Puff Jacket - Men's | REI Co-op, rei.com, Shopping, saved {LibraryQuery.ShortDate(item.FirstSaved, Now, Utc, EnUs)}"
+                     + string.Concat(new[] { rei.Hint, rei.OpenedText }.Where(t => t.Length > 0).Distinct().Select(t => ", " + t)) + (rei.IsOpen ? ", open now" : ""), rei.Name);
         Assert.Equal(rei.Name, rei.ToString());
         var twice = rows.Single(r => r.Site == "linkvault.example.net");
         Assert.Equal(2, twice.Copies);
@@ -140,6 +141,19 @@ public sealed class RowsTests
         var row = ListRows.Row(item, 0, null, LibrarySort.LastSeen, Now, true, true, Utc, EnUs);
         Assert.Equal(string.Join(" · ", new[] { row.SiteLine, row.OpenedText, row.Visits }.Where(t => t.Length > 0)), row.Meta);
         Assert.StartsWith("rei.com", row.Meta, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARowNameCarriesTheHintAndWhenItWasOpenedSoLookAlikesDiffer()
+    {
+        var item = library.Data.Items.First(i => i.Host == "rei.com");
+        var plain = ListRows.Row(item, 0, null, LibrarySort.LastSeen, Now, true, true, Utc, EnUs);
+        var hinted = ListRows.Row(item, 0, "Opened Thu 3:04 PM", LibrarySort.LastSeen, Now, true, true, Utc, EnUs);
+        Assert.Contains(", Opened Thu 3:04 PM", hinted.Name, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opened Thu", plain.Name, StringComparison.Ordinal);
+        Assert.NotEqual(plain.Name, hinted.Name);
+        var open = ListRows.Row(item, 2, "Opened Thu 3:04 PM", LibrarySort.LastSeen, Now, true, true, Utc, EnUs);
+        Assert.EndsWith(", open now", open.Name, StringComparison.Ordinal);   // the flags stay last
     }
 
     [Fact]

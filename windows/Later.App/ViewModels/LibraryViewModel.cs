@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
+using Later.App.Actions;
 using Later.Core;
 using Later.Windows.Engine;
 
@@ -10,6 +11,12 @@ namespace Later.App.ViewModels;
 public sealed record EngineState(IReadOnlyDictionary<Browser, BrowserStatus> Statuses, bool Paused, string? Notice, bool CanEdit, bool Onboarded, Browser? LastBrowser = null)
 {
     public static readonly EngineState None = new(new Dictionary<Browser, BrowserStatus>(), false, null, false, true);
+
+    /// Where "Open" goes, worked out from what the engine tracks (no look at the machine's processes): the browser last in front if it
+    /// runs, else any running one, else the first installed (Helium first). Null when the engine knows of none (no engine, or none installed).
+    public Browser? OpenIn => Opener.BrowserFor(LastBrowser,
+        b => Statuses.TryGetValue(b, out var s) && s is BrowserStatus.Watching or BrowserStatus.ReadFailed,
+        b => Statuses.TryGetValue(b, out var s) && s != BrowserStatus.NotInstalled);
 
     /// The statuses by content: the engine hands out a new dictionary on every call, so a reference comparison never says "same".
     public bool Equals(EngineState? other) =>
