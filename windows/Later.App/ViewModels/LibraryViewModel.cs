@@ -14,6 +14,13 @@ public sealed record Listing(IReadOnlyList<Item> Items, int NewToday, int Sites)
 public sealed record EngineState(IReadOnlyDictionary<Browser, BrowserStatus> Statuses, bool Paused, string? Notice, bool CanEdit, bool Onboarded)
 {
     public static readonly EngineState None = new(new Dictionary<Browser, BrowserStatus>(), false, null, false, true);
+
+    /// The statuses by content: the engine hands out a new dictionary on every call, so a reference comparison never says "same".
+    public bool Equals(EngineState? other) =>
+        other is not null && Paused == other.Paused && Notice == other.Notice && CanEdit == other.CanEdit && Onboarded == other.Onboarded
+        && Statuses.Count == other.Statuses.Count && Statuses.All(kv => other.Statuses.TryGetValue(kv.Key, out var s) && s == kv.Value);
+
+    public override int GetHashCode() => HashCode.Combine(Paused, Notice, CanEdit, Onboarded, Statuses.Count);
 }
 
 /// The window's state, for its three panes: the port of `LibraryModel.swift`'s section, search, grouping, sort, listing, counts and
@@ -38,10 +45,17 @@ public sealed class LibraryViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// `now`: the clock the first listing is worked out at (a sample run pins it); the real time by default.
+    public LibraryViewModel(DateTime? now = null) => Now = now ?? DateTime.UtcNow;
+
+    /// False until the first list arrives (`SetSnapshot`). An unloaded model is not an empty library: the panes show nothing of
+    /// the list yet, not the first-run welcome and not zero counts.
+    public bool IsLoaded { get; private set; }
+
     /// False while the window is hidden: the panes stop following the list, so saves made meanwhile cost nothing.
     public bool IsVisible { get; private set; }
 
-    public DateTime Now { get; private set; } = DateTime.UtcNow;
+    public DateTime Now { get; private set; }
     public IReadOnlyDictionary<LibrarySection, int> Counts { get; private set; } = new Dictionary<LibrarySection, int>();
     public Listing Current { get; private set; } = Listing.Empty;
     public EngineState Engine => engineState;
@@ -90,7 +104,10 @@ public sealed class LibraryViewModel : INotifyPropertyChanged
         data = snapshot;
         openCopies = copies;
         revision++;
+        bool first = !IsLoaded;
+        IsLoaded = true;
         Refresh();
+        if (first) Changed(nameof(IsLoaded));
     }
 
     public void SetEngineState(EngineState state)

@@ -1,6 +1,7 @@
 namespace Later.App;
 
 #if DEBUG
+using System.Globalization;
 using Later.Core;
 
 /// Development only: `--sample` shows a made-up list as if already set up; a sample run starts no engine and no hooks, touches no
@@ -19,6 +20,13 @@ internal static class Sample
     public static bool Onboarding => Has("--sample-onboarding");
     public static bool Settings => Has("--sample-settings");
     public static string? Search => Value("--sample-search");
+
+    /// The sample's clock, so every machine, hour and time zone draws the same counts: today at 12:00 local, or `--sample-now <ISO>`
+    /// (a time without a zone is local). Not the real clock outside a sample run.
+    public static DateTime Clock => Enabled ? Pinned : DateTime.UtcNow;
+
+    static readonly DateTime Pinned =
+        DateTime.TryParse(Value("--sample-now"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal | DateTimeStyles.AdjustToUniversal, out var pinned) ? pinned : SampleLibrary.NoonUtc(DateTime.Now);
     public static string? ShotPath => Value("--shot");
     public static string? ShotScreenPath => Value("--shot-screen");
 
@@ -64,5 +72,6 @@ internal static class Sample
 internal static class Sample
 {
     public const bool Enabled = false;
+    public static DateTime Clock => DateTime.UtcNow;
 }
 #endif

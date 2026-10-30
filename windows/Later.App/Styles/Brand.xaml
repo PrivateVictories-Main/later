@@ -47,7 +47,7 @@
       <SolidColorBrush x:Key="StatusWarningBrush" Color="#FFB067" />
     </ResourceDictionary>
     <ResourceDictionary x:Key="HighContrast">
-      <SolidColorBrush x:Key="BrandBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+      <SolidColorBrush x:Key="BrandBrush" Color="{ThemeResource SystemColorHotlightColor}" />   <!-- a foreground colour; Highlight is a selection fill -->
       <SolidColorBrush x:Key="SecondaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
       <SolidColorBrush x:Key="KindShoppingBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
       <SolidColorBrush x:Key="KindPostsBrush" Color="{ThemeResource SystemColorWindowTextColor}" />

@@ -54,6 +54,9 @@ public static class SampleLibrary
         new("https://tinytools.example.net/", "Tiny Tools: small utilities for everyday jobs", 1.4, 1),
     ];
 
+    /// The sample's clock: 12:00 local time on the day of `day`, so the counts do not depend on the hour or time zone it is run in.
+    public static DateTime NoonUtc(DateTime day) => new DateTime(day.Year, day.Month, day.Day, 12, 0, 0, DateTimeKind.Local).ToUniversalTime();
+
     static DateTime Ago(DateTime now, double days) => now.AddSeconds(-days * 86_400);
 
     /// What the sample's browser history says: on which of the last 28 days each place's site was visited.

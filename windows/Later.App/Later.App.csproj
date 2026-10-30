@@ -16,7 +16,7 @@
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <PublishReadyToRun>false</PublishReadyToRun>
     <LaterProduct>true</LaterProduct>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>   <!-- LibraryImport (Debug screenshot capture) -->
+    <AllowUnsafeBlocks Condition="'$(Configuration)' == 'Debug'">true</AllowUnsafeBlocks>   <!-- LibraryImport (Debug screenshot capture) -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>   <!-- generated XAML code warns; the network ban and string-comparison rules are errors via .editorconfig -->
   </PropertyGroup>
   <!-- The app uses no networking, so the self-contained runtime's network-capable files (msquic.dll, createdump.exe and the

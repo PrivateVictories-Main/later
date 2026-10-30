@@ -35,6 +35,16 @@ public class SampleLibraryTests
     }
 
     [Fact]
+    public void TheSampleClockIsNoonLocalSoTheCountsDoNotDependOnTheHourItIsRunAt()
+    {
+        var noon = SampleLibrary.NoonUtc(new DateTime(2026, 10, 29, 23, 59, 0));   // the time of day given is ignored
+        var local = TimeZoneInfo.ConvertTimeFromUtc(noon, TimeZoneInfo.Local);
+        Assert.Equal(new DateTime(2026, 10, 29, 12, 0, 0), local);
+        var counts = LibraryQuery.Counts(SampleLibrary.Data(noon), noon);
+        Assert.Equal((22, 4, 4, 9, 3), (counts[LibrarySection.All], counts[LibrarySection.Regulars], counts[LibrarySection.OfKind(Kind.Tools)], counts[LibrarySection.Older], counts[LibrarySection.Done]));
+    }
+
+    [Fact]
     public void ThreePagesAreDoneAndTheirDoneTimeFollowsTheVisit()
     {
         var done = data.Items.Where(i => i.Status == ItemStatus.Done).ToList();

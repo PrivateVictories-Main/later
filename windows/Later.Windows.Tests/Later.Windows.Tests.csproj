@@ -13,4 +13,9 @@
     <ProjectReference Include="..\Later.Windows\Later.Windows.csproj" />
     <ProjectReference Include="..\Later.Core\Later.Core.csproj" />
   </ItemGroup>
+  <!-- The window's view model and the engine host that feeds it are plain C# (no WinUI types), so their logic is compiled in here and tested. -->
+  <ItemGroup>
+    <Compile Include="..\Later.App\ViewModels\*.cs" LinkBase="App\ViewModels" />
+    <Compile Include="..\Later.App\AppEngine.cs" LinkBase="App" />
+  </ItemGroup>
 </Project>

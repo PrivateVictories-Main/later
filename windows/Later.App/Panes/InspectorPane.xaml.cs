@@ -1,6 +1,7 @@
 using System.Globalization;
 using Later.App.ViewModels;
 using Later.Core;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
@@ -24,7 +25,7 @@ public sealed partial class InspectorPane : UserControl
         model = viewModel;
         viewModel.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(LibraryViewModel.Current) or nameof(LibraryViewModel.Counts) or nameof(LibraryViewModel.Search)) Update();
+            if (e.PropertyName is nameof(LibraryViewModel.Current) or nameof(LibraryViewModel.Counts)) Update();
         };
         Update();
     }
@@ -39,11 +40,14 @@ public sealed partial class InspectorPane : UserControl
             : $"{pages.ToString(CultureInfo.InvariantCulture)} {(pages == 1 ? "page" : "pages")} across {listing.Sites.ToString(CultureInfo.InvariantCulture)} {(listing.Sites == 1 ? "site" : "sites")}";
         // The kinds of what the list shows now, so a search or a section narrows them too.
         var byKind = listing.Items.GroupBy(i => i.Kind).ToDictionary(g => g.Key, g => g.Count());
+        // As the Mac's: only kinds that have pages, and no breakdown when there are none or the section already is one kind.
+        ByKind.Visibility = pages > 0 && (model.Searching || model.Section.Kind != SectionKind.OfKind) ? Visibility.Visible : Visibility.Collapsed;
         foreach (var (kind, (row, count)) in kinds)
         {
             int n = byKind.GetValueOrDefault(kind);
             count.Text = n.ToString(CultureInfo.InvariantCulture);
             AutomationProperties.SetName(row, $"{kind.Title()}, {n}");
+            row.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 }

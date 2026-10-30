@@ -27,16 +27,16 @@
       </ListView.ItemContainerStyle>
       <ListView.ItemTemplate>
         <DataTemplate x:DataType="local:RowText">
-          <Grid ColumnSpacing="16" Padding="0,8" AutomationProperties.Name="{x:Bind Name}">
+          <Grid ColumnSpacing="16" Padding="0,8">   <!-- the item is named by RowText.ToString(); the parts are not read again -->
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Spacing="2" VerticalAlignment="Center">
-              <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" MaxLines="1" />
-              <TextBlock Text="{x:Bind Site}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" MaxLines="1" />
+              <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" MaxLines="1" AutomationProperties.AccessibilityView="Raw" />
+              <TextBlock Text="{x:Bind Site}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" MaxLines="1" AutomationProperties.AccessibilityView="Raw" />
             </StackPanel>
-            <TextBlock Grid.Column="1" Text="{x:Bind When}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{x:Bind When}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
           </Grid>
         </DataTemplate>
       </ListView.ItemTemplate>

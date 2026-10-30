@@ -22,10 +22,13 @@
         <TextBlock Text="Later" VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" />
       </StackPanel>
       <AutoSuggestBox x:Name="SearchBox" Grid.Column="1" PlaceholderText="Search" QueryIcon="Find" MaxWidth="420"
-                      AutomationProperties.Name="Search saved pages" VerticalAlignment="Center" />
+                      AutomationProperties.Name="Search saved pages" AutomationProperties.AcceleratorKey="Control+F" VerticalAlignment="Center" />
       <DropDownButton x:Name="GroupButton" Grid.Column="2" Content="Group By" AutomationProperties.Name="Group By" VerticalAlignment="Center" />
       <DropDownButton x:Name="SortButton" Grid.Column="3" Content="Sort By" AutomationProperties.Name="Sort By" VerticalAlignment="Center" />
     </Grid>
+
+    <ProgressRing x:Name="Loading" Grid.Row="1" IsActive="True" Width="28" Height="28" HorizontalAlignment="Center" VerticalAlignment="Center"
+                  Visibility="Collapsed" AutomationProperties.Name="Loading your list" />
 
     <Grid Grid.Row="1" x:Name="Panes" ColumnSpacing="0">
       <Grid.ColumnDefinitions>

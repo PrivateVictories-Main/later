@@ -49,6 +49,7 @@ public sealed partial class ShellWindow : Window
         BuildMenus();
         model.PropertyChanged += (_, e) =>
         {
+            if (e.PropertyName == nameof(LibraryViewModel.IsLoaded)) ShowLoaded();
             if (e.PropertyName is nameof(LibraryViewModel.Grouping) or nameof(LibraryViewModel.Sort) or nameof(LibraryViewModel.SortReversed))
             {
                 SyncMenus();
@@ -56,6 +57,16 @@ public sealed partial class ShellWindow : Window
             }
         };
         AddAccelerators();
+        ShowLoaded();
+        if (!model.IsLoaded)
+        {
+            // A ring only if the list takes a moment, so a quick start shows no flash of it.
+            var wait = DispatcherQueue.CreateTimer();
+            wait.Interval = TimeSpan.FromMilliseconds(600);
+            wait.IsRepeating = false;
+            wait.Tick += (_, _) => { if (!model.IsLoaded) Loading.Visibility = Visibility.Visible; };
+            wait.Start();
+        }
 
         Root.Loaded += (_, _) =>
         {
@@ -64,15 +75,13 @@ public sealed partial class ShellWindow : Window
             Root.XamlRoot.Changed += (_, _) => { KeepMinimumSize(); UpdateTitleBarRegions(); };   // another display's scale
         };
         TitleBar.SizeChanged += (_, _) => UpdateTitleBarRegions();
-        VisibilityChanged += (_, e) =>
-        {
-            if (e.Visible) { model.Wake(DateTime.UtcNow); engine?.SetVisible(true); engine?.RetryLock(); }
-            else { model.Hide(); engine?.SetVisible(false); }
-        };
+        VisibilityChanged += (_, e) => UpdateShown(e.Visible);
+        AppWindow.Changed += (_, _) => UpdateShown(AppWindow.IsVisible);   // a minimized window is still "visible" to the window, so its presenter says
         Activated += (_, e) =>
         {
             if (e.WindowActivationState == WindowActivationState.Deactivated) return;
-            model.Wake(DateTime.UtcNow);   // a new day, or pages gone to Older, redraw; otherwise nothing does
+            UpdateShown(AppWindow.IsVisible);
+            if (shown) model.Wake(Sample.Clock);   // a new day, or pages gone to Older, redraw; otherwise nothing does
             engine?.RetryLock();
         };
         Closed += (_, _) =>
@@ -83,6 +92,30 @@ public sealed partial class ShellWindow : Window
 #if DEBUG
         ApplySample();
 #endif
+    }
+
+    // MARK: Loading and showing
+
+    bool shown;   // what the model and the engine were last told
+
+    /// Until the first list arrives the panes are not shown: a library being loaded is not an empty one.
+    void ShowLoaded()
+    {
+        bool loaded = model.IsLoaded;
+        Panes.Visibility = loaded ? Visibility.Visible : Visibility.Collapsed;
+        if (!loaded) return;
+        Loading.Visibility = Visibility.Collapsed;
+        if (SearchBox.FocusState == FocusState.Unfocused) List.FocusList();
+    }
+
+    /// Shown means visible and not minimized (`VisibilityChanged` is not raised for a minimize). Only a change is acted on.
+    void UpdateShown(bool visible)
+    {
+        bool now = visible && AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+        if (now == shown) return;
+        shown = now;
+        if (now) { model.Wake(Sample.Clock); engine?.SetVisible(true); engine?.RetryLock(); }
+        else { model.Hide(); engine?.SetVisible(false); }
     }
 
     // MARK: Menus

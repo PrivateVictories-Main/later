@@ -78,7 +78,7 @@
           <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
           <Ellipse x:Name="GoodDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{ThemeResource StatusGoodBrush}" AutomationProperties.AccessibilityView="Raw" />
           <Ellipse x:Name="WarningDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{ThemeResource StatusWarningBrush}" Visibility="Collapsed" AutomationProperties.AccessibilityView="Raw" />
-          <TextBlock x:Name="StatusText" Grid.Column="1" TextWrapping="WrapWholeWords" Foreground="{ThemeResource SecondaryTextBrush}" />
+          <TextBlock x:Name="StatusText" Grid.Column="1" AutomationProperties.LiveSetting="Polite" TextWrapping="WrapWholeWords" Foreground="{ThemeResource SecondaryTextBrush}" />
         </Grid>
       </StackPanel>
       </Border>

@@ -14,7 +14,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        var model = new LibraryViewModel();
+        var model = new LibraryViewModel(Sample.Clock);
         AppEngine? engine = null;
 #if DEBUG
         if (Sample.Enabled) PrepareSample(model);
@@ -27,7 +27,8 @@ public partial class App : Application
             model.Grouping = settings.Grouping;
             model.Sort = settings.Sort;
             model.SortReversed = settings.SortReversed;
-            engine = new AppEngine(paths, model, DispatcherQueue.GetForCurrentThread(), Exit);
+            var queue = DispatcherQueue.GetForCurrentThread();
+            engine = new AppEngine(paths, model, work => queue.TryEnqueue(() => work()), Exit);
         }
         window = new ShellWindow(model, engine);
         window.Activate();
@@ -38,7 +39,7 @@ public partial class App : Application
     /// A made-up list and statuses; no engine, no hooks, nothing read from or written to the real data.
     static void PrepareSample(LibraryViewModel model)
     {
-        var data = SampleLibrary.Data(DateTime.UtcNow);
+        var data = SampleLibrary.Data(Sample.Clock);
         var copies = SampleLibrary.OpenCopies(new Library(data));
         if (Sample.Section is { } section) model.Section = section;
         if (Sample.Group is { } grouping) model.Grouping = grouping;

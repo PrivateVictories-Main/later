@@ -31,7 +31,7 @@ public sealed partial class ListPane : UserControl
         {
             switch (e.PropertyName)
             {
-                case nameof(LibraryViewModel.Current): case nameof(LibraryViewModel.Section): case nameof(LibraryViewModel.Search): ShowList(); break;
+                case nameof(LibraryViewModel.Current): ShowList(); break;   // every section or search change comes with a new listing
                 case nameof(LibraryViewModel.Counts): ShowEmptyState(); break;
                 case nameof(LibraryViewModel.Engine): ShowNotice(); break;
             }
@@ -86,7 +86,7 @@ public sealed partial class ListPane : UserControl
             EmptyTitle.Text = $"No Results for “{model.Query}”";
             EmptyMessage.Text = "Check the spelling or try a new search.";
         }
-        else if (section == LibrarySection.All && model.Counts.Count == 0)   // nothing saved at all
+        else if (model.IsLoaded && section == LibrarySection.All && model.Counts.Count == 0)   // nothing saved at all (not: not loaded yet)
         {
             EmptyGlyph.Glyph = section.Glyph();
             EmptyTitle.Text = "Close tabs freely.";

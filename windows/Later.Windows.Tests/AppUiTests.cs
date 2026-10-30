@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Later.Core;
 using Later.Windows.Engine;
+using Later.Windows.Native;
 using Later.Windows.Platform;
 using Later.Windows.Tests.Integration;
 using Xunit;
@@ -26,11 +27,15 @@ public class AppUiTests
 
         RunningApp(Process process) => Process = process;
 
-        public static RunningApp Start(string dataDir, params string[] args)
+        public static RunningApp Start(string dataDir, params string[] args) => StartWith(dataDir, null, args);
+
+        /// `trace`: a file the app writes its own counts-and-timings events to (what it logs, never a link or a title).
+        public static RunningApp StartWith(string dataDir, string? trace, params string[] args)
         {
             var psi = new ProcessStartInfo(Exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(Exe)! };
             foreach (var a in args) psi.ArgumentList.Add(a);
             psi.Environment["LATER_DATA_DIR"] = dataDir;
+            if (trace is not null) psi.Environment["LATER_TEST_TRACE"] = trace;
             var app = new RunningApp(Process.Start(psi)!);
             Wait(() => { app.Process.Refresh(); return app.Process.HasExited || app.Process.MainWindowHandle != 0; }, Slow, "the window to appear");
             Assert.False(app.Process.HasExited, "Later.exe ended before showing a window");
@@ -70,12 +75,18 @@ public class AppUiTests
     }
 
     [Fact]
-    public void TheSampleWindowNamesEverySectionWithItsCountAndTheStatusLineAndSearch()
+    public void TheSampleWindowNamesEverySectionWithItsCountAndTheStatusLineAndSearch() =>
+        AssertSampleWindow(SampleLibrary.NoonUtc(new DateTime(2026, 10, 15)), "--sample", "--sample-now", "2026-10-15T12:00:00");
+
+    [Fact]
+    public void TheSampleClockIsNoonTodayByDefaultSoTheFirstActivationMovesNothing() =>
+        AssertSampleWindow(SampleLibrary.NoonUtc(DateTime.Now), "--sample");
+
+    static void AssertSampleWindow(DateTime clock, params string[] args)
     {
         using var dir = new TempDir();
-        var now = DateTime.UtcNow;
-        var counts = LibraryQuery.Counts(SampleLibrary.Data(now), now);
-        using var app = RunningApp.Start(dir.Path, "--sample");
+        var counts = LibraryQuery.Counts(SampleLibrary.Data(clock), clock);
+        using var app = RunningApp.Start(dir.Path, args);
         var names = app.WaitForName(n => n == $"All, {counts[LibrarySection.All]}", "the sidebar");
         foreach (var section in LibrarySection.Ordered)
             Assert.Contains($"{section.Title}, {counts.GetValueOrDefault(section)}", names);
@@ -109,18 +120,96 @@ public class AppUiTests
         Assert.Empty(Directory.GetFileSystemEntries(dir.Path));
     }
 
+    /// A list with one saved page and one whose address carries a one-time secret (which the app drops when it opens the list).
+    static void WriteListWithASecret(TempDir dir)
+    {
+        var library = new Library();
+        var verdict = new Verdict(true, Kind.Reading, "a.example.com/*");
+        library.Save("https://a.example.com/reset-password/Xk9fA2bQ7zLm", "Reset", verdict, Browser.Helium, DateTime.UtcNow);
+        library.Save("https://a.example.com/articles/slow-web", "Slow web", verdict, Browser.Helium, DateTime.UtcNow);
+        new LibraryStore(dir.At("library.json")).Save(library.Data);
+    }
+
+    static string[] TitlesOnDisk(TempDir dir) => new LibraryStore(dir.At("library.json")).Peek("").Data.Items.Select(i => i.Title).ToArray();
+
     [Fact]
-    public void ASetUpAppTakesTheEngineLockOnItsEngineThreadAndReleasesItWhenTheWindowCloses()
+    public void ASetUpAppTakesTheEngineLockOnItsEngineThreadAndReleasesItCleanlyAfterSavingWhenTheWindowCloses()
     {
         using var dir = new TempDir();
         File.WriteAllText(dir.At("settings.json"), "{\"onboarded\":true}");
+        WriteListWithASecret(dir);
         using var gate = EngineLock.Open(new AppPaths(dir.Path).InstanceSuffix);
         using var app = RunningApp.Start(dir.Path);
         Wait(() => !gate.TryAcquireAndRelease(), Slow, "the app to hold the engine lock");   // a lock this thread cannot take is the app's
         Assert.True(app.Process.CloseMainWindow());
         Assert.True(app.Process.WaitForExit(15_000), "the app ends when its window closes");
-        Assert.True(gate.TryAcquire(TimeSpan.FromSeconds(5)), "the lock is free once the app has ended");
+        Assert.True(gate.TryAcquire(TimeSpan.FromSeconds(5), out var abandoned), "the lock is free once the app has ended");
+        Assert.False(abandoned, "the app ended holding the lock instead of releasing it");   // an abandoned mutex is also "free"
         gate.Release();
+        Assert.Equal(["Slow web"], TitlesOnDisk(dir));   // what the app did to the list (it dropped the secret link) is on disk
+    }
+
+    [Fact]
+    public void ClosingTheWindowWhileTheAgentStillHoldsTheLockStartsNoEngineAndEndsTheProcess()
+    {
+        using var dir = new TempDir();
+        File.WriteAllText(dir.At("settings.json"), "{\"onboarded\":true}");
+        WriteListWithASecret(dir);
+        using var gate = EngineLock.Open(new AppPaths(dir.Path).InstanceSuffix);
+        Assert.True(gate.TryAcquire(TimeSpan.Zero));   // this thread plays the agent
+        try
+        {
+            using var app = RunningApp.Start(dir.Path);
+            Wait(() => NativeApi.WaitForSingleObject(gate.HandoffHandle, 0) == NativeApi.WaitObject0, Slow, "the app to ask for the lock");
+            Assert.True(app.Process.CloseMainWindow());
+            Thread.Sleep(100);
+            gate.Release();   // the agent lets go while the window is closing: the app must not start watching now
+            Assert.True(app.Process.WaitForExit(15_000), "the process does not end after its window closed");
+            Assert.True(gate.TryAcquire(TimeSpan.FromSeconds(5), out var abandoned));
+            Assert.False(abandoned);
+            gate.Release();
+            Assert.Equal(["Reset", "Slow web"], TitlesOnDisk(dir).Order().ToArray());   // an engine would have dropped the secret link and saved
+        }
+        finally { try { gate.Release(); } catch (System.ComponentModel.Win32Exception) { } }
+    }
+
+    [Fact]
+    public void TheProcessEndsWhenTheWindowIsClosedAtOnce()
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            using var dir = new TempDir();
+            File.WriteAllText(dir.At("settings.json"), "{\"onboarded\":true}");
+            using var app = RunningApp.Start(dir.Path);
+            Assert.True(app.Process.CloseMainWindow());
+            Assert.True(app.Process.WaitForExit(20_000), $"the process outlived its window (run {i + 1})");
+        }
+    }
+
+    [Fact]
+    public void AMinimizedWindowCountsAsHiddenSoNothingIsSentToItAndRestoringShowsItAgain()
+    {
+        using var dir = new TempDir();
+        File.WriteAllText(dir.At("settings.json"), "{\"onboarded\":true}");
+        var trace = dir.At("trace.txt");
+        using var app = RunningApp.StartWith(dir.Path, trace);
+        string? LastShown()
+        {
+            string text;
+            try { text = File.Exists(trace) ? File.ReadAllText(trace) : ""; } catch (IOException) { return null; }
+            return text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault(l => l.Contains(" Shown ", StringComparison.Ordinal))?.Split(' ').Last();
+        }
+        void Restore() { _ = NativeTest.ShowWindow(app.Window, NativeTest.SwRestore); _ = NativeTest.SetForegroundWindow(app.Window); }
+        // The trace starts with the engine, so the first rounds may precede it; each round is minimize, look, restore.
+        Wait(() =>
+        {
+            _ = NativeTest.ShowWindow(app.Window, NativeTest.SwMinimize);
+            Thread.Sleep(700);
+            if (LastShown() == "False") return true;
+            Restore(); Thread.Sleep(700);
+            return false;
+        }, Slow, "a minimized window to be reported hidden");
+        Wait(() => { Restore(); Thread.Sleep(500); return LastShown() == "True"; }, Slow, "the restored window to be reported shown");
     }
 
     [Fact]
@@ -147,7 +236,15 @@ public class AppUiTests
         try
         {
             using var app = RunningApp.Start(dir.Path);
-            var names = app.WaitForName(n => n.StartsWith("Later is busy saving", StringComparison.Ordinal), "the read-only notice");
+            // The whole wait for the lock (5 s): the window must never say "nothing saved" (or "Nothing here yet") for a list that has pages.
+            var names = new List<string>();
+            Wait(() =>
+            {
+                names = app.Names();
+                Assert.DoesNotContain("Close tabs freely.", names);
+                Assert.DoesNotContain("Nothing here yet", names);
+                return names.Any(n => n.StartsWith("Later is busy saving", StringComparison.Ordinal));
+            }, Slow, "the read-only notice");
             Assert.Contains(names, n => n.StartsWith("Slow web, a.example.com, Reading, saved ", StringComparison.Ordinal));   // the list is there
             gate.Release();
             // Coming back to the window asks again, and the lock is free now. Restoring the window activates it.

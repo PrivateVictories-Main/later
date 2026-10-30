@@ -21,7 +21,7 @@
         <TextBlock Text="Overview" Style="{StaticResource SubtitleTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
         <TextBlock x:Name="Caption" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SecondaryTextBrush}" TextWrapping="WrapWholeWords" />
       </StackPanel>
-      <StackPanel Spacing="6">
+      <StackPanel x:Name="ByKind" Spacing="6">
         <TextBlock Text="By kind" Style="{StaticResource BodyStrongTextBlockStyle}" AutomationProperties.HeadingLevel="Level3" Margin="0,0,0,4" />
         <Grid x:Name="ShoppingRow" ColumnSpacing="12" MinHeight="32">
           <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
