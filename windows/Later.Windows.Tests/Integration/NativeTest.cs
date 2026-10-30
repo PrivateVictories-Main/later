@@ -152,6 +152,15 @@ internal sealed unsafe class UiaTest : IDisposable
         finally { _ = element->Release(); }
     }
 
+    /// Presses the focused element when it has this automation id: the runner's first-run privacy page keeps the keyboard until its Accept
+    /// button is pressed (a pwsh step cannot see it). False when something else has the keyboard.
+    public bool InvokeFocusedIf(string automationId)
+    {
+        var element = session.Automation->GetFocusedElement();
+        try { return UiaSession.Current(element, UiaIds.AutomationId) as string == automationId && Call(element, 10000, new Guid("fb377fbe-8ea6-46d5-9c73-6499642d3059"), 3); }
+        finally { _ = element->Release(); }
+    }
+
     public const int ButtonType = 50000, ListItemType = 50007, MenuItemType = 50011;
 
     /// Names of the elements of a control type, in tree order (the list's rows come in the list's order).

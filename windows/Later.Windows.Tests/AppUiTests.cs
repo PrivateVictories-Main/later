@@ -53,6 +53,8 @@ public class AppUiTests
 
         public string FocusedElement() => uia.FocusedElement();
 
+        public bool DismissFirstRunPage() => uia.InvokeFocusedIf("OobeSettingsAcceptButton");
+
         public bool Invoke(string name, int controlType = UiaTest.ButtonType) => uia.Invoke(Window, name, controlType);
 
         public bool Choose(string name) => uia.ChooseInProcess(Process.Id, name);
@@ -60,7 +62,11 @@ public class AppUiTests
         public bool SelectRow(Func<string, bool> which, bool add = false) => uia.SelectRow(Window, which, add);
 
         /// Keys go to the foreground window.
-        public void Focus() => _ = NativeTest.BringToFront(Window);
+        public void Focus()
+        {
+            for (int pages = 0; pages < 10 && DismissFirstRunPage(); pages++) Thread.Sleep(2000);   // a runner's first-run pages hold the keyboard
+            _ = NativeTest.BringToFront(Window);
+        }
 
         public string? Title => uia.RootName(Window);
 
