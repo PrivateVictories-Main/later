@@ -60,7 +60,7 @@ public class AppUiTests
         public bool SelectRow(Func<string, bool> which, bool add = false) => uia.SelectRow(Window, which, add);
 
         /// Keys go to the foreground window.
-        public void Focus() => _ = NativeTest.SetForegroundWindow(Window);
+        public void Focus() => _ = NativeTest.BringToFront(Window);
 
         public string? Title => uia.RootName(Window);
 
