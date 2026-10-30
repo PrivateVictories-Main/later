@@ -166,6 +166,20 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
     void ReportSaved(string what, Browser b, string dir) =>
         output.WriteLine($"AGENT {what} {b}: saved pages = {string.Join(",", (ReadLibrary(dir)?.Items ?? []).Select(i => PageOf(i.Url)).Order())}");
 
+    /// The page opened last is the one meant to be shown, but browsers differ in which tab they show after a launch with three
+    /// pages. Showing the third once, before the agent starts, puts pages 1 and 2 in the background: the setup, not a nudge.
+    static void ShowThirdTab(UiaTest uia, Browser b) =>
+        Assert.True(WaitUntil(() =>
+        {
+            try
+            {
+                var window = WindowsOf(b)[0].Hwnd;
+                uia.SelectTab(window, 2);
+                return uia.Tabs(window) is { Count: >= 3 } tabs && tabs[2].Selected;
+            }
+            catch (COMException) { return false; }
+        }, Slow), "the third tab could not be shown");
+
     /// Brings the browser's window to the front if Windows lets this process (an Alt tap lifts the foreground lock; the Arm
     /// runner's first-boot screen may still hold it). True when the browser is in front afterwards.
     static bool BringToFront(Browser b, nint hwnd)
@@ -192,6 +206,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
+        ShowThirdTab(uia, b);
         bool inFront = BringToFront(b, WindowsOf(b)[0].Hwnd);
         output.WriteLine($"AGENT {b}: browser in front before the start = {inFront}");
         using var agent = AgentProcess.Start(dir.Path, f.Profile, output: output);
@@ -219,6 +234,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
+        ShowThirdTab(uia, b);
         using var agent = AgentProcess.Start(dir.Path, f.Profile, output: output);
         Func<nint> window = () => WindowsOf(b)[0].Hwnd;
         Assert.True(WaitUntil(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90)), "pages 1 and 2 were not saved");
@@ -248,6 +264,7 @@ public class AgentIntegrationTests(ITestOutputHelper output) : IClassFixture<Lef
         using var f = BrowserFixture.Start(ExeOf(b), server, [FixtureServer.Url(1), FixtureServer.Url(2), FixtureServer.Url(3)]);
         using var uia = new UiaTest();
         Assert.True(WaitUntil(() => WindowsOf(b).Count > 0 && uia.Tabs(WindowsOf(b)[0].Hwnd).Count >= 3, Slow), "three tabs did not appear");
+        ShowThirdTab(uia, b);
         using var agent = AgentProcess.Start(dir.Path, f.Profile, output: output);
         Func<nint> window = () => WindowsOf(b)[0].Hwnd;
         Assert.True(WaitUntil(() => Saved(dir.Path, 1) is not null && Saved(dir.Path, 2) is not null, TimeSpan.FromSeconds(90)), "pages 1 and 2 were not saved");
