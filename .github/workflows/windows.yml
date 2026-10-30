@@ -52,7 +52,7 @@ jobs:
       - name: Core tests on Windows
         run: dotnet test windows/Later.Core.Tests -c Release --logger "console;verbosity=detailed"
       - name: Windows unit tests
-        run: dotnet test windows/Later.Windows.Tests -c Release --filter "Category!=Integration&Category!=Probe" --logger "console;verbosity=detailed"
+        run: dotnet test windows/Later.Windows.Tests -c Release --filter "Category!=Integration&Category!=Probe&Category!=Ui" --logger "console;verbosity=detailed"
       - name: Build the scanner
         run: dotnet build windows/tools/ImportScan -c Release
       - name: The scanner rejects every network channel (self-test)
@@ -93,12 +93,13 @@ jobs:
           $p | Stop-Process -Force
           Write-Host 'app started and stayed up for 6 s'
 
-  # Decides whether this push asks for the diagnostic probe (a commit message containing the marker, or a manual run).
+  # Decides whether this push asks for the diagnostic probe or for screenshots (a commit message containing [probe] or [shots], or a manual run).
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       probe: ${{ steps.m.outputs.probe }}
+      shots: ${{ steps.m.outputs.shots }}
     steps:
       - id: m
         env:
@@ -108,6 +109,7 @@ jobs:
         run: |
           msg=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA" --jq .commit.message)
           case "$msg" in *'[probe]'*) echo probe=true >> "$GITHUB_OUTPUT" ;; *) echo probe=$MANUAL >> "$GITHUB_OUTPUT" ;; esac
+          case "$msg" in *'[shots]'*) echo shots=true >> "$GITHUB_OUTPUT" ;; *) echo shots=$MANUAL >> "$GITHUB_OUTPUT" ;; esac
 
   probe:
     name: probe (${{ matrix.arch }})
@@ -224,3 +226,71 @@ jobs:
           Get-Process Later,chrome -ErrorAction SilentlyContinue | Stop-Process -Force
           Remove-Item -Recurse -Force (Join-Path $env:RUNNER_TEMP 'helium'), (Join-Path $env:RUNNER_TEMP 'helium-dl'), (Join-Path $env:LOCALAPPDATA 'Later') -ErrorAction SilentlyContinue
           Get-ChildItem $env:TEMP -Filter 'LaterIT-*' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+
+  # The sample window rendered in each scene, for looking at (Debug build: sample mode is not in Release). Only on a [shots] commit or a
+  # manual run. The x64 leg also takes a plain screen copy, which shows the Mica backdrop; PrintWindow does not.
+  screenshots:
+    name: screenshots (${{ matrix.arch }})
+    needs: gate
+    if: needs.gate.outputs.shots == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2025, rid: win-x64, arch: x64 }
+          - { os: windows-11-arm, rid: win-arm64, arch: arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: windows/global.json
+      - name: Publish a Debug app
+        run: dotnet publish windows/Later.App/Later.App.csproj -c Debug -r ${{ matrix.rid }} -p:Platform=${{ matrix.arch }} --self-contained true -o windows/out-debug/${{ matrix.rid }}
+      - name: Render the sample window
+        shell: pwsh
+        run: ./windows/scripts/shots.ps1 -Exe "windows/out-debug/${{ matrix.rid }}/Later.exe" -Out "$env:RUNNER_TEMP/shots" -Arch ${{ matrix.arch }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: shots-${{ matrix.arch }}
+          path: ${{ runner.temp }}/shots/*.png
+          retention-days: 1
+          if-no-files-found: error
+      - name: Nothing left behind
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Process Later -ErrorAction SilentlyContinue | Stop-Process -Force
+          Remove-Item -Recurse -Force (Join-Path $env:RUNNER_TEMP 'shots'), (Join-Path $env:RUNNER_TEMP 'later-shots-data') -ErrorAction SilentlyContinue
+
+  # The app window driven through UI Automation, as assistive technology sees it: sample mode, names, counts, the status line.
+  ui:
+    name: ui (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2025, rid: win-x64, arch: x64 }
+          - { os: windows-11-arm, rid: win-arm64, arch: arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: windows/global.json
+      - name: Publish a Debug app
+        run: dotnet publish windows/Later.App/Later.App.csproj -c Debug -r ${{ matrix.rid }} -p:Platform=${{ matrix.arch }} --self-contained true -o windows/out-debug/${{ matrix.rid }}
+      - name: UI tests
+        env:
+          LATER_EXE: '${{ github.workspace }}/windows/out-debug/${{ matrix.rid }}/Later.exe'
+        run: dotnet test windows/Later.Windows.Tests -c Release --filter "Category=Ui" --logger "console;verbosity=detailed"
+      - name: Nothing left behind
+        if: always()
+        shell: pwsh
+        run: Get-Process Later -ErrorAction SilentlyContinue | Stop-Process -Force

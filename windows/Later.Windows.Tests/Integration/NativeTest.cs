@@ -83,6 +83,27 @@ internal sealed unsafe class UiaTest : IDisposable
         finally { if (found is not null) _ = found->Release(); _ = tabs->Release(); _ = root->Release(); }
     }
 
+    /// Every descendant's name, in tree order: what assistive technology can read in the app's own window.
+    public List<string> Names(nint hwnd)
+    {
+        var root = Root(hwnd);
+        var all = session.True();
+        IUIAutomationElementArray* found = null;
+        var names = new List<string>();
+        try
+        {
+            found = root->FindAll((TreeScope)UiaIds.ScopeDescendants, all);
+            for (int i = 0; i < found->Length; i++)
+            {
+                var element = found->GetElement(i);
+                try { if (UiaSession.Current(element, UiaIds.Name) is string { Length: > 0 } name) names.Add(name); }
+                finally { _ = element->Release(); }
+            }
+        }
+        finally { if (found is not null) _ = found->Release(); _ = all->Release(); _ = root->Release(); }
+        return names;
+    }
+
     /// A depth-limited look at the window's UI tree, skipping page content, one line per node.
     public List<string> Dump(nint hwnd, int maxDepth = 6, int maxNodes = 150)
     {
